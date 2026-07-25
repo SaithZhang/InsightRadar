@@ -1,0 +1,22 @@
+{
+  "schema_version": "insightradar-harness-task/v1",
+  "task_id": "harness-smoke-001",
+  "title": "Harness contract smoke",
+  "goal": "Validate task, trace, privacy, and checkpoint contracts without a model call or investment side effect.",
+  "starting_state": {"references": ["CURRENT_STATE.md"]},
+  "context_refs": ["AGENTS.md", "CURRENT_STATE.md"],
+  "memory_refs": ["docs/memory/product-state.md"],
+  "allowed_tools": ["read_project_files", "write_runtime_artifacts"],
+  "budget": {
+    "max_steps": 8,
+    "max_tool_calls": 4,
+    "max_elapsed_seconds": 30
+  },
+  "expected_artifacts": ["trace.jsonl", "checkpoint.json", "harness-smoke.md"],
+  "acceptance_checks": [
+    {"id": "trace", "kind": "file_exists", "target": "trace.jsonl", "expected": "true"},
+    {"id": "checkpoint", "kind": "file_exists", "target": "checkpoint.json", "expected": "true"},
+    {"id": "trade", "kind": "text_contains", "target": "harness-smoke.md", "expected": "交易权限：none"}
+  ],
+  "privacy_class": "public"
+}

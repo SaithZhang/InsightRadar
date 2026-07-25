@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InsightRadar personal factor model",
+  "type": "object",
+  "required": [
+    "schema_version", "version", "model_type", "as_of", "data_hash",
+    "universe_id", "universe_manifest_hash",
+    "feature_names", "weights", "intercept", "validation_status",
+    "validation_metrics", "gate_results"
+  ],
+  "properties": {
+    "schema_version": {"const": "factor-model/v2"},
+    "version": {"type": "string"},
+    "model_type": {"const": "ridge_v1"},
+    "as_of": {"type": "string", "format": "date"},
+    "data_hash": {"type": "string"},
+    "universe_id": {"type": "string", "minLength": 1},
+    "universe_manifest_hash": {"type": "string", "minLength": 1},
+    "feature_names": {"type": "array", "items": {"type": "string"}},
+    "weights": {"type": "object", "additionalProperties": {"type": "number"}},
+    "intercept": {"type": ["number", "null"]},
+    "validation_status": {"enum": ["passed", "failed", "insufficient_sample"]},
+    "validation_metrics": {"type": "object"},
+    "gate_results": {"type": "object", "additionalProperties": {"type": "boolean"}}
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "dex": "xyz",
+  "symbols": ["XYZ100", "BRENTOIL"],
+  "addresses": [
+    {
+      "label": "BlockBeats/HyperInsight 0xec4 RWA trader",
+      "address": "0xec4a6f59960fb55a7fa49262e2628687b322cf62",
+      "notes": "Matched by Hyperliquid clearinghouseState on dex=xyz: short 600 xyz:XYZ100 and long 50,000 xyz:BRENTOIL on 2026-07-08."
+    }
+  ],
+  "alert_rules": {
+    "position_notional_gt": 10000000,
+    "liquidation_distance_pct_lt": 5
+  },
+  "market_radar": {
+    "enabled": true,
+    "top_positions_limit": 5,
+    "liquidation_risk_limit": 5,
+    "min_notional": 5000000,
+    "max_distance_pct": 10
+  }
+}

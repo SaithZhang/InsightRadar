@@ -1,0 +1,136 @@
+{
+  "max_age_days": 180,
+  "companies": [
+    {
+      "key": "microsoft",
+      "name": "Microsoft",
+      "ticker": "MSFT",
+      "observed_at": "2026-04-29",
+      "verification_status": "official",
+      "guidance_period": "CY2026",
+      "guidance_low_billion_usd": 190.0,
+      "guidance_high_billion_usd": 190.0,
+      "guidance_direction": "up",
+      "ai_dc_link": "explicit",
+      "network_share": null,
+      "source_label": "Microsoft FY2026 Q3电话会",
+      "source_url": "https://www.microsoft.com/en-us/investor/events/fy-2026/earnings-fy-2026-q3"
+    },
+    {
+      "key": "alphabet",
+      "name": "Alphabet",
+      "ticker": "GOOGL",
+      "observed_at": "2026-02-04",
+      "verification_status": "official",
+      "guidance_period": "CY2026",
+      "guidance_low_billion_usd": 175.0,
+      "guidance_high_billion_usd": 185.0,
+      "prior_actual_capex_billion_usd": 91.4,
+      "guidance_direction": "up",
+      "ai_dc_link": "explicit",
+      "network_share": null,
+      "source_label": "Alphabet 2025 Q4电话会",
+      "source_url": "https://abc.xyz/investor/events/event-details/2026/2025-Q4-Earnings-Call-2026-Dr_C033hS6/default.aspx"
+    },
+    {
+      "key": "meta",
+      "name": "Meta",
+      "ticker": "META",
+      "observed_at": "2026-04-29",
+      "verification_status": "official",
+      "guidance_period": "CY2026",
+      "guidance_low_billion_usd": 125.0,
+      "guidance_high_billion_usd": 145.0,
+      "prior_guidance_low_billion_usd": 115.0,
+      "prior_guidance_high_billion_usd": 135.0,
+      "guidance_direction": "up",
+      "ai_dc_link": "explicit",
+      "network_share": null,
+      "source_label": "Meta 2026 Q1业绩稿",
+      "source_url": "https://investor.atmeta.com/investor-news/press-release-details/2026/Meta-Reports-First-Quarter-2026-Results/default.aspx"
+    },
+    {
+      "key": "amazon",
+      "name": "Amazon",
+      "ticker": "AMZN",
+      "observed_at": "2026-02-05",
+      "verification_status": "official",
+      "guidance_period": "CY2026",
+      "guidance_low_billion_usd": 200.0,
+      "guidance_high_billion_usd": 200.0,
+      "guidance_direction": "up",
+      "ai_dc_link": "explicit",
+      "network_share": null,
+      "source_label": "Amazon 2025 Q4业绩稿",
+      "source_url": "https://ir.aboutamazon.com/news-release/news-release-details/2026/Amazon-com-Announces-Fourth-Quarter-Results/default.aspx"
+    },
+    {
+      "key": "oracle",
+      "name": "Oracle",
+      "ticker": "ORCL",
+      "observed_at": "2026-06-10",
+      "verification_status": "official",
+      "actual_period": "FY2026",
+      "actual_capex_billion_usd": 55.663,
+      "prior_actual_capex_billion_usd": 21.215,
+      "guidance_direction": "flat",
+      "ai_dc_link": "explicit",
+      "network_share": null,
+      "free_cash_flow_billion_usd": -23.686,
+      "source_label": "Oracle FY2026 Q4业绩稿",
+      "source_url": "https://investor.oracle.com/investor-news/news-details/2026/Oracle-Announces-Record-Q4-and-FY-2026-Results-Driven-by-Cloud-Infrastructure--Cloud-Applications/"
+    }
+  ],
+  "optical_evidence": [
+    {
+      "key": "nvidia_dc_networking_revenue",
+      "observed_at": "2026-05-20",
+      "verification_status": "official",
+      "category": "network_revenue",
+      "direction": "positive",
+      "strength": 1.0,
+      "metric_name": "NVIDIA数据中心网络收入",
+      "detail": "FY2027 Q1收入148亿美元，同比+199%、环比+35%",
+      "source_label": "NVIDIA FY2027 Q1业绩稿",
+      "source_url": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-First-Quarter-Fiscal-2027/default.aspx"
+    },
+    {
+      "key": "alphabet_infrastructure_mix",
+      "observed_at": "2026-02-04",
+      "verification_status": "official",
+      "category": "network_allocation",
+      "direction": "positive",
+      "strength": 0.55,
+      "metric_name": "Alphabet技术基础设施结构",
+      "detail": "2025年约60%投向服务器、40%投向数据中心和网络设备；40%不是纯网络占比",
+      "source_label": "Alphabet 2025 Q4电话会",
+      "source_url": "https://abc.xyz/investor/events/event-details/2026/2025-Q4-Earnings-Call-2026-Dr_C033hS6/default.aspx"
+    }
+  ],
+  "supplier_checks": [
+    {
+      "key": "innolight_gross_margin",
+      "label": "毛利率",
+      "status": "pending",
+      "decision_use": "验证1.6T产品结构是否抵消年降和竞争"
+    },
+    {
+      "key": "innolight_operating_cash_flow",
+      "label": "经营现金流",
+      "status": "pending",
+      "decision_use": "验证利润是否转化为现金"
+    },
+    {
+      "key": "innolight_inventory_receivables",
+      "label": "库存与应收",
+      "status": "pending",
+      "decision_use": "识别备货、渠道堆积和回款压力"
+    },
+    {
+      "key": "innolight_1_6t_revenue",
+      "label": "1.6T收入/出货",
+      "status": "pending",
+      "decision_use": "验证高速产品需求与份额兑现"
+    }
+  ]
+}

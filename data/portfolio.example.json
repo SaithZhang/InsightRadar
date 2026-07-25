@@ -1,0 +1,14 @@
+{
+  "cash": 100000,
+  "holdings": [
+    {
+      "code": "000001.SZ",
+      "name": "平安银行",
+      "shares": 1000,
+      "cost": 10.5,
+      "thesis": "示例持仓，请替换为真实买入逻辑。",
+      "risk_line": "跌破买入逻辑或回撤超过计划阈值",
+      "horizon": "swing"
+    }
+  ]
+}

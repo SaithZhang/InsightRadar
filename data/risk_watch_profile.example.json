@@ -1,0 +1,10 @@
+{
+  "total_exposure_pct": 20,
+  "holding_weights_pct": [20],
+  "high_beta_exposure_pct": 20,
+  "portfolio_effective_from": "2026-07-17",
+  "behavior_effective_from": "2026-05-14",
+  "fomo_flag": false,
+  "long_horizon_pricing_flag": false,
+  "retail_euphoria_flag": false
+}

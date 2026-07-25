@@ -1,0 +1,45 @@
+{
+  "schema_version": "insightradar-style-rotation-config/v1",
+  "history_limit": 160,
+  "minimum_style_coverage": 0.67,
+  "initial_confirmation_days": 2,
+  "persistent_confirmation_days": 5,
+  "turnover_share_change_threshold": 0.02,
+  "benchmark": {
+    "code": "510300.SH",
+    "name": "沪深300ETF",
+    "secid": "1.510300",
+    "tencent_code": "sh510300"
+  },
+  "styles": [
+    {
+      "key": "technology_growth",
+      "label": "科技成长",
+      "definition": "固定行业ETF代理篮子：电子、通信、计算机；不是主观个股列表。",
+      "members": [
+        {"code": "159997.SZ", "name": "电子ETF", "industry": "电子", "secid": "0.159997", "tencent_code": "sz159997"},
+        {"code": "515880.SH", "name": "通信ETF", "industry": "通信", "secid": "1.515880", "tencent_code": "sh515880"},
+        {"code": "512720.SH", "name": "计算机ETF", "industry": "计算机", "secid": "1.512720", "tencent_code": "sh512720"}
+      ]
+    },
+    {
+      "key": "large_financials",
+      "label": "大金融",
+      "definition": "固定行业ETF代理篮子：银行、非银金融/证券、保险主题。",
+      "members": [
+        {"code": "512800.SH", "name": "银行ETF", "industry": "银行", "secid": "1.512800", "tencent_code": "sh512800"},
+        {"code": "512880.SH", "name": "证券ETF", "industry": "非银金融", "secid": "1.512880", "tencent_code": "sh512880"},
+        {"code": "512070.SH", "name": "证券保险ETF", "industry": "保险/非银", "secid": "1.512070", "tencent_code": "sh512070"}
+      ]
+    },
+    {
+      "key": "high_dividend",
+      "label": "高股息",
+      "definition": "固定红利指数ETF代理篮子：上证红利ETF与中证红利ETF。",
+      "members": [
+        {"code": "510880.SH", "name": "红利ETF", "industry": "上证红利", "secid": "1.510880", "tencent_code": "sh510880"},
+        {"code": "515080.SH", "name": "中证红利ETF", "industry": "中证红利", "secid": "1.515080", "tencent_code": "sh515080"}
+      ]
+    }
+  ]
+}

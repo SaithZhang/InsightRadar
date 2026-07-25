@@ -1,0 +1,11 @@
+{
+  "target": {
+    "code": "000001.SH",
+    "secid": "1.000001",
+    "tencent_code": "sh000001",
+    "label": "上证指数"
+  },
+  "history_limit": 500,
+  "timeframes": ["month", "week", "day", "60m", "15m", "3m"],
+  "methodology": "chan_approximation_with_multi_evidence_level_clusters"
+}

@@ -1,0 +1,21 @@
+{
+  "threads": [
+    {
+      "id": "example-thread",
+      "observation_id": "example-observation",
+      "author": "X 白毛女 / Serenity",
+      "source": "X",
+      "source_url": "https://x.com/example/status/1",
+      "captured_at": "2026-07-07T17:00:00+08:00",
+      "main_text": "示例主贴。",
+      "replies": [
+        {
+          "author": "示例用户",
+          "age": "1小时",
+          "text": "不错的框架，但还需要验证收入。",
+          "category": "unknown"
+        }
+      ]
+    }
+  ]
+}

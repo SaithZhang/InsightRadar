@@ -1,0 +1,35 @@
+{
+  "lookback_days": 7,
+  "page_size": 20,
+  "pdf_extract_limit": 5,
+  "research_delta_path": "data/research_deltas.jsonl",
+  "providers": {
+    "report_cli": {
+      "enabled": true,
+      "industry_codes": ["1036"],
+      "include_types": ["strategy", "macro", "morning"],
+      "watch_stock_codes": []
+    },
+    "eastmoney_public": {
+      "enabled": true
+    }
+  },
+  "watch_keywords": [
+    "AI",
+    "半导体",
+    "存储",
+    "算力",
+    "储能",
+    "锂",
+    "黄金",
+    "有色",
+    "创新药",
+    "医疗器械"
+  ],
+  "notes": [
+    "正式研报监测配置。按实际持仓和关注行业维护 watch_keywords。",
+    "PDF 正文抽取为 best-effort；若东方财富返回反爬脚本页，报告会标记 blocked，不会伪造已读全文。",
+    "research_delta_path 是追加型研究记忆，不包含账号、cookie 或付费站点凭证。",
+    "不包含账号、cookie 或付费站点凭证。"
+  ]
+}

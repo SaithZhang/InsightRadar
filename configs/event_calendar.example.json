@@ -1,0 +1,35 @@
+{
+  "lookahead_days": 14,
+  "events": [
+    {
+      "date": "2026-07-09",
+      "title": "盛新锂能 2026H1 业绩预告公告消化",
+      "type": "filing_digest",
+      "market": "A股",
+      "symbols": ["002240.SZ"],
+      "importance": "high",
+      "watch": "观察业绩预告后集合竞价、同业雅化/天齐/赣锋承接和是否出现业绩兑现卖压。",
+      "source": "CNInfo latest filing"
+    },
+    {
+      "date": "2026-07-10",
+      "title": "AI硬件链周度复盘",
+      "type": "sector_review",
+      "market": "A股/美股",
+      "symbols": ["688008.SH", "002463.SZ", "NVDA", "META"],
+      "importance": "medium",
+      "watch": "检查美股AI链、存储价格、光模块/PCB同业和A股持仓是否共振或背离。",
+      "source": "manual watchlist"
+    },
+    {
+      "date": "2026-07-12",
+      "title": "组合研究假设复盘日",
+      "type": "portfolio_review",
+      "market": "A股",
+      "symbols": ["688126.SH", "688008.SH", "002463.SZ", "601899.SH"],
+      "importance": "medium",
+      "watch": "对照 data/portfolio_context.json 的催化剂、反证条件和下次复盘日，更新继续持有理由。",
+      "source": "portfolio_context"
+    }
+  ]
+}

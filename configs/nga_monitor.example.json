@@ -1,0 +1,83 @@
+{
+  "board_fid": 706,
+  "timeout_seconds": 20,
+  "top_n": 12,
+  "daily_detail_limit": 35,
+  "daily_listing_pages": 10,
+  "morning_detail_limit": 20,
+  "morning_listing_pages": 5,
+  "detail_request_delay_seconds": 3.0,
+  "detail_retries": 2,
+  "influencer_reply_max_pages": 8,
+  "influencer_thread_delay_seconds": 1.0,
+  "morning_window_start": "00:00:00",
+  "morning_window_end": "09:00:00",
+  "day_window_start": "00:00:00",
+  "day_window_end": "15:59:59",
+  "influential_authors": [
+    {"uid": "66662897", "name": "fuelish", "tracked_threads": [{"thread_id": "47002314", "title": "左光右存算电协同"}]},
+    {"uid": "66278813", "name": "文驹", "tracked_threads": [{"thread_id": "47047228", "title": "存储中仍被严重低估的隐藏冠军，领先全球的关键卡点，澜起科技展望500元"}]},
+    {
+      "uid": "21321600",
+      "name": "幸运阿sai",
+      "signal_prior_weight": 1.15,
+      "profile": {
+        "stance_prior": "technology_bull",
+        "themes": ["科技", "AI算力", "光模块"],
+        "source_type": "user_provided",
+        "verification_status": "unverified",
+        "user_claims": ["长期科技多头", "资产从数百万元增长到约一亿元", "光模块持仓曾取得约10倍收益"],
+        "decision_framework": {
+          "title": "科技主线坚守纪律契约",
+          "source_url": "https://bbs.nga.cn/read.php?tid=46906089",
+          "source_type": "user_provided_review",
+          "verification_status": "page_unverified",
+          "reviewed_at": "2026-07-16",
+          "principle": "产业趋势与交易结构分开判断；执行纪律不是死拿，而是按事前规则调整仓位、结构与止损。",
+          "diagnostic_axes": ["产业趋势证据", "交易结构风险", "组合承受力", "核心仓与交易仓边界"],
+          "candidate_drawdown_bands": [
+            {"drawdown": "6%-8%", "action": "预警复核，不自动交易"},
+            {"drawdown": "10%-12%", "action": "优先削减纯叙事或订单未验证仓位"},
+            {"drawdown": "15%", "action": "降低总仓位并全面再评估"}
+          ],
+          "mainline_gates": ["核心大票是否有效跌破20日线", "产业链是否仍有轮动承接", "市场风格是否持续放量切换"],
+          "product_guardrails": [
+            "候选阈值必须绑定用户风险预算，不能成为统一默认止损",
+            "不能把所有未破位震荡自动解释为洗盘",
+            "科技主线结束必须拆成可观测的失效条件",
+            "论坛观点不替代公告、财务、现金流和行情证据"
+          ],
+          "external_view_firewall": {
+            "action_authority": "forbidden",
+            "rules": [
+              "外部观点只能触发研究，不能直接触发买入、加仓或取消减仓",
+              "持仓后出现的新故事不得替换入场时的原始逻辑和失效条件",
+              "所谓中报好必须拆成官方披露、相对市场预期、价格反馈三项验证",
+              "基本面叙事偏多但价格连续破位时，优先执行既有风险规则"
+            ]
+          },
+          "profit_giveback_template": {
+            "reference": "monthly_profit_high_watermark",
+            "threshold_status": "candidate_requires_user_approval",
+            "bands": [
+              {"giveback": "25%", "action": "暂停新增由外部观点驱动的交易仓"},
+              {"giveback": "40%", "action": "交易仓降低约三分之一并复核全部失效条件"},
+              {"giveback": "60%", "action": "停止主动扩张风险，保留经验证核心仓并全面复盘"}
+            ]
+          }
+        }
+      },
+      "tracked_threads": [{"thread_id": "46906089", "title": "2000字长文——《科技主线坚守指南》"}]
+    },
+    {"uid": "150058", "name": "-阿狼-", "tracked_threads": [{"thread_id": "45974302", "title": "自立自强，科学技术打头阵"}]},
+    {"uid": "67153507", "name": "神之使Ty"},
+    {"uid": "24252407", "name": "铁锤狂砸盘"},
+    {"uid": "42855554", "name": "路过的帅小伙"},
+    {"uid": "67145714", "name": "Plezl"},
+    {"uid": "61395264", "name": "村上吹树", "tracked_threads": [{"thread_id": "46872529", "title": "存储人哀嚎酒馆。"}]}
+  ],
+  "daily_cluster_count": 5,
+  "daily_max_tokens": 3800,
+  "snapshot_path": "data/nga/board_snapshots.jsonl",
+  "watch_terms": ["科创50", "半导体", "ETF", "抄底", "被套"]
+}

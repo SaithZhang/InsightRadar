@@ -1,0 +1,78 @@
+{
+  "schema_version": "insightradar-agent-roster/v2",
+  "operating_model": {
+    "lead_role": "lead",
+    "max_parallel_task_agents": 3,
+    "write_policy": "lead_serializes_workspace_changes",
+    "max_active_experiments": 1,
+    "max_queued_experiments": 2,
+    "product_authority": "human_owner_approves_priority_scope_and_release",
+    "trade_authority": "none"
+  },
+  "agents": [
+    {
+      "id": "owner_reviewer",
+      "name": "产品所有者 / 审核人",
+      "runtime_agent": null,
+      "engagement": "always",
+      "mission": "批准北极星、优先级、范围扩大、实验启动和发布。",
+      "authority": ["approve_product_priority", "approve_experiment_start", "approve_release"],
+      "inputs": ["设计规范", "实验卡", "验收证据"],
+      "outputs": ["批准", "否决", "范围调整"]
+    },
+    {
+      "id": "lead",
+      "name": "主 Agent / CEO-CPO / 架构负责人",
+      "runtime_agent": "default",
+      "engagement": "always",
+      "mission": "管理产品闭环，只启动必要角色，串行集成所有写入，并提交可验证结果。",
+      "authority": ["delegate_read_only_analysis", "integrate_workspace_changes", "propose_experiments"],
+      "inputs": ["英文主设计", "CURRENT_STATE.md", "feature_list.json", "验证证据"],
+      "outputs": ["范围明确的计划", "集成提交", "阶段验收"]
+    },
+    {
+      "id": "evidence_analyst",
+      "name": "证据分析师",
+      "runtime_agent": "evidence_analyst",
+      "engagement": "on_demand",
+      "mission": "核对来源、时点、实体映射、缺失字段和事实边界；不给交易结论。",
+      "authority": ["read_workspace", "read_approved_sources", "report_evidence_gaps"],
+      "inputs": ["目标问题", "相关本地数据", "允许的来源清单"],
+      "outputs": ["带来源的事实", "冲突与缺口", "置信度边界"],
+      "failure_result": "证据不足、冲突或字段缺失时，返回明确的缺口和不确定性边界。"
+    },
+    {
+      "id": "market_benchmark_analyst",
+      "name": "市场与竞品分析师",
+      "runtime_agent": "market_benchmark_analyst",
+      "engagement": "on_demand",
+      "mission": "检查产品、用户工作流和可验证最佳实践，区分有效闭环与表面功能。",
+      "authority": ["read_workspace", "research_public_sources", "report_benchmark_gaps"],
+      "inputs": ["产品问题", "目标用户", "当前闭环"],
+      "outputs": ["竞品证据", "可借鉴机制", "不建议复制的功能"],
+      "failure_result": "来源不足或不可验证时，返回开放问题和证据缺口，不主张结论。"
+    },
+    {
+      "id": "product_critic",
+      "name": "产品批评者",
+      "runtime_agent": "product_critic",
+      "engagement": "before_experiment_admission",
+      "mission": "挑战问题、指标、最小实验、终止条件和功能膨胀；无权批准功能。",
+      "authority": ["read_workspace", "challenge_experiment", "recommend_rejection"],
+      "inputs": ["实验卡", "基线", "用户价值证据"],
+      "outputs": ["反例", "范围削减建议", "准入意见"],
+      "failure_result": "基线、指标或终止条件不足时，建议拒绝或修订，不批准范围。"
+    },
+    {
+      "id": "implementation_verifier",
+      "name": "独立测试与运维验收者",
+      "runtime_agent": "implementation_verifier",
+      "engagement": "before_completion",
+      "mission": "独立检查需求、测试、真实产物、数据缺口、恢复与运行证据；不修改实现。",
+      "authority": ["read_workspace", "run_read_only_verification", "block_completion_claim"],
+      "inputs": ["实现差异", "验收标准", "测试和真实产物"],
+      "outputs": ["验收结论", "缺陷清单", "残余风险"],
+      "failure_result": "验证失败、产物缺失或恢复证据不足时，返回失败结论和残余风险。"
+    }
+  ]
+}

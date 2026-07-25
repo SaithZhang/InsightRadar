@@ -1,0 +1,35 @@
+{
+  "lookback_days": 7,
+  "page_size": 20,
+  "pdf_extract_limit": 5,
+  "research_delta_path": "data/research_deltas.jsonl",
+  "providers": {
+    "report_cli": {
+      "enabled": true,
+      "industry_codes": ["1036"],
+      "include_types": ["strategy", "macro", "morning"],
+      "watch_stock_codes": []
+    },
+    "eastmoney_public": {
+      "enabled": true
+    }
+  },
+  "watch_keywords": [
+    "AI",
+    "半导体",
+    "存储",
+    "算力",
+    "储能",
+    "锂",
+    "黄金",
+    "有色",
+    "创新药",
+    "医疗器械"
+  ],
+  "notes": [
+    "当前版本抓东方财富公开研报元数据；PDF 正文下载和 OCR 后续接入 report-cli 或 SkillHub 研报/PDF skill。",
+    "pdf_extract_limit 控制每次最多尝试下载/抽取正文的命中研报数量；遇到反爬或非 PDF 内容会记录缺口。",
+    "research_delta_path 是追加型研究记忆，不覆盖 data/portfolio_context.json。",
+    "watch_keywords 用于补充持仓名称/代码之外的产业主题命中。"
+  ]
+}

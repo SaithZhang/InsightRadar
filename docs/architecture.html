@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="architecture-source-sha256" content="4efaa1f83844145a093c6eeaff423c14aac8bc97de5f95f56a5fd07e22f246e3">
+  <title>InsightRadar 架构拓扑</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --ink: #17202a;
+      --muted: #667085;
+      --line: #d8dee8;
+      --accent: #0f766e;
+      --accent-soft: #dff5f1;
+      --blue: #2563eb;
+      --warn: #b45309;
+      --purple: #7c3aed;
+      --shadow: 0 12px 30px rgba(24, 39, 75, 0.09);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    button { font: inherit; }
+    .app { display: grid; grid-template-columns: 270px minmax(720px, 1fr) 330px; min-height: 100vh; }
+    .sidebar, .inspector {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: auto;
+      background: var(--panel);
+      padding: 18px;
+      border-right: 1px solid var(--line);
+    }
+    .inspector { border-right: 0; border-left: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+    .brand-mark {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: var(--accent);
+      font-weight: 800;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 3px; font-size: 21px; }
+    h2 { margin-bottom: 10px; color: var(--muted); font-size: 13px; text-transform: uppercase; }
+    h3 { margin-bottom: 8px; font-size: 15px; }
+    .subtle { color: var(--muted); font-size: 13px; line-height: 1.55; }
+    .memory-note {
+      margin: 0 0 16px;
+      border: 1px solid #b9e6dc;
+      border-radius: 10px;
+      padding: 10px;
+      color: #0b625c;
+      background: #edfdf9;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .module-list, .ideas { display: grid; gap: 8px; }
+    .module-row {
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      color: var(--ink);
+      background: #fff;
+      cursor: pointer;
+    }
+    .module-row.active { border-color: var(--accent); background: var(--accent-soft); }
+    .module-title { margin-bottom: 5px; font-size: 14px; font-weight: 750; }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 21px;
+      margin: 3px 4px 0 0;
+      border-radius: 999px;
+      padding: 0 7px;
+      color: #344054;
+      background: #eef2f7;
+      font-size: 11px;
+    }
+    .tag.active, .tag.wired, .tag.source_of_truth { color: var(--accent); background: var(--accent-soft); }
+    .tag.research_only, .tag.evidence_mvp { color: var(--blue); background: #e8f0ff; }
+    .tag.gated { color: var(--warn); background: #fff2d6; }
+    .tag.resident { color: var(--purple); background: #f1eafe; }
+    .detail-section { margin-top: 15px; border-top: 1px solid var(--line); padding-top: 14px; }
+    .idea { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: #fff; }
+    .idea strong { font-size: 13px; }
+    .idea p { margin: 6px 0 0; }
+    .canvas-wrap { min-width: 0; overflow: auto; padding: 18px; }
+    .canvas-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 14px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+    .toolbar button {
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 11px;
+      color: var(--ink);
+      background: #fff;
+      cursor: pointer;
+    }
+    .toolbar .primary { border-color: var(--accent); color: #fff; background: var(--accent); }
+    .canvas {
+      position: relative;
+      min-width: 1480px;
+      min-height: 900px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background:
+        linear-gradient(90deg, rgba(15, 118, 110, 0.05) 1px, transparent 1px),
+        linear-gradient(rgba(15, 118, 110, 0.05) 1px, transparent 1px),
+        #fff;
+      background-size: 28px 28px;
+      box-shadow: var(--shadow);
+    }
+    .lane { position: absolute; top: 0; bottom: 0; border-right: 1px solid var(--line); padding: 13px; pointer-events: none; }
+    .lane:last-child { border-right: 0; }
+    .lane-title { font-size: 13px; font-weight: 800; }
+    .lane-desc { margin-top: 4px; max-width: 240px; color: var(--muted); font-size: 11px; line-height: 1.35; }
+    svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+    .node {
+      position: absolute;
+      min-height: 112px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 11px;
+      background: #fff;
+      box-shadow: 0 8px 20px rgba(20, 24, 31, 0.08);
+      cursor: grab;
+      user-select: none;
+    }
+    .node.active { outline: 3px solid rgba(15, 118, 110, 0.18); border-color: var(--accent); }
+    .node-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; margin-bottom: 7px; }
+    .node-name { font-size: 14px; font-weight: 800; line-height: 1.3; }
+    .node-summary { color: var(--muted); font-size: 11px; line-height: 1.42; }
+    code { display: block; white-space: normal; word-break: break-word; border: 1px solid var(--line); border-radius: 8px; padding: 9px; background: #f8fafc; font-size: 12px; line-height: 1.5; }
+    ul { margin: 8px 0 0; padding-left: 18px; color: #344054; font-size: 13px; line-height: 1.6; }
+    @media (max-width: 1180px) { .app { grid-template-columns: 230px minmax(720px, 1fr); } .inspector { display: none; } }
+    @media (max-width: 760px) { .app { display: block; } .sidebar, .inspector { position: static; width: auto; height: auto; border: 0; } .sidebar { display: none; } .canvas-wrap { padding: 12px; } .canvas-head { display: block; } .toolbar { margin-top: 10px; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">IR</div>
+        <div><h1>InsightRadar</h1><div class="subtle">Research, trading, and risk intelligence desk</div></div>
+      </div>
+      <div class="memory-note">长期入口：<strong>PROJECT_MEMORY.md</strong><br>图源：<strong>configs/architecture.json</strong></div>
+      <h2>模块</h2>
+      <div id="moduleList" class="module-list"></div>
+      <div class="detail-section"><h2>当前演进原则</h2><div id="ideas" class="ideas"></div></div>
+    </aside>
+    <main class="canvas-wrap">
+      <div class="canvas-head">
+        <div><h1>InsightRadar 架构拓扑</h1><p class="subtle">数据 → 研究/市场 → 组合决策 → 后验反馈。拖动节点只保存本机布局，不改写配置。</p></div>
+        <div class="toolbar"><button id="resetLayout">重置布局</button><button id="fitView" class="primary">自动排列</button></div>
+      </div>
+      <section id="canvas" class="canvas"><svg id="edges" class="edges"></svg></section>
+    </main>
+    <aside class="inspector"><h2>节点详情</h2><div id="inspector"></div></aside>
+  </div>
+  <script id="architecture-data" type="application/json">{"lanes": [{"id": "data", "title": "数据与运行时", "description": "行情、持仓、公告、研究元数据和本地私有状态。"}, {"id": "research", "title": "研究与模型", "description": "把原始证据转成产业、观点、因子与候选模型。"}, {"id": "market", "title": "市场雷达", "description": "观察指数、关键价位、跨市场和加密资产风险。"}, {"id": "decision", "title": "组合决策", "description": "形成持仓条件计划、风险提示和纪律约束。"}, {"id": "ops", "title": "产品运营与反馈", "description": "维护产品地图、架构、Agent 分工、结果回看和下一轮迭代。"}], "nodes": [{"id": "amazingdata", "ring": "core", "title": "AmazingData 数据源", "type": "data_source", "lane": "data", "status": "wired", "commands": [], "command": "python -m stock_assist.data_sources.xysz doctor --code 000001.SZ", "summary": "A 股行情、财务、指数成分和权限诊断的结构化入口。", "inputs": [".env 凭据与主备地址", "代码和日期范围"], "outputs": ["日线/快照", "财务与公告结构数据", "指数成分区间"], "next": ["补齐点时行业和自由流通市值暴露", "保持登录和查询串行"]}, {"id": "iwencai_market", "ring": "core", "title": "同花顺问财市场数据", "type": "data_source", "lane": "data", "status": "guarded", "commands": [], "command": "python -m stock_assist.cli market-pulse", "summary": "通过项目自有标准库HTTPS边界提供A股横截面和同日IF/IH/IC/IM收盘基差；失败、过期或日期错位时显式降级。", "inputs": ["IWENCAI_API_KEY环境变量", "日期对齐的自然语言查询", "configs/a_share_pulse.json"], "outputs": ["A股横截面", "股指期货收盘价/成交量/持仓量", "同日现货指数与基差"], "next": ["积累多交易日对账/延迟/配额证据", "跨平台验收前保持本地受控接入"]}, {"id": "portfolio_memory", "ring": "core", "title": "持仓与研究记忆", "type": "private_runtime_data", "lane": "data", "status": "active", "commands": ["portfolio-import"], "command": "python -m stock_assist.cli portfolio-import --serve", "summary": "真实持仓、成本、风险线、显式beta分类和组合风险对账的本地来源；批准后原子保存并串行重跑。", "inputs": ["券商TSV", "明确保存批准", "显式beta分类", "人工研究上下文"], "outputs": ["原子portfolio.json", "风险画像同步", "可恢复备份", "当前持仓与风险状态"], "next": ["继续保持私有且不入库", "不根据代码猜测高beta", "不连接实盘下单"]}, {"id": "research_monitor", "ring": "core", "title": "研报与论点变化", "type": "workflow", "lane": "research", "status": "active", "commands": ["research-monitor"], "command": "python -m stock_assist.cli research-monitor", "summary": "聚合公开研报元数据、正文和 thesis delta，映射到持仓与主题。", "inputs": ["configs/research_sources.json", "report-cli / Eastmoney", "持仓研究上下文"], "outputs": ["research-monitor 报告", "data/research_deltas.jsonl"], "next": ["继续审计来源状态", "只把有证据的变化送入盘后报告"]}, {"id": "industry_pool", "ring": "core", "title": "产业研究股票池", "type": "workflow", "lane": "research", "status": "active", "commands": ["industry-pool"], "command": "python -m stock_assist.cli industry-pool 机器人", "summary": "按产业链、关键变量和验证指标维护候选股票池。", "inputs": ["configs/industries.json", "财务与行业证据"], "outputs": ["reports/*-industry-pool.md"], "next": ["增加点时估值与拥挤度", "和组合假设建立显式映射"]}, {"id": "influencer_evidence", "ring": "extension", "title": "公开观点证据链", "type": "workflow", "lane": "research", "status": "evidence_mvp", "commands": ["x-user-posts", "x-sync-observations", "influencer-skills", "influencer-sentiment", "nga-auth", "nga-monitor", "llm-auth", "nga-daily"], "command": "python -m stock_assist.cli x-user-posts &lt;handle&gt; -n 5; python -m stock_assist.cli x-sync-observations; python -m stock_assist.cli influencer-skills; python -m stock_assist.cli influencer-sentiment; python -m stock_assist.cli nga-auth status; python -m stock_assist.cli nga-monitor; python -m stock_assist.cli llm-auth status; python -m stock_assist.cli nga-daily --llm", "summary": "采集一手公开帖子、同步可审计观察，并生成证据回填的 NGA 每日话题综述。", "inputs": ["本地 X/NGA/AI 认证", "configs/influencers.json", "原始帖子与线程"], "outputs": ["观点观察流水", "技能卡", "回复情绪报告", "NGA 每日话题报告"], "next": ["保持一手/二手来源分层", "沉淀后验命中与风格漂移"]}, {"id": "factor_universe", "ring": "lab", "title": "点时 CSI 1000 样本域", "type": "workflow", "lane": "research", "status": "active", "commands": ["factor-universe-sync"], "command": "python -m stock_assist.cli factor-universe-sync", "summary": "同步历史成分进出区间并用 manifest hash 锁定样本谱系。", "inputs": ["AmazingData 指数成分", "历史日期区间"], "outputs": ["点时成分 CSV", "factor-universe JSON/Markdown/HTML"], "next": ["补点时行业和自由流通市值", "保持半开区间过滤"]}, {"id": "factor_lab", "ring": "lab", "title": "因子研究实验室", "type": "workflow", "lane": "research", "status": "research_only", "commands": ["factor-lab"], "command": "python -m stock_assist.cli factor-lab", "summary": "用 embargo、RankIC、分层、成本和共线性诊断检验可解释因子。", "inputs": ["显式研究样本域", "日线行情", "基准收益"], "outputs": ["factor-lab JSON/Markdown/HTML", "验证门结果"], "next": ["行业/规模中性化", "按因子族做消融"]}, {"id": "factor_pipeline", "ring": "lab", "title": "个人因子模型流水线", "type": "workflow", "lane": "research", "status": "gated", "commands": ["factor-pipeline"], "command": "python -m stock_assist.cli factor-pipeline", "summary": "积累观察、成熟 T+5 标签、训练 challenger，并只晋升通过硬门槛的 champion。", "inputs": ["点时因子面板", "私有观察账本", "模型与验证配置"], "outputs": ["候选模型", "模型注册表", "champion 或明确缺失"], "next": ["当前无 champion", "不得为强行上线而放松门槛"]}, {"id": "market_pulse", "ring": "core", "title": "A 股实时市场脉冲", "type": "workflow", "lane": "market", "status": "active", "commands": ["market-pulse"], "command": "python -m stock_assist.cli market-pulse", "summary": "观察指数方向、ETF 支撑、期指基差，并以累计下界和1/5/20次变化跟踪国家队ETF份额代理。", "inputs": ["同花顺问财期指收盘基差", "AmazingData 实时快照与ETF份额历史", "ETF年报汇金持仓披露", "configs/a_share_pulse.json"], "outputs": ["market-pulse JSON/Markdown/HTML", "国家队ETF最低退出比例", "ETF份额短中周期变化", "来源审计流水"], "next": ["补真实广度和席位结构", "补ETF申赎与2015年直接持股", "缺失数据不推断方向"]}, {"id": "market_levels", "ring": "core", "title": "多周期关键价位", "type": "workflow", "lane": "market", "status": "active", "commands": ["market-levels"], "command": "python -m stock_assist.cli market-levels", "summary": "用月/周/日/60m/15m/3m 结构给出支撑、失效和收复条件。", "inputs": ["公开 K 线", "configs/market_levels.json"], "outputs": ["market-levels JSON/Markdown/HTML"], "next": ["积累价位后验", "不把缠论近似包装成确定预测"]}, {"id": "risk_watch", "ring": "core", "title": "每日风险温度计", "type": "workflow", "lane": "market", "status": "active", "commands": ["risk-watch"], "command": "python -m stock_assist.cli risk-watch", "summary": "把等权广度、A股内部结构、跨市场冲击、成交拥挤和组合脆弱度合成为可回放的分级风险预算。", "inputs": ["可选同花顺全A、成交集中度与9·24前复权横截面", "A股/全球日线（含标普500）", "data/risk_watch_profile.json", "Brent/WTI/US10Y/SP500/QQQ/SOX/KOSPI point-in-time history", "primary-source macro event evidence"], "outputs": ["risk-watch JSON/Markdown/HTML", "绿黄橙红风险预算", "9·24锚点宽度与等效点位", "无未来函数回放", "diagnostic-only macro transmission shadow and replay calibration"], "next": ["积累成交集中度与叙事遥测的时间戳样本", "积累跨行情误报率与漏报率", "只校准风险预算，不接自动交易"]}, {"id": "style_rotation", "ring": "core", "title": "科技—金融—高股息风格矩阵", "type": "workflow", "lane": "market", "status": "active", "commands": ["style-rotation"], "command": "python -m stock_assist.cli style-rotation", "summary": "以固定ETF代理篮子比较三类风格的多周期超额、宽度、均线参与、成交代理和持续性，冲突或缺失时降级。", "inputs": ["configs/style_rotation.json", "公开ETF日线", "固定沪深300基准"], "outputs": ["style-rotation JSON/Markdown/HTML", "轮动确认状态", "证据账单与覆盖率"], "next": ["补固定点时盈利修正源", "回测校准前保持diagnostic_unbacktested", "不单独授权买入"]}, {"id": "ai_capex_watch", "ring": "core", "title": "AI资本开支与光模块传导", "type": "workflow", "lane": "research", "status": "active", "commands": ["ai-capex-watch"], "command": "python -m stock_assist.cli ai-capex-watch", "summary": "用官方云厂商CapEx、网络收入和供应商兑现证据验证AI/CPO景气，不把总支出直接映射为个股利润。", "inputs": ["configs/ai_capex_watch.json", "云厂商官方IR", "网络与光模块供应链官方披露"], "outputs": ["ai-capex-watch JSON/Markdown/HTML", "CapEx动量", "光模块传导与中际待验证清单"], "next": ["自动发现官方IR更新", "接入中际半年报指标", "积累时间戳历史后回放阈值"]}, {"id": "crypto_monitor", "ring": "extension", "title": "Hyperliquid 只读监控", "type": "workflow", "lane": "market", "status": "active", "commands": ["crypto-monitor"], "command": "python -m stock_assist.cli crypto-monitor", "summary": "监控加密/RWA 行情、地址仓位和清算风险，不持有私钥。", "inputs": ["configs/crypto_watchlist.json", "Hyperliquid Info API"], "outputs": ["reports/*-crypto-monitor.md"], "next": ["保持只读边界", "异常阈值继续显式配置"]}, {"id": "after_close", "ring": "core", "title": "盘后组合决策面", "type": "workflow", "lane": "decision", "status": "active", "commands": ["after-close"], "command": "python -m stock_assist.cli after-close", "summary": "把正式/候选评分状态机、持仓动作、风险、市场点位、风格轮动和产业证据合并成一个可审计的次日条件计划。", "inputs": ["真实持仓与风险对账", "行情与公告", "研报变化", "risk-watch", "market-pulse国家队代理", "market-levels", "style-rotation", "ai-capex-watch"], "outputs": ["after-close JSON/Markdown/HTML", "additive market-matrix contract with bounded 30-session trajectories", "self-contained five-route after-close decision workbench", "评分账单与market_level_state决策权", "首屏操盘条", "四时点时间轴", "100股整数手执行建议", "风格确认矩阵", "开盘/上行/震荡/下行情景"], "next": ["继续保持条件语言", "用结果账本校准而非凭印象调参"]}, {"id": "signal_outcomes", "ring": "core", "title": "信号结果账本", "type": "feedback_store", "lane": "ops", "status": "active", "commands": [], "command": "data/signal_outcomes.jsonl", "summary": "按股票和日期去重，等待 1/5/20 个交易日成熟后评分。", "inputs": ["盘后动作", "后续交易日价格"], "outputs": ["收益、命中、MFE/MAE", "待成熟样本"], "next": ["样本不足时保持 pending", "增加基准相对贡献"]}, {"id": "agent_roster", "ring": "governance", "title": "Agent 分工表", "type": "governance", "lane": "ops", "status": "active", "commands": ["agents"], "command": "python -m stock_assist.cli agents", "summary": "呈现人工权限、主 Agent 串行写入、只读任务角色和并行上限。", "inputs": ["configs/agents.json", ".codex/agents/*.toml"], "outputs": ["reports/*-agents.md"], "next": ["保持角色合同一致", "只在任务可拆分时使用并行"]}, {"id": "harness_eval", "ring": "governance", "title": "Agent Harness 合同与评测", "type": "workflow", "lane": "ops", "status": "bootstrap", "commands": ["harness-smoke"], "command": "python -m stock_assist.cli harness-smoke", "summary": "用版本化 task、trace、privacy 和 checkpoint 合同生成无模型、无交易副作用的确定性 smoke 证据。", "inputs": ["configs/harness_eval/smoke_task.json", "configs/product_governance.json", "feature_list.json", "configs/agents.json", ".codex/agents/*.toml"], "outputs": ["data/harness_eval/runs/*", "reports/*-harness-smoke.md"], "next": ["建立真实任务基线", "对 Context、Memory 和 Multi-Agent 做消融"]}, {"id": "product_map", "ring": "governance", "title": "产品注册表与地图", "type": "governance", "lane": "ops", "status": "source_of_truth", "commands": ["product-map"], "command": "python -m stock_assist.cli product-map", "summary": "从 product.py 呈现模块、命令、输入输出和数据分类。", "inputs": ["stock_assist/product.py", "当前仓库文件"], "outputs": ["reports/*-product-map.md"], "next": ["新增命令时同步架构覆盖", "避免并行注册表漂移"]}, {"id": "architecture_view", "ring": "governance", "title": "架构拓扑与项目记忆", "type": "governance", "lane": "ops", "status": "source_of_truth", "commands": ["architecture-view"], "command": "python -m stock_assist.cli architecture-view", "summary": "用受版本控制的图和记忆索引维持跨会话、跨机器的项目连续性。", "inputs": ["PROJECT_MEMORY.md", "configs/architecture.json", "stock_assist/product.py"], "outputs": ["docs/architecture.html", "可执行新鲜度校验"], "next": ["每次模块变化后刷新", "记忆索引保持短小并按需加载"]}, {"id": "evolution", "ring": "governance", "title": "自我进化 backlog", "type": "workflow", "lane": "ops", "status": "active", "commands": ["evolve"], "command": "python -m stock_assist.cli evolve", "summary": "扫描业务报告和完整 feature 目录，并只提出能够装入剩余实验容量的未批准候选。", "inputs": ["feature_list.json", "configs/product_governance.json", "业务报告", "本地配置/数据状态"], "outputs": ["reports/*-evolution.md"], "next": ["避免扫描自己的旧报告", "只提出可验证的下一步"]}], "edges": [{"from": "amazingdata", "to": "research_monitor", "label": "结构化确认"}, {"from": "iwencai_market", "to": "market_pulse", "label": "同日收盘基差"}, {"from": "iwencai_market", "to": "risk_watch", "label": "宽度与拥挤度"}, {"from": "amazingdata", "to": "factor_universe", "label": "历史成分"}, {"from": "amazingdata", "to": "factor_lab", "label": "日线与基准"}, {"from": "factor_universe", "to": "factor_lab", "label": "点时样本"}, {"from": "factor_lab", "to": "factor_pipeline", "label": "因子规范"}, {"from": "portfolio_memory", "to": "after_close", "label": "真实持仓与假设"}, {"from": "research_monitor", "to": "after_close", "label": "论点变化"}, {"from": "industry_pool", "to": "after_close", "label": "产业证据"}, {"from": "influencer_evidence", "to": "after_close", "label": "公开观点"}, {"from": "market_pulse", "to": "after_close", "label": "市场上下文"}, {"from": "market_levels", "to": "after_close", "label": "关键价位条件"}, {"from": "style_rotation", "to": "after_close", "label": "风格确认与冲突证据"}, {"from": "risk_watch", "to": "after_close", "label": "风险预算、锚点宽度与去风险条件"}, {"from": "factor_pipeline", "to": "after_close", "label": "仅 champion 可用"}, {"from": "after_close", "to": "signal_outcomes", "label": "记录动作"}, {"from": "signal_outcomes", "to": "evolution", "label": "成熟后验"}, {"from": "research_monitor", "to": "evolution", "label": "来源缺口"}, {"from": "ai_capex_watch", "to": "evolution", "label": "CapEx与产业传导缺口"}, {"from": "market_pulse", "to": "evolution", "label": "实时数据缺口"}, {"from": "risk_watch", "to": "evolution", "label": "预警误报与漏报"}, {"from": "factor_pipeline", "to": "evolution", "label": "验证门结果"}, {"from": "agent_roster", "to": "evolution", "label": "职责边界"}, {"from": "agent_roster", "to": "harness_eval", "label": "角色与权限合同"}, {"from": "harness_eval", "to": "evolution", "label": "失败与验证证据"}, {"from": "product_map", "to": "architecture_view", "label": "命令覆盖"}, {"from": "architecture_view", "to": "evolution", "label": "结构缺口"}], "ideas": [{"priority": "P0", "title": "项目记忆必须可执行验证", "detail": "索引、主题、源文件、生成物新鲜度和产品命令覆盖都由脚本检查，避免只靠文档约定。"}, {"priority": "P0", "title": "模型晋升保持硬门槛", "detail": "因子候选未通过 RankIC、成本、单调性和共线性门槛时，盘后模块不得消费诊断排名。"}, {"priority": "P1", "title": "结果校准进入反馈回路", "detail": "等待足够成熟样本后，再用基准相对收益和 MFE/MAE 调整提示优先级。"}, {"priority": "P1", "title": "数据缺口保持显式", "detail": "行情、公告、期指、行业暴露或持仓缺失时，报告说明缺口而不是推断结论。"}]}</script>
+  <script>
+    const graph = JSON.parse(document.getElementById('architecture-data').textContent);
+    const canvas = document.getElementById('canvas');
+    const edgesSvg = document.getElementById('edges');
+    const list = document.getElementById('moduleList');
+    const inspector = document.getElementById('inspector');
+    const ringLabels = { core: '核心', lab: '实验室', satellite: '卫星应用', extension: '可选扩展', governance: '治理' };
+    function ringLabel(node) { return ringLabels[node.ring] || node.ring || '未分类'; }
+    const ideas = document.getElementById('ideas');
+    const layoutKey = 'insight-radar-architecture-layout-v2';
+    let activeId = graph.nodes[0]?.id;
+    let saved = JSON.parse(localStorage.getItem(layoutKey) || '{}');
+
+    function laneWidth() { return canvas.clientWidth / graph.lanes.length; }
+    function laneCount(laneId) { return graph.nodes.filter(node => node.lane === laneId).length; }
+    function ensureCanvasHeight() {
+      const maxCount = Math.max(1, ...graph.lanes.map(lane => laneCount(lane.id)));
+      canvas.style.height = `${Math.max(900, 112 + maxCount * 148)}px`;
+    }
+    function defaultPosition(node) {
+      const laneIndex = Math.max(0, graph.lanes.findIndex(lane => lane.id === node.lane));
+      const order = graph.nodes.filter(item => item.lane === node.lane).findIndex(item => item.id === node.id);
+      return { x: laneIndex * laneWidth() + 22, y: 84 + order * 148 };
+    }
+    function positionFor(node) { return saved[node.id] || defaultPosition(node); }
+    function selectNode(id) { activeId = id; render(); }
+
+    function render() {
+      ensureCanvasHeight();
+      canvas.querySelectorAll('.lane,.node').forEach(item => item.remove());
+      renderLanes();
+      renderNodes();
+      renderList();
+      renderIdeas();
+      renderInspector();
+      requestAnimationFrame(renderEdges);
+    }
+    function renderLanes() {
+      const width = laneWidth();
+      graph.lanes.forEach((lane, index) => {
+        const el = document.createElement('div');
+        el.className = 'lane';
+        el.style.left = `${index * width}px`;
+        el.style.width = `${width}px`;
+        el.innerHTML = `<div class="lane-title">${lane.title}</div><div class="lane-desc">${lane.description}</div>`;
+        canvas.appendChild(el);
+      });
+    }
+    function renderNodes() {
+      const width = laneWidth();
+      graph.nodes.forEach(node => {
+        const pos = positionFor(node);
+        const el = document.createElement('article');
+        el.className = `node ${node.id === activeId ? 'active' : ''}`;
+        el.dataset.id = node.id;
+        el.style.left = `${pos.x}px`;
+        el.style.top = `${pos.y}px`;
+        el.style.width = `${Math.min(252, width - 44)}px`;
+        el.innerHTML = `<div class="node-top"><div class="node-name">${node.title}</div><span class="tag ${node.status}">${node.status}</span></div><div class="node-summary">${node.summary}</div><span class="tag">${ringLabel(node)}</span><span class="tag">${node.type}</span>`;
+        el.addEventListener('pointerdown', startDrag);
+        el.addEventListener('click', () => selectNode(node.id));
+        canvas.appendChild(el);
+      });
+    }
+    function renderList() {
+      list.innerHTML = '';
+      graph.nodes.forEach(node => {
+        const row = document.createElement('button');
+        row.className = `module-row ${node.id === activeId ? 'active' : ''}`;
+        row.innerHTML = `<div class="module-title">${node.title}</div><span class="tag ${node.status}">${node.status}</span><span class="tag">${ringLabel(node)}</span><span class="tag">${node.lane}</span>`;
+        row.addEventListener('click', () => selectNode(node.id));
+        list.appendChild(row);
+      });
+    }
+    function renderIdeas() {
+      ideas.innerHTML = graph.ideas.map(idea => `<div class="idea"><strong>${idea.priority} · ${idea.title}</strong><p class="subtle">${idea.detail}</p></div>`).join('');
+    }
+    function renderInspector() {
+      const node = graph.nodes.find(item => item.id === activeId);
+      if (!node) { inspector.innerHTML = '<p class="subtle">请选择一个节点。</p>'; return; }
+      inspector.innerHTML = `
+        <h1>${node.title}</h1><p class="subtle">${node.summary}</p>
+        <span class="tag ${node.status}">${node.status}</span><span class="tag">${ringLabel(node)}</span><span class="tag">${node.type}</span>
+        <div class="detail-section"><h3>运行/位置</h3><code>${node.command}</code></div>
+        <div class="detail-section"><h3>输入</h3><ul>${node.inputs.map(item => `<li>${item}</li>`).join('')}</ul></div>
+        <div class="detail-section"><h3>输出</h3><ul>${node.outputs.map(item => `<li>${item}</li>`).join('')}</ul></div>
+        <div class="detail-section"><h3>下一步</h3><ul>${node.next.map(item => `<li>${item}</li>`).join('')}</ul></div>`;
+    }
+    function renderEdges() {
+      edgesSvg.innerHTML = '<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#98a2b3"></path></marker></defs>';
+      const rect = canvas.getBoundingClientRect();
+      graph.edges.forEach(edge => {
+        const from = canvas.querySelector(`[data-id="${edge.from}"]`);
+        const to = canvas.querySelector(`[data-id="${edge.to}"]`);
+        if (!from || !to) return;
+        const a = from.getBoundingClientRect();
+        const b = to.getBoundingClientRect();
+        const x1 = a.left - rect.left + a.width;
+        const y1 = a.top - rect.top + a.height / 2;
+        const x2 = b.left - rect.left;
+        const y2 = b.top - rect.top + b.height / 2;
+        const bend = Math.max(35, Math.abs(x2 - x1) / 2);
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`);
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', '#98a2b3');
+        path.setAttribute('stroke-width', '2');
+        path.setAttribute('marker-end', 'url(#arrow)');
+        edgesSvg.appendChild(path);
+      });
+    }
+    function startDrag(event) {
+      const nodeEl = event.currentTarget;
+      const id = nodeEl.dataset.id;
+      activeId = id;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const initial = { x: parseFloat(nodeEl.style.left), y: parseFloat(nodeEl.style.top) };
+      nodeEl.setPointerCapture(event.pointerId);
+      function move(moveEvent) {
+        const x = Math.max(8, initial.x + moveEvent.clientX - startX);
+        const y = Math.max(70, initial.y + moveEvent.clientY - startY);
+        saved[id] = { x, y };
+        nodeEl.style.left = `${x}px`;
+        nodeEl.style.top = `${y}px`;
+        renderEdges();
+      }
+      function up() {
+        localStorage.setItem(layoutKey, JSON.stringify(saved));
+        nodeEl.removeEventListener('pointermove', move);
+        nodeEl.removeEventListener('pointerup', up);
+        render();
+      }
+      nodeEl.addEventListener('pointermove', move);
+      nodeEl.addEventListener('pointerup', up);
+    }
+    document.getElementById('resetLayout').addEventListener('click', () => { saved = {}; localStorage.removeItem(layoutKey); render(); });
+    document.getElementById('fitView').addEventListener('click', () => { saved = {}; graph.nodes.forEach(node => saved[node.id] = defaultPosition(node)); localStorage.setItem(layoutKey, JSON.stringify(saved)); render(); });
+    window.addEventListener('resize', () => { if (Object.keys(saved).length === 0) render(); else renderEdges(); });
+    render();
+  </script>
+</body>
+</html>

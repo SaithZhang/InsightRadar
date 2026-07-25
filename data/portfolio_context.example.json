@@ -1,0 +1,29 @@
+{
+  "positions": [
+    {
+      "code": "000001.SZ",
+      "name": "示例持仓",
+      "buy_thesis": "示例：买入时的核心假设，例如估值修复、行业景气改善或事件催化。",
+      "initial_risk_line": "示例：买入当日定义的失效条件，例如跌破关键均线或基本面假设被证伪。",
+      "current_risk_line": "示例：复盘后更新的当前风控线。",
+      "horizon": "swing",
+      "review_status": "watch",
+      "catalysts": [
+        "示例：未来1-4周可能验证买入假设的事件或数据。"
+      ],
+      "falsification_signals": [
+        "示例：一旦出现就说明原始假设可能失效的价格、基本面或事件证据。"
+      ],
+      "observation_window": "示例：2026-07-08 至 2026-07-31",
+      "next_review_date": "2026-07-15",
+      "adjustments": [
+        {
+          "date": "2026-07-08",
+          "action": "示例：减仓/加仓/上移止盈线/继续观察",
+          "reason": "示例：调整原因和证据。",
+          "risk_line_after": "示例：调整后的风控线。"
+        }
+      ]
+    }
+  ]
+}

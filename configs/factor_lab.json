@@ -1,0 +1,21 @@
+{
+  "universe_name": "A股显式研究池v1（非完整中证1000）",
+  "universe_type": "explicit_custom",
+  "universe_mode": "static_codes",
+  "universe_id": "custom_pilot_v1",
+  "codes": [
+    "002240.SZ", "002371.SZ", "002436.SZ", "002463.SZ", "002920.SZ",
+    "300274.SZ", "300308.SZ", "300316.SZ", "300394.SZ", "300476.SZ",
+    "300502.SZ", "300567.SZ", "300620.SZ", "300661.SZ", "600487.SH",
+    "603228.SH", "603986.SH", "688008.SH", "688041.SH", "688126.SH"
+  ],
+  "benchmark": "000852.SH",
+  "begin_date": 20250101,
+  "horizon_days": 5,
+  "rebalance_days": 5,
+  "min_train_days": 100,
+  "train_window_days": 252,
+  "ridge_alpha": 10.0,
+  "top_n": 5,
+  "transaction_cost_bps": 10
+}

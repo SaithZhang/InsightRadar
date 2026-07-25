@@ -1,0 +1,18 @@
+{
+  "history_days": 360,
+  "default_replay_start": "2026-05-01",
+  "anchor_structure": {
+    "enabled": true,
+    "anchor_date": "2024-09-24",
+    "benchmark_anchor_close": 2863.13,
+    "page_size": 500,
+    "max_pages": 20,
+    "min_rows": 4000,
+    "min_coverage": 0.9,
+    "technology_industries": [
+      "电子",
+      "通信",
+      "计算机"
+    ]
+  }
+}
