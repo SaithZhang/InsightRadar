@@ -1,0 +1,54 @@
+{
+  "schema_version": "insightradar-decision-rules/v1",
+  "score": {
+    "minimum": 0.0,
+    "maximum": 10.0,
+    "initial_formal_score": 2.0,
+    "max_daily_change": 1.0,
+    "source_max_age_calendar_days": 4,
+    "breadth_up_day_return": 0.005,
+    "breadth_down_day_return": -0.01,
+    "turnover_not_weak_percentile": 0.2,
+    "turnover_improved_percentile": 0.5,
+    "zone_hysteresis_pct": 0.001,
+    "confirmation_persistence_bars": 2
+  },
+  "rules": [
+    {
+      "rule_id": "ML_CONFIRM_BREADTH_UP",
+      "direction": "positive",
+      "points": 1.0,
+      "description": "第一确认区上沿有效站稳，宽度改善且成交确认不弱，只形成盘中候选加分。"
+    },
+    {
+      "rule_id": "ML_SUPPORT_FAIL_BREADTH_DOWN",
+      "direction": "negative",
+      "points": -1.0,
+      "description": "15分钟有效收在生死支撑下沿以下，下一根15分钟仍未收回且宽度恶化。"
+    },
+    {
+      "rule_id": "ML_STRONG_BREAKOUT_CONFIRMED",
+      "direction": "positive",
+      "points": 1.0,
+      "description": "收盘站上强压力上沿，宽度和成交同步改善，才允许正式加一分。"
+    },
+    {
+      "rule_id": "SIGNAL_CONFLICT",
+      "direction": "neutral",
+      "points": 0.0,
+      "description": "价格、宽度和成交相互矛盾时维持原评分。"
+    },
+    {
+      "rule_id": "DATA_STALE_OR_MISSING",
+      "direction": "veto",
+      "points": 0.0,
+      "description": "market-levels、宽度或成交数据缺失或过期时禁止升分。"
+    },
+    {
+      "rule_id": "RISK_VETO",
+      "direction": "veto",
+      "points": 0.0,
+      "description": "risk-watch红灯或硬风险事件不阻止候选分改善，但禁止风险预算自动升级。"
+    }
+  ]
+}

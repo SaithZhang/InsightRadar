@@ -1,0 +1,44 @@
+{
+  "schema_version": "insightradar-product-governance/v1",
+  "limits": {
+    "max_active_experiments": 1,
+    "max_queued_experiments": 2
+  },
+  "active_experiments": [
+    {
+      "feature_id": "feat-058",
+      "problem": "The after-close HTML mixes decisions, market data, research, audit text, and raw failures into one long page, so the user cannot move quickly from market state to portfolio action.",
+      "loop_stage": "decide",
+      "baseline": "The 2026-07-23 after-close HTML is 3616 pixels tall on desktop and 7786 pixels on mobile, exposes raw provider exceptions, conflicts on holdings and freshness, and does not surface the macro shadow.",
+      "outcome_metric": "At 1440x900 the first viewport shows market conclusion, matrix, portfolio translation, and the start of holding actions; all five routes work from file://; JSON/Markdown/HTML agree; raw exceptions are absent from the normal UI; mobile has no page overflow.",
+      "smallest_experiment": "Reuse existing risk-watch, macro, style, reliability, action, and outcome payloads to build one self-contained after-close HTML workbench with no new provider.",
+      "safety_boundaries": [
+        "No uncalibrated 0-100 market-temperature score",
+        "No new Hong Kong technology or China government-bond provider",
+        "No diagnostic macro state may alter risk score, risk budget, or trade authority",
+        "Missing and stale values remain explicit and cannot authorize new exposure",
+        "No automatic order placement or holdings overwrite"
+      ],
+      "kill_criterion": "Reject or simplify the workbench if it changes trade authority, duplicates provider fetching in presentation code, cannot keep JSON/HTML consistent, or remains slower to scan than the existing action table.",
+      "review_date": "2026-08-07"
+    }
+  ],
+  "queued_experiments": [
+    {
+      "feature_id": "feat-056",
+      "problem": "InsightRadar has a structurally complete Harness but no behavioral baseline proving which controls improve real tasks.",
+      "loop_stage": "verify",
+      "baseline": "Harness structure scores 100/100, but no versioned 20-30-task suite or four-profile comparison exists.",
+      "outcome_metric": "Every eligible task reports deterministic success, evidence correctness, false completion, scope drift, privacy, recovery, token or context volume when available, tool calls, elapsed time, and human corrections across declared profiles.",
+      "smallest_experiment": "Plan and run a five-task pilot across the four profiles before scaling the accepted schema to 20-30 tasks.",
+      "safety_boundaries": [
+        "Use synthetic or private local tasks only",
+        "No holdings, broker data, credentials, or raw private conversations in public artifacts",
+        "Deterministic checks are primary; model judging is secondary",
+        "No benchmark result grants trade authority or model-superiority claims"
+      ],
+      "kill_criterion": "Stop expansion if the five-task pilot cannot produce reproducible deterministic verdicts or leaks private/secret data.",
+      "review_date": "2026-08-17"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InfluencerThreads",
+  "type": "object",
+  "required": ["threads"],
+  "properties": {
+    "threads": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "observation_id", "author", "captured_at", "main_text", "replies"],
+        "properties": {
+          "id": {"type": "string"},
+          "observation_id": {"type": "string"},
+          "author": {"type": "string"},
+          "source": {"type": "string"},
+          "source_url": {"type": "string"},
+          "captured_at": {"type": "string"},
+          "main_text": {"type": "string"},
+          "replies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["author", "text"],
+              "properties": {
+                "author": {"type": "string"},
+                "age": {"type": "string"},
+                "text": {"type": "string"},
+                "category": {
+                  "type": "string",
+                  "enum": ["supportive", "skeptical", "question", "neutral", "noise", "unknown"]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

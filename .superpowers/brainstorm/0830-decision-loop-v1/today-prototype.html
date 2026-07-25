@@ -1,0 +1,2982 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PROTOTYPE — InsightRadar 08:30 决策闭环</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111b;
+      --panel: #0c1926;
+      --panel-2: #102131;
+      --panel-3: #15293b;
+      --line: rgba(154, 181, 207, .13);
+      --line-strong: rgba(154, 181, 207, .26);
+      --text: #f4f0e8;
+      --muted: #91a4b7;
+      --green: #5a8fc7;
+      --green-soft: rgba(90, 143, 199, .13);
+      --amber: #d6a74a;
+      --amber-soft: rgba(214, 167, 74, .13);
+      --red: #d94b45;
+      --red-soft: rgba(217, 75, 69, .12);
+      --blue: #73a9df;
+      --warm-white: #f4f0e8;
+      --ink: #07111b;
+      --shadow: 0 22px 64px rgba(0, 0, 0, .34);
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; }
+    html { background: var(--bg); }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 78% -24%, rgba(45, 92, 137, .22), transparent 39%),
+        linear-gradient(180deg, #081521 0, #07111b 58%, #050c13 100%);
+      font: 14px/1.55 Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+
+    button { font: inherit; }
+    button:focus-visible, [tabindex]:focus-visible {
+      outline: 2px solid var(--green);
+      outline-offset: 2px;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 214px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 24px 18px;
+      border-right: 1px solid var(--line);
+      background: rgba(5, 13, 22, .86);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 8px 28px;
+      font-size: 15px;
+      font-weight: 750;
+      letter-spacing: .01em;
+    }
+
+    .brand-mark {
+      width: 29px;
+      height: 29px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(90, 143, 199, .42);
+      border-radius: 9px;
+      color: var(--blue);
+      background: rgba(90, 143, 199, .12);
+      box-shadow: inset 0 0 18px rgba(90, 143, 199, .08);
+    }
+
+    .nav {
+      display: grid;
+      gap: 7px;
+    }
+
+    .nav button {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      width: 100%;
+      padding: 11px 12px;
+      border: 0;
+      border-radius: 11px;
+      color: var(--muted);
+      text-align: left;
+      background: transparent;
+    }
+
+    .nav button.active {
+      color: var(--text);
+      background: linear-gradient(90deg, rgba(90, 143, 199, .17), rgba(90, 143, 199, .04));
+    }
+
+    .nav-icon {
+      width: 23px;
+      color: var(--green);
+      text-align: center;
+    }
+
+    .sidebar-note {
+      position: absolute;
+      right: 18px;
+      bottom: 96px;
+      left: 18px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      background: rgba(255,255,255,.025);
+    }
+
+    .content {
+      min-width: 0;
+      padding: 24px clamp(20px, 3vw, 46px) 144px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: center;
+      max-width: 1260px;
+      margin: 0 auto 26px;
+    }
+
+    .eyebrow {
+      color: var(--blue);
+      font-size: 11px;
+      font-weight: 760;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    .topbar h1 {
+      margin: 2px 0 0;
+      font-size: clamp(24px, 3vw, 36px);
+      line-height: 1.18;
+      letter-spacing: -.025em;
+    }
+
+    .data-state {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .chip, .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 27px;
+      padding: 4px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 11px;
+      background: rgba(255,255,255,.025);
+    }
+
+    .chip::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 0 10px rgba(115, 169, 223, .55);
+    }
+
+    .stage {
+      max-width: 1260px;
+      margin: 0 auto;
+    }
+
+    .market-context {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+
+    .market-constraint {
+      display: grid;
+      grid-template-columns: minmax(190px, .85fr) repeat(2, minmax(190px, 1fr)) minmax(150px, .65fr);
+      gap: 0;
+      align-items: stretch;
+      width: 100%;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      color: var(--text);
+      text-align: left;
+      background: rgba(12, 25, 38, .86);
+      overflow: hidden;
+    }
+
+    .constraint-summary, .market-driver, .market-confidence {
+      min-width: 0;
+      padding: 16px 18px;
+    }
+
+    .market-driver, .market-confidence {
+      border-left: 1px solid var(--line);
+    }
+
+    .constraint-summary strong {
+      display: block;
+      margin: 6px 0 3px;
+      font-size: 17px;
+      line-height: 1.25;
+    }
+
+    .market-constraint small { display: block; color: var(--muted); }
+    .market-driver {
+      border-top: 0;
+      border-right: 0;
+      border-bottom: 0;
+      color: var(--text);
+      text-align: left;
+      background: transparent;
+      cursor: pointer;
+    }
+    .market-driver:hover { background: rgba(255,255,255,.025); }
+    .market-driver .driver-label {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+    .market-driver strong {
+      display: block;
+      margin: 8px 0 4px;
+      font-size: 20px;
+      line-height: 1.1;
+    }
+    .market-driver:first-of-type strong { color: var(--red); }
+    .market-driver:last-of-type strong { color: var(--amber); }
+    .market-confidence .freshness {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      margin: 7px 0 4px;
+      color: var(--blue);
+      font-weight: 760;
+    }
+    .market-confidence .freshness::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 0 10px rgba(115,169,223,.55);
+    }
+    .market-constraint .constraint-link {
+      display: inline-flex;
+      margin-top: 11px;
+      padding: 7px 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      color: var(--text);
+      font-size: 11px;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .market-strip { display: none; }
+
+    .market-tile {
+      min-width: 0;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: var(--text);
+      text-align: left;
+      background: rgba(12, 25, 38, .82);
+      cursor: pointer;
+    }
+
+    .market-tile:hover { border-color: var(--line-strong); }
+    .market-tile header, .market-tile footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 7px;
+      align-items: center;
+    }
+
+    .market-tile header strong { font-size: 12px; }
+    .market-tile header span {
+      overflow: hidden;
+      color: var(--amber);
+      font-size: 10px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .market-tile .temperature {
+      margin: 7px 0 5px;
+      font-size: 17px;
+      font-weight: 780;
+      line-height: 1.1;
+    }
+
+    .market-tile footer {
+      color: var(--muted);
+      font-size: 9px;
+    }
+
+    .market-tile .confirm-ok { color: var(--green); }
+    .market-tile .confirm-lag { color: var(--amber); }
+    .market-tile .confirm-gap { color: var(--red); }
+
+    .decision-heading {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: end;
+      margin: 0 0 12px;
+    }
+
+    .decision-heading h2 {
+      margin: 0;
+      color: var(--warm-white);
+      font-size: clamp(23px, 2.5vw, 32px);
+      line-height: 1.15;
+      letter-spacing: -.02em;
+    }
+
+    .decision-heading p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .decision-counts {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .decision-counts strong { color: var(--text); }
+    .decision-counts .revised strong { color: var(--amber); }
+    .decision-counts .voided strong { color: var(--red); }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(160deg, rgba(16,33,49,.96), rgba(9,20,31,.96));
+      box-shadow: var(--shadow);
+    }
+
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: flex-start;
+      padding: 18px 20px 0;
+    }
+
+    .panel-head h2, .panel-head h3 { margin: 0; }
+    .panel-head p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 9px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 750;
+    }
+
+    .status.unchanged { color: var(--blue); background: rgba(90,143,199,.12); }
+    .status.revised { color: var(--amber); background: var(--amber-soft); }
+    .status.void { color: var(--red); background: var(--red-soft); }
+
+    .action-title {
+      margin: 14px 0 6px;
+      font-size: clamp(20px, 2.4vw, 31px);
+      line-height: 1.22;
+      letter-spacing: -.02em;
+    }
+
+    .rule {
+      display: grid;
+      grid-template-columns: 58px minmax(0, 1fr);
+      gap: 8px;
+      padding: 9px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .rule-key {
+      color: var(--blue);
+      font: 760 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+      letter-spacing: .06em;
+    }
+
+    .rule.invalid .rule-key { color: var(--red); }
+    .rule-value { color: #d9e2eb; }
+
+    .progress {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-top: 13px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .progress-bars {
+      display: grid;
+      grid-template-columns: repeat(3, 26px);
+      gap: 4px;
+    }
+
+    .progress-bars i {
+      display: block;
+      height: 5px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.11);
+    }
+
+    .progress-bars i.on {
+      background: var(--amber);
+      box-shadow: 0 0 10px rgba(244,197,108,.28);
+    }
+
+    .actions {
+      display: flex;
+      gap: 9px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    .decision-actions {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .decision-actions .text-button {
+      min-height: 34px;
+      padding: 7px 9px;
+    }
+
+    .decision-actions .reject {
+      color: #e17a74;
+    }
+
+    .response-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 27px;
+      padding: 4px 9px;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 760;
+      background: rgba(255,255,255,.025);
+    }
+
+    .response-badge.accepted { color: var(--blue); background: var(--green-soft); }
+    .response-badge.disputed { color: var(--amber); background: var(--amber-soft); }
+    .response-badge.rejected { color: #e17a74; background: var(--red-soft); }
+    .response-badge.deferred { color: var(--muted); }
+
+    .primary, .secondary, .text-button {
+      min-height: 36px;
+      padding: 8px 13px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    .primary {
+      border: 1px solid var(--warm-white);
+      color: var(--ink);
+      font-weight: 760;
+      background: var(--warm-white);
+    }
+
+    .primary.confirmed {
+      border-color: var(--line-strong);
+      color: var(--blue);
+      background: var(--green-soft);
+    }
+
+    .secondary {
+      border: 1px solid var(--line-strong);
+      color: var(--text);
+      background: rgba(255,255,255,.035);
+    }
+
+    .text-button {
+      border: 0;
+      color: var(--muted);
+      background: transparent;
+    }
+
+    .evidence-tags {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    .evidence-tags span {
+      padding: 4px 7px;
+      border-radius: 7px;
+      color: var(--muted);
+      font-size: 10px;
+      background: rgba(255,255,255,.04);
+    }
+
+    [data-tip] {
+      position: relative;
+      display: inline-grid;
+      place-items: center;
+      width: 18px;
+      height: 18px;
+      border: 1px solid var(--line-strong);
+      border-radius: 50%;
+      color: var(--muted);
+      font: 700 11px/1 sans-serif;
+      cursor: help;
+    }
+
+    [data-tip]::after {
+      position: absolute;
+      z-index: 20;
+      bottom: calc(100% + 9px);
+      left: 50%;
+      width: 250px;
+      padding: 10px 11px;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      color: var(--text);
+      background: #132638;
+      box-shadow: var(--shadow);
+      content: attr(data-tip);
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, 4px);
+      transition: .16s ease;
+    }
+
+    [data-tip]:hover::after, [data-tip]:focus::after {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    .route-stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 9px;
+    }
+
+    .metric-card {
+      padding: 15px 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(12, 25, 38, .82);
+    }
+
+    .metric-card small {
+      display: block;
+      color: var(--muted);
+    }
+
+    .metric-card strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 22px;
+      line-height: 1.1;
+    }
+
+    .metric-card em {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 10px;
+      font-style: normal;
+    }
+
+    .route-panel { padding: 18px 20px; }
+
+    .route-toolbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+
+    .route-toolbar h2, .route-toolbar h3 { margin: 0; }
+    .route-toolbar p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+    .toolbar-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+    .field, .select-field {
+      min-height: 38px;
+      padding: 8px 11px;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      color: var(--text);
+      background: rgba(4, 13, 22, .66);
+    }
+
+    .field::placeholder { color: #6f8279; }
+    .field:focus, .select-field:focus { border-color: var(--green); outline: 0; }
+
+    .holdings-table {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+    }
+
+    .holding-head, .holding-row {
+      display: grid;
+      grid-template-columns: minmax(170px, 1.25fr) 90px 120px minmax(180px, 1.25fr) 112px;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .holding-head {
+      padding: 10px 14px;
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 760;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      background: rgba(255,255,255,.025);
+    }
+
+    .holding-row {
+      min-height: 76px;
+      padding: 12px 14px;
+      border-top: 1px solid var(--line);
+    }
+
+    .holding-id strong, .holding-plan strong { display: block; }
+    .holding-id small, .holding-plan small { color: var(--muted); }
+    .holding-weight { font-weight: 760; }
+    .holding-risk { color: var(--amber); font-size: 11px; }
+    .holding-risk.ready { color: var(--blue); }
+    .holding-risk.blocked { color: var(--red); }
+    .holding-row .secondary { width: 100%; }
+
+    .universe-note {
+      display: flex;
+      gap: 9px;
+      align-items: flex-start;
+      padding: 12px 13px;
+      border: 1px solid rgba(140, 191, 243, .25);
+      border-radius: 12px;
+      color: var(--muted);
+      font-size: 11px;
+      background: rgba(140, 191, 243, .06);
+    }
+
+    .universe-note b { color: var(--blue); }
+
+    .lookup-bar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto;
+      gap: 8px;
+    }
+
+    .lookup-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(330px, .8fr);
+      gap: 14px;
+    }
+
+    .lookup-chart { padding: 18px 20px; }
+    .lookup-chart h2 { margin: 0; }
+    .lookup-chart .mini-chart { height: 260px; margin-bottom: 12px; }
+    .lookup-chart .mini-chart svg { height: 220px; }
+
+    .benchmark-row {
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap;
+      margin: 10px 0 0;
+    }
+
+    .benchmark-pill {
+      padding: 5px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 10px;
+      background: rgba(255,255,255,.025);
+    }
+
+    .benchmark-pill.active { border-color: rgba(90,143,199,.48); color: var(--blue); }
+
+    .indicator-list {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .indicator {
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255,255,255,.022);
+    }
+
+    .indicator small { display: block; color: var(--muted); }
+    .indicator strong { display: block; margin-top: 3px; font-size: 12px; }
+    .indicator .warning { color: var(--amber); }
+    .indicator .positive { color: var(--red); }
+
+    .strategy-card { padding: 20px; }
+    .strategy-card h2 { margin: 7px 0 12px; font-size: 22px; line-height: 1.25; }
+    .strategy-note {
+      margin-top: 12px;
+      padding: 11px 12px;
+      border-left: 3px solid var(--amber);
+      color: var(--muted);
+      background: var(--amber-soft);
+    }
+
+    .review-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .score-panel { padding: 18px 20px; }
+    .score-panel header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .score-panel h2 { margin: 0; }
+    .score-panel .score { color: var(--blue); font-size: 28px; font-weight: 780; }
+    .score-panel ul { margin: 14px 0 0; padding-left: 18px; color: var(--muted); }
+
+    .review-ledger {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+    }
+
+    .review-head, .review-row {
+      display: grid;
+      grid-template-columns: minmax(150px, 1fr) minmax(160px, 1.15fr) minmax(150px, 1fr) 110px 88px;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .review-head {
+      padding: 10px 14px;
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 760;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      background: rgba(255,255,255,.025);
+    }
+
+    .review-row {
+      min-height: 75px;
+      padding: 12px 14px;
+      border-top: 1px solid var(--line);
+    }
+
+    .review-row small { color: var(--muted); }
+    .review-row .good { color: var(--blue); }
+    .review-row .pending { color: var(--amber); }
+
+    .pilot-progress {
+      display: grid;
+      grid-template-columns: repeat(10, minmax(0, 1fr));
+      gap: 5px;
+      margin-top: 12px;
+    }
+
+    .pilot-progress i {
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.08);
+    }
+
+    .pilot-progress i.done { background: var(--blue); }
+    .pilot-progress i.current { background: var(--amber); }
+
+    /* Variant A: selected action brief, one dominant decision plus two compact rows. */
+    .variant-a .focus-layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .variant-a .primary-plan {
+      position: relative;
+      padding: 22px 24px 20px;
+      border-color: rgba(217, 75, 69, .42);
+      background:
+        linear-gradient(90deg, rgba(217,75,69,.08), transparent 30%),
+        linear-gradient(160deg, rgba(16,33,49,.98), rgba(9,20,31,.97));
+      overflow: hidden;
+    }
+
+    .variant-a .primary-plan::before {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 4px;
+      background: var(--red);
+      content: "";
+    }
+
+    .plan-identity {
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .decision-number {
+      color: var(--red);
+      font-size: 24px;
+      font-weight: 760;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .plan-name strong { display: block; }
+    .plan-name small { color: var(--muted); }
+    .primary-plan .action-title { margin: 12px 0 10px; }
+
+    .rule-set {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: rgba(5, 14, 23, .42);
+    }
+
+    .rule-set .rule {
+      display: block;
+      min-width: 0;
+      padding: 12px 14px;
+      border-top: 0;
+      border-left: 1px solid var(--line);
+    }
+
+    .rule-set .rule:first-child { border-left: 0; }
+    .rule-set .rule-key { display: block; margin-bottom: 7px; }
+    .rule-set .rule-value { display: block; font-size: 12px; }
+
+    .variant-a .secondary-stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .compact-plan {
+      display: grid;
+      grid-template-columns: 46px minmax(180px, .75fr) minmax(260px, 1.5fr) auto;
+      gap: 14px;
+      align-items: center;
+      padding: 14px 18px;
+      box-shadow: none;
+    }
+
+    .compact-plan .decision-number { color: var(--blue); font-size: 20px; }
+    .compact-plan .action-title { margin: 4px 0 0; font-size: 17px; }
+    .compact-plan .compact-rules {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .compact-plan .compact-rules span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .compact-plan .compact-rules b {
+      display: inline-block;
+      width: 52px;
+      color: var(--blue);
+      font: 760 10px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+    .compact-plan .compact-rules .invalid b { color: var(--red); }
+    .compact-plan .compact-actions { display: flex; gap: 8px; align-items: center; }
+    .compact-plan .compact-actions .primary,
+    .compact-plan .compact-actions .secondary { white-space: nowrap; }
+
+    .morning-footer {
+      display: grid;
+      grid-template-columns: minmax(220px, .75fr) minmax(180px, .55fr) minmax(260px, 1fr);
+      gap: 12px;
+      align-items: center;
+      margin-top: 12px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(9, 20, 31, .74);
+    }
+    .morning-footer .primary,
+    .morning-footer .secondary { min-height: 46px; font-size: 14px; }
+    .morning-footer p { margin: 0; color: var(--muted); font-size: 11px; }
+
+    .footer-response-summary {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .alert-handoff {
+      display: grid;
+      grid-template-columns: minmax(180px, .65fr) minmax(250px, 1.35fr) auto;
+      gap: 14px;
+      align-items: center;
+      margin-top: 10px;
+      padding: 13px 16px;
+      border: 1px solid rgba(115,169,223,.24);
+      border-radius: 13px;
+      background: rgba(90,143,199,.06);
+    }
+
+    .alert-handoff strong { display: block; }
+    .alert-handoff small { color: var(--muted); }
+    .alert-handoff .alert-state { color: var(--blue); font-weight: 760; }
+    .alert-handoff .alert-state.waiting { color: var(--amber); }
+
+    .theme-constraint {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 10px 14px;
+      border: 1px solid rgba(214,167,74,.24);
+      border-radius: 12px;
+      color: var(--muted);
+      background: rgba(214,167,74,.055);
+    }
+
+    .theme-constraint strong { color: var(--text); }
+    .theme-constraint b { color: var(--amber); }
+
+    .market-permission {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    .permission-cell {
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: rgba(255,255,255,.023);
+    }
+
+    .permission-cell small { display: block; color: var(--muted); }
+    .permission-cell strong { display: block; margin: 3px 0; }
+    .permission-cell em { color: var(--muted); font-size: 10px; font-style: normal; }
+    .permission-cell.caution strong { color: var(--amber); }
+    .permission-cell.blocked strong { color: var(--red); }
+
+    .backtest-panel {
+      padding: 18px 20px;
+    }
+
+    .backtest-status {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .backtest-metric {
+      min-height: 86px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: rgba(255,255,255,.022);
+    }
+
+    .backtest-metric small { display: block; color: var(--muted); }
+    .backtest-metric strong { display: block; margin: 7px 0 2px; font-size: 16px; }
+    .backtest-metric em { color: var(--muted); font-size: 10px; font-style: normal; }
+
+    .theme-page {
+      display: grid;
+      gap: 14px;
+    }
+
+    .theme-hero {
+      padding: 20px;
+    }
+
+    .theme-hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(260px, .8fr);
+      gap: 18px;
+      align-items: center;
+    }
+
+    .theme-score {
+      color: var(--amber);
+      font-size: clamp(42px, 6vw, 70px);
+      font-weight: 790;
+      line-height: 1;
+      letter-spacing: -.05em;
+    }
+
+    .theme-score small {
+      color: var(--muted);
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+
+    .theme-rule-card {
+      padding: 14px;
+      border: 1px solid rgba(214,167,74,.26);
+      border-radius: 12px;
+      background: var(--amber-soft);
+    }
+
+    .theme-rule-card strong { display: block; margin-bottom: 5px; }
+    .theme-rule-card p { margin: 0; color: var(--muted); }
+
+    .theme-chart-panel { padding: 18px 20px; }
+    .theme-canvas-wrap {
+      position: relative;
+      height: 330px;
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: rgba(4,13,22,.5);
+      overflow: hidden;
+    }
+
+    .theme-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .theme-legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .theme-legend span { display: inline-flex; gap: 6px; align-items: center; }
+    .theme-legend i {
+      width: 18px;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--legend-color);
+    }
+
+    .theme-etf-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .theme-etf {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: rgba(255,255,255,.022);
+    }
+
+    .theme-etf.low { border-color: rgba(214,167,74,.28); background: rgba(214,167,74,.055); }
+    .theme-etf strong, .theme-etf small { display: block; }
+    .theme-etf small { color: var(--muted); }
+    .theme-etf b { color: var(--text); font-size: 17px; }
+    .theme-etf.low b { color: var(--amber); }
+
+    .objection-options {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    .objection-option {
+      padding: 10px 11px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--muted);
+      text-align: left;
+      background: rgba(255,255,255,.025);
+      cursor: pointer;
+    }
+
+    .objection-option.active {
+      border-color: rgba(214,167,74,.55);
+      color: var(--text);
+      background: var(--amber-soft);
+    }
+
+    .objection-note {
+      width: 100%;
+      min-height: 96px;
+      resize: vertical;
+    }
+
+    /* Variant B: inbox and selected detail. */
+    .variant-b .inbox {
+      display: grid;
+      grid-template-columns: minmax(260px, .62fr) minmax(0, 1.38fr);
+      min-height: 540px;
+      overflow: hidden;
+    }
+
+    .queue {
+      padding: 13px;
+      border-right: 1px solid var(--line);
+      background: rgba(4, 13, 22, .34);
+    }
+
+    .queue-title {
+      padding: 8px 9px 13px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 760;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .queue-item {
+      display: grid;
+      grid-template-columns: 8px minmax(0,1fr) auto;
+      gap: 10px;
+      width: 100%;
+      padding: 13px 10px;
+      border: 0;
+      border-radius: 11px;
+      color: var(--text);
+      text-align: left;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .queue-item.active { background: rgba(90, 143, 199, .1); }
+    .queue-item .dot { width: 7px; height: 7px; margin-top: 7px; border-radius: 50%; background: var(--green); }
+    .queue-item.revised .dot { background: var(--amber); }
+    .queue-item.void .dot { background: var(--red); }
+    .queue-item strong { display: block; }
+    .queue-item small { color: var(--muted); }
+    .queue-item time { color: var(--muted); font-size: 10px; }
+
+    .detail-pane { padding: 24px clamp(20px, 3vw, 36px); }
+    .detail-pane .rule { max-width: 760px; }
+
+    /* Variant C: scan-first morning checklist. */
+    .variant-c .checklist {
+      overflow: hidden;
+    }
+
+    .checklist-head, .check-row {
+      display: grid;
+      grid-template-columns: minmax(150px, .7fr) minmax(210px, 1fr) minmax(280px, 1.45fr) 120px;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .checklist-head {
+      padding: 11px 18px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 760;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .check-row {
+      min-height: 112px;
+      padding: 15px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .check-row:last-child { border-bottom: 0; }
+    .security strong { display: block; margin-bottom: 4px; font-size: 15px; }
+    .security small { color: var(--muted); }
+    .check-action { font-weight: 720; }
+    .check-condition { color: #d7e4de; font-size: 12px; }
+    .check-condition b { color: var(--green); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .check-controls { display: grid; gap: 7px; }
+    .check-controls button { width: 100%; }
+
+    .empty {
+      display: grid;
+      min-height: 420px;
+      place-items: center;
+      padding: 40px;
+      text-align: center;
+    }
+
+    .empty-mark {
+      width: 72px;
+      height: 72px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto 18px;
+      border: 1px solid rgba(90,143,199,.3);
+      border-radius: 24px;
+      color: var(--green);
+      font-size: 30px;
+      background: var(--green-soft);
+    }
+
+    .empty h2 { margin: 0 0 8px; }
+    .empty p { max-width: 520px; margin: 0 auto; color: var(--muted); }
+
+    .drawer-backdrop {
+      position: fixed;
+      z-index: 60;
+      inset: 0;
+      display: none;
+      justify-content: flex-end;
+      background: rgba(0, 0, 0, .58);
+      backdrop-filter: blur(3px);
+    }
+
+    .drawer-backdrop.open { display: flex; }
+
+    .drawer {
+      width: min(520px, 92vw);
+      height: 100%;
+      padding: 24px;
+      overflow: auto;
+      border-left: 1px solid var(--line-strong);
+      background: #0b1713;
+      box-shadow: -20px 0 60px rgba(0,0,0,.4);
+    }
+
+    .drawer header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: start;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .drawer h2 { margin: 0; }
+    .drawer-close {
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--text);
+      background: rgba(255,255,255,.04);
+      cursor: pointer;
+    }
+
+    .mini-chart {
+      display: grid;
+      place-items: center;
+      height: 170px;
+      margin: 18px 0;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background:
+        linear-gradient(var(--line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--line) 1px, transparent 1px);
+      background-size: 100% 34px, 52px 100%;
+    }
+
+    .mini-chart svg { width: 92%; height: 130px; overflow: visible; }
+
+    .evidence-list {
+      display: grid;
+      gap: 8px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .evidence-list li {
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: #d4e2db;
+      background: rgba(255,255,255,.025);
+    }
+
+    .temperature-grid {
+      display: grid;
+      gap: 10px;
+      margin: 16px 0;
+    }
+
+    .temperature-row {
+      display: grid;
+      grid-template-columns: 70px minmax(0, 1fr) 74px;
+      gap: 10px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .temperature-row strong {
+      color: var(--text);
+      text-align: right;
+    }
+
+    .temperature-meter {
+      height: 7px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255,255,255,.08);
+    }
+
+    .temperature-meter i {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--blue), var(--amber));
+    }
+
+    .proxy-contract {
+      display: grid;
+      gap: 8px;
+      margin: 14px 0;
+    }
+
+    .proxy-line {
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255,255,255,.025);
+    }
+
+    .proxy-line b {
+      display: block;
+      margin-bottom: 2px;
+      color: var(--green);
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .proxy-line small { color: var(--muted); }
+
+    .prototype-bar {
+      position: fixed;
+      z-index: 80;
+      bottom: 18px;
+      left: 18px;
+      display: grid;
+      gap: 6px;
+      width: 178px;
+      padding: 7px;
+      border: 1px solid rgba(255,255,255,.2);
+      border-radius: 12px;
+      color: #fff;
+      background: rgba(5, 11, 18, .94);
+      box-shadow: 0 18px 50px rgba(0,0,0,.55);
+      backdrop-filter: blur(14px);
+    }
+
+    .prototype-bar .group {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .prototype-bar button {
+      min-width: 34px;
+      height: 32px;
+      padding: 0 10px;
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 9px;
+      color: #dce7e2;
+      background: rgba(255,255,255,.055);
+      cursor: pointer;
+    }
+
+    .prototype-bar button.active {
+      border-color: var(--green);
+      color: var(--ink);
+      font-weight: 760;
+      background: var(--green);
+    }
+
+    .variant-label {
+      min-width: 88px;
+      text-align: center;
+    }
+
+    .variant-label strong { display: block; font-size: 12px; }
+    .variant-label small { color: #94a49d; font-size: 10px; }
+    .bar-sep { display: none; }
+
+    .mobile-nav { display: none; }
+
+    @media (max-width: 820px) {
+      .app { display: block; }
+      .sidebar { display: none; }
+      .content { padding: 16px 12px 160px; }
+      .topbar { align-items: flex-start; margin-bottom: 18px; }
+      .topbar h1 { font-size: 26px; }
+      .data-state .chip:nth-child(n+3) { display: none; }
+      .market-constraint { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .constraint-summary { grid-column: 1 / -1; }
+      .market-driver:first-of-type { border-left: 0; border-top: 1px solid var(--line); }
+      .market-driver:last-of-type { border-top: 1px solid var(--line); }
+      .market-confidence { grid-column: 1 / -1; border-top: 1px solid var(--line); border-left: 0; }
+      .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .route-toolbar { align-items: flex-start; }
+      .holding-head, .review-head { display: none; }
+      .holding-row {
+        grid-template-columns: 1fr auto;
+        gap: 7px 12px;
+        padding: 14px;
+      }
+      .holding-id { grid-column: 1; }
+      .holding-weight { grid-column: 2; grid-row: 1; text-align: right; }
+      .holding-risk { grid-column: 1 / -1; }
+      .holding-plan { grid-column: 1; }
+      .holding-row .secondary { grid-column: 2; width: auto; }
+      .lookup-grid { grid-template-columns: 1fr; }
+      .indicator-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .market-permission { grid-template-columns: 1fr; }
+      .review-grid { grid-template-columns: 1fr; }
+      .backtest-status { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .theme-hero-grid { grid-template-columns: 1fr; }
+      .theme-etf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .review-row {
+        grid-template-columns: 1fr auto;
+        gap: 7px 12px;
+        padding: 14px;
+      }
+      .review-row > :nth-child(2), .review-row > :nth-child(3) { grid-column: 1 / -1; }
+      .review-row > :nth-child(4) { grid-column: 1; }
+      .review-row > :nth-child(5) { grid-column: 2; grid-row: 1; }
+      .decision-heading { align-items: flex-start; }
+      .decision-counts { max-width: 240px; }
+      .variant-a .focus-layout, .variant-b .inbox { grid-template-columns: 1fr; }
+      .rule-set { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .rule-set .rule:nth-child(3) { border-left: 0; border-top: 1px solid var(--line); }
+      .rule-set .rule:nth-child(4) { border-top: 1px solid var(--line); }
+      .compact-plan { grid-template-columns: 38px minmax(170px, .8fr) minmax(220px, 1.2fr); }
+      .compact-plan .compact-actions { grid-column: 2 / -1; justify-content: flex-end; }
+      .morning-footer { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .morning-footer p { grid-column: 1 / -1; }
+      .alert-handoff { grid-template-columns: 1fr auto; }
+      .alert-handoff > :nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+      .variant-b .inbox { min-height: auto; }
+      .queue { border-right: 0; border-bottom: 1px solid var(--line); }
+      .detail-pane { padding: 20px 16px; }
+      .checklist-head { display: none; }
+      .check-row {
+        grid-template-columns: 1fr auto;
+        gap: 8px 14px;
+        padding: 16px;
+      }
+      .check-row .security { grid-column: 1; }
+      .check-row .check-action { grid-column: 1; }
+      .check-row .check-condition { grid-column: 1 / -1; }
+      .check-row .check-controls { grid-column: 2; grid-row: 1 / 3; width: 94px; }
+      .prototype-bar {
+        display: none;
+      }
+      .variant-label { min-width: 126px; }
+      .variant-label small { display: none; }
+      .prototype-bar .scenario-label { display: none; }
+      .prototype-bar button { padding: 0 8px; min-width: 31px; }
+      .mobile-nav {
+        position: fixed;
+        z-index: 70;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
+        border-top: 1px solid var(--line);
+        background: rgba(5,13,22,.96);
+        backdrop-filter: blur(16px);
+      }
+      .mobile-nav button {
+        border: 0;
+        color: var(--muted);
+        font-size: 10px;
+        background: transparent;
+      }
+      .mobile-nav button.active { color: var(--green); }
+    }
+
+    @media (max-width: 470px) {
+      .topbar { display: block; }
+      .data-state { justify-content: flex-start; margin-top: 12px; }
+      .constraint-summary, .market-driver, .market-confidence { padding: 12px; }
+      .market-driver, .market-confidence { border-top: 1px solid var(--line); border-left: 0; }
+      .market-driver:last-of-type { border-left: 1px solid var(--line); }
+      .market-constraint .constraint-link { display: inline-flex; }
+      .decision-heading { display: block; }
+      .decision-counts { justify-content: flex-start; margin-top: 10px; }
+      .route-toolbar { display: block; }
+      .toolbar-actions { margin-top: 10px; }
+      .lookup-bar { grid-template-columns: 1fr; }
+      .lookup-bar .primary { width: 100%; }
+      .route-panel, .lookup-chart, .strategy-card, .score-panel { padding: 16px; }
+      .variant-a .primary-plan { padding: 19px 16px; }
+      .plan-identity { grid-template-columns: 34px minmax(0, 1fr); }
+      .plan-identity .status { grid-column: 2; width: max-content; }
+      .rule-set { display: block; }
+      .rule-set .rule,
+      .rule-set .rule:nth-child(3),
+      .rule-set .rule:nth-child(4) { border-top: 1px solid var(--line); border-left: 0; }
+      .rule-set .rule:first-child { border-top: 0; }
+      .compact-plan { grid-template-columns: 34px minmax(0, 1fr); }
+      .compact-plan .compact-rules,
+      .compact-plan .compact-actions { grid-column: 2; }
+      .compact-plan .compact-actions { justify-content: flex-start; flex-wrap: wrap; }
+      .morning-footer { display: grid; grid-template-columns: 1fr; }
+      .morning-footer p { grid-column: auto; }
+      .alert-handoff, .theme-constraint { grid-template-columns: 1fr; }
+      .alert-handoff > :nth-child(2) { grid-column: auto; grid-row: auto; }
+      .theme-constraint .secondary { width: 100%; }
+      .backtest-status, .theme-etf-grid, .objection-options { grid-template-columns: 1fr; }
+      .theme-canvas-wrap { height: 270px; }
+      .panel-head { padding: 16px 16px 0; }
+      .rule { grid-template-columns: 50px minmax(0,1fr); }
+      .prototype-bar { width: calc(100vw - 20px); justify-content: center; }
+      .bar-sep { display: none; }
+      .variant-label { min-width: 110px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">IR</span> InsightRadar</div>
+      <nav class="nav" aria-label="主要任务">
+        <button class="active" data-route="today"><span class="nav-icon">◎</span>今日计划</button>
+        <button data-route="holdings"><span class="nav-icon">◇</span>我的持仓</button>
+        <button data-route="lookup"><span class="nav-icon">⌕</span>个股查询</button>
+        <button data-route="review"><span class="nav-icon">↺</span>复盘</button>
+      </nav>
+      <div class="sidebar-note">PROTOTYPE<br>固定脱敏数据 · 无持久化 · 无交易</div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <div id="page-eyebrow" class="eyebrow">08:30 · Morning Decision Check</div>
+          <h1 id="page-title">今日计划</h1>
+        </div>
+        <div id="data-state" class="data-state" aria-label="数据状态">
+          <span class="chip">美股已收盘</span>
+          <span class="chip">日韩30分钟</span>
+          <span class="chip">公告已校验</span>
+          <span class="chip">持仓昨日确认</span>
+        </div>
+      </header>
+      <section id="stage" class="stage" aria-live="polite"></section>
+    </main>
+  </div>
+
+  <nav class="mobile-nav" aria-label="移动端任务">
+    <button class="active" data-route="today">◎<br>今日</button>
+    <button data-route="holdings">◇<br>持仓</button>
+    <button data-route="lookup">⌕<br>查询</button>
+    <button data-route="review">↺<br>复盘</button>
+  </nav>
+
+  <div id="drawer" class="drawer-backdrop" aria-hidden="true">
+    <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+      <header>
+        <div>
+          <div class="eyebrow">解释层 · 非首页</div>
+          <h2 id="drawer-title">策略依据</h2>
+        </div>
+        <button class="drawer-close" type="button" aria-label="关闭">×</button>
+      </header>
+      <div id="drawer-content"></div>
+    </aside>
+  </div>
+
+  <div id="prototype-bar" class="prototype-bar" aria-label="原型切换器">
+    <div class="group">
+      <button id="prev" type="button" aria-label="上一种布局">←</button>
+      <div class="variant-label">
+        <strong id="variant-name"></strong>
+        <small id="prototype-state"></small>
+      </div>
+      <button id="next" type="button" aria-label="下一种布局">→</button>
+    </div>
+    <span class="bar-sep"></span>
+    <div id="scenario-controls" class="group" aria-label="数据场景">
+      <span class="scenario-label">决策数</span>
+      <button class="scenario" data-scenario="0" type="button">0</button>
+      <button class="scenario" data-scenario="1" type="button">1</button>
+      <button class="scenario" data-scenario="3" type="button">3</button>
+    </div>
+  </div>
+
+  <script>
+    // PROTOTYPE: three Today variants plus Holdings, Lookup, Review, and one
+    // secondary Theme detail route. No persistence and no real mutations.
+    const variantMeta = {
+      A: "A · 聚焦主决策",
+      B: "B · 决策收件箱",
+      C: "C · 晨间决策清单"
+    };
+
+    const routeMeta = {
+      today: {
+        title: "行动简报",
+        eyebrow: "08:30 决策简报 · 数据截至 08:28",
+        chips: ["美股已收盘", "日韩30分钟", "公告已校验", "持仓昨日确认"]
+      },
+      holdings: {
+        title: "我的持仓",
+        eyebrow: "Portfolio · Actual Positions First",
+        chips: ["实际持仓 4", "自选池 22", "全市场 5,299", "待补字段 1"]
+      },
+      lookup: {
+        title: "个股查询",
+        eyebrow: "Stock Lookup · Rule-Based Scenarios",
+        chips: ["全市场 5,299", "日线 + 30分钟", "规则版", "AI未调用"]
+      },
+      review: {
+        title: "复盘",
+        eyebrow: "Review · Strategy ≠ Execution",
+        chips: ["第4/10次", "策略与执行分开", "T+5观察中", "样本未成熟"]
+      },
+      theme: {
+        title: "AI硬件主题温度",
+        eyebrow: "Market Detail · ETF Proxy Basket",
+        chips: ["9个ETF代理", "截至07-22收盘", "地板35 / 天花板80", "AI调用缓存"]
+      }
+    };
+
+    const holdingRows = [
+      {
+        id: "h1", code: "000001.EX", name: "示例科技A", weight: "28.4%",
+        risk: "高Beta · 字段完整", riskClass: "ready",
+        plan: "继续持有，禁止追高", note: "1/3根15分钟K线确认"
+      },
+      {
+        id: "h2", code: "000002.EX", name: "示例光模块B", weight: "17.9%",
+        risk: "高Beta · 计划修订", riskClass: "",
+        plan: "下调置信度，保留风险线", note: "MA20尚未收复"
+      },
+      {
+        id: "h3", code: "000003.EX", name: "示例保险C", weight: "9.6%",
+        risk: "普通Beta · 假设失效", riskClass: "blocked",
+        plan: "暂停轮动计划", note: "等待新的基本面证据"
+      },
+      {
+        id: "h4", code: "000004.EX", name: "示例红利D", weight: "5.5%",
+        risk: "Beta未知 · 阻塞风险归因", riskClass: "blocked",
+        plan: "延续昨日观察", note: "需补充Beta分类"
+      }
+    ];
+
+    const reviewRows = [
+      {
+        id: "r1", name: "示例科技A", plan: "禁止追高；3根15分钟K线确认后再观察",
+        event: "仅完成1/3，条件未成立", execution: "遵守", outcome: "T+1待定"
+      },
+      {
+        id: "r2", name: "示例光模块B", plan: "不收复MA20则不提高优先级",
+        event: "MA20未收复", execution: "遵守", outcome: "T+5观察中"
+      },
+      {
+        id: "r3", name: "示例保险C", plan: "旧轮动假设作废",
+        event: "未使用旧依据追加动作", execution: "遵守", outcome: "避免错误归因"
+      }
+    ];
+
+    const plans = [
+      {
+        id: "alpha",
+        code: "000001.EX",
+        name: "示例科技A",
+        change: "unchanged",
+        changeLabel: "计划不变",
+        action: "继续持有，禁止追高",
+        primary: true,
+        ifText: "连续3根已完成15分钟K线收于确认位上方，行业未同步转弱，且上证指数未跌破市场地板",
+        thenText: "状态升级为条件成立；等待回踩，不在第一波拉升追入",
+        untilText: "今日14:45收盘确认窗口",
+        invalidText: "任一15分钟收盘重新跌回确认位，或行业风险预算降级",
+        progress: 1,
+        evidence: ["日线在MA20上方", "上证风险门：谨慎许可", "SOX隔夜中性", "公告无新增"],
+        why: "隔夜证据没有改变昨日已确认计划；技术条件仍处于等待确认状态。",
+        source: "示例数据 · 08:26 CST"
+      },
+      {
+        id: "beta",
+        code: "000002.EX",
+        name: "示例光模块B",
+        change: "revised",
+        changeLabel: "计划修订",
+        action: "下调置信度，保留原风险线",
+        primary: false,
+        ifText: "价格重新站稳MA20，30分钟成交量达到过去20日同时刻中位数的1.2倍，且上证风险门未否决",
+        thenText: "恢复观察优先级；仍不扩大风险预算",
+        untilText: "未来3个交易日",
+        invalidText: "日线收盘跌破既有失效位",
+        progress: 0,
+        evidence: ["海外同业指引偏弱", "上证风险门：谨慎许可", "MA20尚未收复", "风险线未触发"],
+        why: "隔夜海外同业信息削弱上行证据，但不足以使原持仓逻辑作废。",
+        source: "示例数据 · 08:22 CST"
+      },
+      {
+        id: "gamma",
+        code: "000003.EX",
+        name: "示例保险C",
+        change: "void",
+        changeLabel: "原计划作废",
+        action: "暂停轮动计划，等待重新研究",
+        primary: false,
+        ifText: "新的基本面证据完成核验，相对沪深300重新转强，且上证风险门未否决",
+        thenText: "进入研究队列；不得直接升级为持仓动作",
+        untilText: "下一次官方披露或5日相对强弱确认",
+        invalidText: "旧轮动假设不再作为任何新动作依据",
+        progress: 0,
+        evidence: ["关键假设失效", "相对强弱转负", "无紧急卖出触发"],
+        why: "原计划依赖的轮动假设不再成立；当前结论是停止使用旧依据，而不是自动卖出。",
+        source: "示例数据 · 08:18 CST"
+      }
+    ];
+
+    const markets = [
+      {
+        id: "cn",
+        name: "A股",
+        mode: "支撑测试",
+        temperature: "偏冷修复",
+        confirmation: "ETF一致",
+        confirmationClass: "confirm-ok",
+        asOf: "07-23收盘",
+        summary: "宽基仍在支撑测试阶段；低情绪本身不构成抄底授权，等待广度与关键位共同确认。",
+        dimensions: { "趋势": 35, "广度": 31, "情绪": 28, "拥挤": 52, "流动性": 41 },
+        primary: "沪深300、中证1000直接指数的已完成收盘、MA20与支撑状态。",
+        proxy: "510300、159919、159845等高流动性ETF篮子取方向中位数，不由单只ETF决定。",
+        integrity: "指数与ETF方向一致；3/3代理可用。ETF只作确认，不覆盖指数主判。",
+        path: "M0 78 C48 70 74 89 115 74 S178 82 221 66 S286 72 329 60 S374 62 420 48"
+      },
+      {
+        id: "us",
+        name: "美股科技",
+        mode: "隔夜降温",
+        temperature: "风险偏弱",
+        confirmation: "ETF一致",
+        confirmationClass: "confirm-ok",
+        asOf: "07-23 ET",
+        summary: "纳指科技与半导体隔夜同步降温，对A股高Beta科技形成负向约束，但不直接决定持仓动作。",
+        dimensions: { "趋势": 42, "广度": 38, "情绪": 40, "拥挤": 68, "流动性": 57 },
+        primary: "NASDAQ-100与SOX完成收盘数据；海外本地市场数据优先。",
+        proxy: "QQQ用于可交易确认；境内纳指QDII ETF仍是昨日A股收盘，只标记滞后，不当作08:30实时数据。",
+        integrity: "直接指数与QQQ方向一致；境内QDII代理滞后并从实时一致性中剔除。",
+        path: "M0 42 C48 33 81 37 118 31 S184 25 226 38 S292 34 337 52 S382 49 420 66"
+      },
+      {
+        id: "hk",
+        name: "港股",
+        mode: "等待开盘",
+        temperature: "中性偏弱",
+        confirmation: "ETF分歧",
+        confirmationClass: "confirm-lag",
+        asOf: "07-23收盘",
+        summary: "恒生与恒生科技方向不完全一致；开盘前只保留昨收状态，不制造实时结论。",
+        dimensions: { "趋势": 44, "广度": 46, "情绪": 38, "拥挤": 55, "流动性": 49 },
+        primary: "恒生指数与恒生科技指数的已完成收盘及相对强弱。",
+        proxy: "513130、513180等ETF篮子用于确认，但需同时检查溢折价与跟踪误差。",
+        integrity: "指数与ETF存在分歧；开盘后再验证，不升级风险预算。",
+        path: "M0 64 C50 57 92 70 133 55 S193 61 235 48 S302 58 349 51 S390 55 420 52"
+      },
+      {
+        id: "jp",
+        name: "日本",
+        mode: "开盘30分",
+        temperature: "早盘转弱",
+        confirmation: "ETF滞后",
+        confirmationClass: "confirm-lag",
+        asOf: "09:28 JST",
+        summary: "日经早盘较昨收转弱；境内日经ETF尚未开盘，因此只使用日本当地指数更新方向。",
+        dimensions: { "趋势": 47, "广度": 43, "情绪": 45, "拥挤": 61, "流动性": 54 },
+        primary: "日经225当地市场09:00—09:28 JST已完成时段。",
+        proxy: "513520仍为昨日境内收盘，只展示为滞后参照，不参与当前确认。",
+        integrity: "直接指数可用；ETF实时确认不可用，明确降级。",
+        path: "M0 47 C51 38 93 44 137 36 S202 42 244 39 S306 45 352 58 S392 55 420 63"
+      },
+      {
+        id: "kr",
+        name: "韩国",
+        mode: "半导体传导",
+        temperature: "偏弱",
+        confirmation: "基金滞后",
+        confirmationClass: "confirm-lag",
+        asOf: "09:28 KST",
+        summary: "韩国早盘半导体风险偏弱，作为A股科技的传导证据之一，不单独生成交易动作。",
+        dimensions: { "趋势": 39, "广度": 36, "情绪": 41, "拥挤": 58, "流动性": 46 },
+        primary: "KOSPI及半导体相关当地市场早盘已完成时段。",
+        proxy: "境内联接基金为前一净值日，仅保留历史映射，不作为实时确认。",
+        integrity: "当地指数可用；境内基金滞后，结论置信度下调。",
+        path: "M0 49 C52 39 86 52 128 45 S190 51 232 42 S294 48 337 62 S380 60 420 72"
+      },
+      {
+        id: "macro",
+        name: "宏观",
+        mode: "利率压力",
+        temperature: "压力偏高",
+        confirmation: "无ETF主判",
+        confirmationClass: "confirm-gap",
+        asOf: "08:26 CST",
+        summary: "美债利率、美元与能源价格共同约束高Beta风险预算；宏观压力只做上限约束。",
+        dimensions: { "利率压力": 71, "美元压力": 63, "能源压力": 58, "信用压力": 46, "数据覆盖": 80 },
+        primary: "US10Y、美元指数与原油等直接市场序列。",
+        proxy: "不使用债券ETF代替收益率主判；ETF仅可用于观察可交易资产表现。",
+        integrity: "4/5直接序列可用；缺失项保持未知，不按0计。",
+        path: "M0 69 C42 62 83 67 121 56 S182 61 227 52 S290 46 336 37 S382 42 420 31"
+      }
+    ];
+
+    const themeEtfs = [
+      { sector: "科创50", name: "科创50ETF易方达", code: "588080", value: 45.83 },
+      { sector: "半导体材料设备", name: "半导体ETF", code: "512480", value: 33.32 },
+      { sector: "科创芯片", name: "科创芯片ETF", code: "588200", value: 44.01 },
+      { sector: "通信CPO", name: "通信ETF", code: "515880", value: 25.56 },
+      { sector: "通信PCB", name: "5G通信ETF", code: "515050", value: 27.47 },
+      { sector: "算力租赁", name: "大数据ETF", code: "515400", value: 46.19 },
+      { sector: "AI人工智能", name: "AI人工智能ETF", code: "512930", value: 21.51 },
+      { sector: "创业板50", name: "创业板50ETF", code: "159949", value: 38.41 },
+      { sector: "商业航天", name: "航空航天ETF", code: "159227", value: 26.24 }
+    ];
+
+    const themeSeries = {
+      labels: ["07-23", "08-27", "10-09", "11-13", "12-18", "01-26", "03-10", "04-15", "05-25", "06-30", "07-22"],
+      unified: [63, 77, 80, 57, 52, 71, 48, 31, 62, 52, 33],
+      ai: [44, 51, 33, 48, 69, 76, 55, 37, 51, 29, 22],
+      cpo: [58, 83, 79, 54, 46, 70, 36, 28, 64, 59, 26],
+      semiconductor: [61, 72, 78, 58, 44, 67, 51, 30, 61, 55, 33]
+    };
+
+    const state = {
+      route: "today",
+      variant: "A",
+      scenario: 3,
+      selected: "alpha",
+      responses: new Map(),
+      holdingQuery: "",
+      previewAdded: false,
+      lookupCode: "512480"
+    };
+
+    const stage = document.getElementById("stage");
+    const drawer = document.getElementById("drawer");
+    const drawerContent = document.getElementById("drawer-content");
+    const prototypeBar = document.getElementById("prototype-bar");
+
+    function readQuery() {
+      const params = new URLSearchParams(location.search);
+      const route = (params.get("route") || "today").toLowerCase();
+      const variant = (params.get("variant") || "A").toUpperCase();
+      const scenario = Number(params.get("scenario") || 3);
+      state.route = routeMeta[route] ? route : "today";
+      state.variant = variantMeta[variant] ? variant : "A";
+      state.scenario = [0, 1, 3].includes(scenario) ? scenario : 3;
+    }
+
+    function writeQuery() {
+      const params = new URLSearchParams(location.search);
+      params.set("route", state.route);
+      params.set("variant", state.variant);
+      params.set("scenario", String(state.scenario));
+      history.replaceState(null, "", `${location.pathname}?${params.toString()}`);
+    }
+
+    function visiblePlans() {
+      return plans.slice(0, state.scenario);
+    }
+
+    function status(plan) {
+      return `<span class="status ${plan.change}">${plan.changeLabel}</span>`;
+    }
+
+    function progress(plan) {
+      return `
+        <div class="progress">
+          <span>盘中确认</span>
+          <span class="progress-bars" aria-label="${plan.progress}/3根15分钟K线已完成">
+            ${[1,2,3].map(i => `<i class="${i <= plan.progress ? "on" : ""}"></i>`).join("")}
+          </span>
+          <strong>${plan.progress}/3</strong>
+          <span tabindex="0" data-tip="“站上”默认指连续3根已完成15分钟K线收盘价高于确认位；影线可短暂穿越。">i</span>
+        </div>`;
+    }
+
+    function responseFor(plan) {
+      return state.responses.get(plan.id) || { status: "pending", reason: "" };
+    }
+
+    function responseBadge(plan) {
+      const response = responseFor(plan);
+      const labels = {
+        pending: "未处理",
+        accepted: "已接受",
+        disputed: `有异议${response.reason ? ` · ${response.reason}` : ""}`,
+        rejected: "不采用",
+        deferred: "稍后决定"
+      };
+      return `<span class="response-badge ${response.status}">${labels[response.status]}</span>`;
+    }
+
+    function decisionButtons(plan, compact = false) {
+      const response = responseFor(plan);
+      return `
+        <div class="decision-actions">
+          <button class="primary ${response.status === "accepted" ? "confirmed" : ""}" type="button"
+            data-plan-response="${plan.id}" data-response-status="accepted">
+            ${response.status === "accepted" ? "✓ 已接受" : compact ? "接受" : "接受计划"}
+          </button>
+          <button class="secondary" type="button" data-plan-response="${plan.id}" data-response-status="disputed">有异议</button>
+          <button class="text-button reject" type="button" data-plan-response="${plan.id}" data-response-status="rejected">不采用</button>
+          <button class="text-button" type="button" data-plan-response="${plan.id}" data-response-status="deferred">稍后</button>
+        </div>`;
+    }
+
+    function ruleBlock(plan, compact = false) {
+      if (compact) {
+        return `
+          <div class="compact-rules">
+            <span><b>IF</b>${plan.ifText}</span>
+            <span class="invalid"><b>失效</b>${plan.invalidText}</span>
+          </div>`;
+      }
+      return `
+        <div class="rule-set">
+          <div class="rule"><span class="rule-key">IF · 触发条件</span><span class="rule-value">${plan.ifText}</span></div>
+          <div class="rule"><span class="rule-key">THEN · 执行动作</span><span class="rule-value">${plan.thenText}</span></div>
+          <div class="rule"><span class="rule-key">UNTIL · 有效窗口</span><span class="rule-value">${plan.untilText}</span></div>
+          <div class="rule invalid"><span class="rule-key">INVALID · 失效条件</span><span class="rule-value">${plan.invalidText}</span></div>
+        </div>`;
+    }
+
+    function marketContext() {
+      const primaryDrivers = [markets[0], markets[1]];
+      return `
+        <section class="market-context" aria-label="全球市场温度">
+          <div class="market-constraint">
+            <div class="constraint-summary">
+              <span class="eyebrow">市场约束 · 08:28 CST</span>
+              <strong>高Beta禁止增加</strong>
+              <small>A股支撑测试；海外科技降温</small>
+            </div>
+            ${primaryDrivers.map((market, index) => `
+              <button class="market-driver" type="button" data-market-detail="${market.id}">
+                <span class="driver-label"><span>核心约束 ${index + 1}</span><time>${market.asOf}</time></span>
+                <strong>${market.temperature}</strong>
+                <small>${market.name} · ${market.mode} · ${market.confirmation}</small>
+              </button>`).join("")}
+            <div class="market-confidence">
+              <span class="eyebrow">更新与置信度</span>
+              <span class="freshness">数据截至 08:28</span>
+              <small>指数主判 · ETF篮子确认</small>
+              <button class="constraint-link" type="button" data-market-detail="all">查看全部市场 →</button>
+            </div>
+          </div>
+          <div class="theme-constraint">
+            <span class="eyebrow">持仓相关主题</span>
+            <span><strong>AI硬件温度 <b>33 / 100</b></strong> · 5/9子板块处于低位候选区，但上证风险门仅为谨慎许可。</span>
+            <button class="secondary" type="button" data-theme-detail>查看主题温度 →</button>
+          </div>
+        </section>`;
+    }
+
+    function summary(plansNow) {
+      const revised = plansNow.filter(p => p.change === "revised").length;
+      const voided = plansNow.filter(p => p.change === "void").length;
+      const responseCounts = plansNow.reduce((counts, plan) => {
+        counts[responseFor(plan).status] += 1;
+        return counts;
+      }, { pending: 0, accepted: 0, disputed: 0, rejected: 0, deferred: 0 });
+      return `
+        ${marketContext()}
+        <div class="decision-heading">
+          <div>
+            <h2>${plansNow.length ? `今日需要处理 ${plansNow.length} 项` : "今天没有需要处理的新决策"}</h2>
+            <p>${plansNow.length ? "可以接受、提出异议、不采用或稍后决定；其余持仓延续昨日计划。" : "隔夜证据没有改变既有条件和失效线。"}</p>
+          </div>
+          <div class="decision-counts">
+            <span>未处理 <strong>${responseCounts.pending}</strong></span>
+            <span>已接受 <strong>${responseCounts.accepted}</strong></span>
+            <span class="revised">有异议 <strong>${responseCounts.disputed}</strong></span>
+            <span class="revised">计划修订 <strong>${revised}</strong></span>
+            <span class="voided">计划作废 <strong>${voided}</strong></span>
+            <span>预计用时 <strong>&lt; 2 分钟</strong></span>
+          </div>
+        </div>`;
+    }
+
+    function emptyState() {
+      return `${summary([])}
+        <section class="panel empty">
+          <div>
+            <div class="empty-mark">✓</div>
+            <h2>今天没有需要处理的新决策</h2>
+            <p>隔夜信息没有改变已确认计划。系统不会为了填满首页而制造观点；持仓条件和失效线继续在后台等待。</p>
+            <div class="actions" style="justify-content:center">
+              <button class="secondary" type="button" data-empty-detail>查看延续计划摘要</button>
+            </div>
+          </div>
+        </section>`;
+    }
+
+    function planCard(plan, compact = false) {
+      const planNumber = String(plans.indexOf(plan) + 1).padStart(2, "0");
+      if (compact) {
+        return `
+          <article class="panel compact-plan">
+            <span class="decision-number">${planNumber}</span>
+            <div>
+              <div class="plan-name"><strong>${plan.name}</strong><small>${plan.code}</small></div>
+              <div style="margin-top:6px">${status(plan)}</div>
+              <h2 class="action-title">${plan.action}</h2>
+            </div>
+            ${ruleBlock(plan, true)}
+            <div class="compact-actions">
+              ${responseBadge(plan)}
+              ${decisionButtons(plan, true)}
+              <button class="secondary" type="button" data-detail="${plan.id}">查看依据</button>
+            </div>
+          </article>`;
+      }
+      return `
+        <article class="panel primary-plan">
+          <div class="plan-identity">
+            <span class="decision-number">${planNumber}</span>
+            <div class="plan-name"><strong>${plan.name}</strong><small>${plan.code}</small></div>
+            ${status(plan)}
+          </div>
+          <h2 class="action-title">${plan.action}</h2>
+          ${ruleBlock(plan, false)}
+          ${progress(plan)}
+          <div class="evidence-tags">${plan.evidence.map(x => `<span>${x}</span>`).join("")}</div>
+          <div class="actions">
+            ${responseBadge(plan)}
+            ${decisionButtons(plan, false)}
+            <button class="secondary" type="button" data-detail="${plan.id}">查看依据</button>
+          </div>
+        </article>`;
+    }
+
+    function renderA(plansNow) {
+      if (!plansNow.length) return emptyState();
+      const pendingCount = plansNow.filter(plan => responseFor(plan).status === "pending").length;
+      const acceptedCount = plansNow.filter(plan => responseFor(plan).status === "accepted").length;
+      const disputedCount = plansNow.filter(plan => responseFor(plan).status === "disputed").length;
+      const rejectedCount = plansNow.filter(plan => responseFor(plan).status === "rejected").length;
+      return `${summary(plansNow)}
+        <div class="variant-a">
+          <div class="focus-layout">
+            ${planCard(plansNow[0], false)}
+            <div class="secondary-stack">
+              ${plansNow.slice(1).map(p => planCard(p, true)).join("")}
+              ${plansNow.length === 1 ? `
+                <section class="panel compact-plan">
+                  <div class="eyebrow">其他持仓</div>
+                  <h2 class="action-title">没有实质变化</h2>
+                  <p style="color:var(--muted)">继续昨日已确认计划，不生成新卡片。</p>
+                </section>` : ""}
+            </div>
+          </div>
+          <div class="morning-footer">
+            <div class="footer-response-summary">
+              <span class="response-badge accepted">已接受 ${acceptedCount}</span>
+              <span class="response-badge disputed">有异议 ${disputedCount}</span>
+              <span class="response-badge rejected">不采用 ${rejectedCount}</span>
+            </div>
+            <button class="secondary" type="button" data-accept-all ${pendingCount ? "" : "disabled"}>接受所有未处理（${pendingCount}）</button>
+            <button class="secondary" type="button" data-market-detail="all">查看全部依据（汇总）</button>
+            <p>批量接受只处理“未处理”项，不覆盖异议、不采用或稍后决定。所有选择都记录规则与依据版本。</p>
+          </div>
+          <div class="alert-handoff">
+            <div>
+              <span class="eyebrow">盘中预警 · V2设计预览</span>
+              <strong class="alert-state ${acceptedCount ? "" : "waiting"}">${acceptedCount ? `已挂接 ${acceptedCount} 份接受计划` : "尚未激活新计划"}</strong>
+            </div>
+            <small>${acceptedCount ? "仅监听已接受版本；5分钟完成K线负责提醒时机，日线与30分钟仍拥有策略权威。" : "开盘前未接受则沿用上一份已确认计划；新机会提醒关闭，仅保留既有风险失效监控。"}</small>
+            <span class="status-chip">去重 · 冷却 · 状态变化才提醒</span>
+          </div>
+        </div>`;
+    }
+
+    function renderB(plansNow) {
+      if (!plansNow.length) return emptyState();
+      if (!plansNow.some(p => p.id === state.selected)) state.selected = plansNow[0].id;
+      const selected = plansNow.find(p => p.id === state.selected) || plansNow[0];
+      return `${summary(plansNow)}
+        <div class="variant-b">
+          <section class="panel inbox">
+            <div class="queue">
+              <div class="queue-title">需要确认 · ${plansNow.length}</div>
+              ${plansNow.map(p => `
+                <button type="button" class="queue-item ${p.change} ${p.id === selected.id ? "active" : ""}" data-select="${p.id}">
+                  <span class="dot"></span>
+                  <span><strong>${p.name}</strong><small>${p.action}</small></span>
+                  <time>${responseBadge(p)}</time>
+                </button>`).join("")}
+            </div>
+            <div class="detail-pane">
+              <div style="display:flex;justify-content:space-between;gap:14px">
+                <div><div class="eyebrow">${selected.code}</div><h2 class="action-title">${selected.action}</h2></div>
+                ${status(selected)}
+              </div>
+              ${ruleBlock(selected)}
+              ${progress(selected)}
+              <div class="evidence-tags">${selected.evidence.map(x => `<span>${x}</span>`).join("")}</div>
+              <div class="actions">
+                ${responseBadge(selected)}
+                ${decisionButtons(selected)}
+                <button class="secondary" type="button" data-detail="${selected.id}">打开解释抽屉</button>
+              </div>
+            </div>
+          </section>
+        </div>`;
+    }
+
+    function renderC(plansNow) {
+      if (!plansNow.length) return emptyState();
+      return `${summary(plansNow)}
+        <div class="variant-c">
+          <section class="panel checklist">
+            <div class="checklist-head">
+              <span>对象 / 变化</span><span>今日动作</span><span>条件与失效</span><span>我的决定</span>
+            </div>
+            ${plansNow.map(p => `
+              <article class="check-row">
+                <div class="security">
+                  <strong>${p.name}</strong>
+                  ${status(p)}
+                </div>
+                <div class="check-action">${p.action}</div>
+                <div class="check-condition">
+                  <b>IF</b> ${p.ifText}<br>
+                  <b style="color:var(--red)">INVALID</b> ${p.invalidText}
+                </div>
+                <div class="check-controls">
+                  ${responseBadge(p)}
+                  ${decisionButtons(p, true)}
+                  <button class="text-button" type="button" data-detail="${p.id}">详情 →</button>
+                </div>
+              </article>`).join("")}
+          </section>
+        </div>`;
+    }
+
+    function renderHoldings() {
+      const added = state.previewAdded ? [{
+        id: "h5", code: "000005.EX", name: "刚加入的示例标的", weight: "未知",
+        risk: "新加入 · 信息待补", riskClass: "blocked",
+        plan: "仅进入资料补全队列", note: "尚未生成持仓动作"
+      }] : [];
+      const rows = [...holdingRows, ...added].filter(row => {
+        const query = state.holdingQuery.trim().toLowerCase();
+        return !query || `${row.code} ${row.name}`.toLowerCase().includes(query);
+      });
+      return `
+        <div class="route-stack">
+          <div class="metrics-grid">
+            <div class="metric-card"><small>实际持仓</small><strong>${holdingRows.length + added.length}</strong><em>不是全市场标的数</em></div>
+            <div class="metric-card"><small>已知权重</small><strong>61.4%</strong><em>未知部分保持未知</em></div>
+            <div class="metric-card"><small>严格就绪</small><strong>3 / ${holdingRows.length + added.length}</strong><em>Beta未知会阻塞归因</em></div>
+            <div class="metric-card"><small>今日有变化</small><strong>3</strong><em>最多进入今日3张卡</em></div>
+          </div>
+          <section class="panel route-panel">
+            <div class="route-toolbar">
+              <div>
+                <h2>实际持仓清单</h2>
+                <p>默认按“需要处理”排序；支持搜索、分组和大规模标的库映射。</p>
+              </div>
+              <div class="toolbar-actions">
+                <form data-holding-search>
+                  <input class="field" name="query" value="${state.holdingQuery}" placeholder="代码或名称">
+                  <button class="secondary" type="submit">筛选</button>
+                </form>
+                <button class="secondary" type="button" data-holding-action="import">导入持仓</button>
+                <button class="primary" type="button" data-holding-action="add">＋ 添加标的</button>
+              </div>
+            </div>
+            <div class="universe-note">
+              <b>边界</b>
+              <span><strong style="color:var(--text)">全市场标的库 5,299</strong> 用于搜索与映射；自选池22只；真正持仓只有上方${holdingRows.length + added.length}只，不能把全市场股票误称为持仓。</span>
+            </div>
+          </section>
+          <section class="panel route-panel">
+            <div class="holdings-table">
+              <div class="holding-head"><span>标的</span><span>权重</span><span>风险就绪</span><span>当前计划</span><span>详情</span></div>
+              ${rows.length ? rows.map(row => `
+                <article class="holding-row">
+                  <div class="holding-id"><strong>${row.name}</strong><small>${row.code}</small></div>
+                  <div class="holding-weight">${row.weight}</div>
+                  <div class="holding-risk ${row.riskClass}">${row.risk}</div>
+                  <div class="holding-plan"><strong>${row.plan}</strong><small>${row.note}</small></div>
+                  <button class="secondary" type="button" data-holding-detail="${row.id}">打开</button>
+                </article>`).join("") : `
+                <div style="padding:30px;text-align:center;color:var(--muted)">没有匹配的实际持仓；可转到全市场查询。</div>`}
+            </div>
+          </section>
+        </div>`;
+    }
+
+    function renderLookup() {
+      return `
+        <div class="route-stack">
+          <section class="panel route-panel">
+            <div class="route-toolbar">
+              <div>
+                <h2>股票代码查询</h2>
+                <p>输入代码，查看规则策略、技术状态与证据；非持仓不会输出个性化数量。</p>
+              </div>
+              <span class="status-chip">全市场可搜索</span>
+            </div>
+            <form class="lookup-bar" data-stock-lookup>
+              <input class="field" name="code" value="${state.lookupCode}" aria-label="股票代码" placeholder="例如 512480 / 300308.SZ">
+              <button class="primary" type="submit">策略分析</button>
+            </form>
+          </section>
+          <div class="lookup-grid">
+            <section class="panel lookup-chart">
+              <div class="route-toolbar">
+                <div><div class="eyebrow">${state.lookupCode} · 固定示意</div><h2>示例标的 · 技术结构</h2></div>
+                <span class="status revised">等待确认</span>
+              </div>
+              <div class="mini-chart" aria-label="示意K线、MA20与MA60">
+                <svg viewBox="0 0 520 220" role="img">
+                  <g stroke="#d94b45" fill="#d94b45">
+                    <line x1="28" y1="145" x2="28" y2="103"/><rect x="21" y="114" width="14" height="22"/>
+                    <line x1="66" y1="130" x2="66" y2="86"/><rect x="59" y="98" width="14" height="21"/>
+                    <line x1="104" y1="116" x2="104" y2="70"/><rect x="97" y="82" width="14" height="23"/>
+                    <line x1="180" y1="128" x2="180" y2="79"/><rect x="173" y="91" width="14" height="25"/>
+                    <line x1="256" y1="112" x2="256" y2="64"/><rect x="249" y="77" width="14" height="22"/>
+                    <line x1="294" y1="102" x2="294" y2="55"/><rect x="287" y="67" width="14" height="23"/>
+                    <line x1="370" y1="91" x2="370" y2="42"/><rect x="363" y="54" width="14" height="25"/>
+                    <line x1="446" y1="85" x2="446" y2="37"/><rect x="439" y="48" width="14" height="24"/>
+                  </g>
+                  <g stroke="#5a8fc7" fill="#0c1926">
+                    <line x1="142" y1="121" x2="142" y2="74"/><rect x="135" y="84" width="14" height="25"/>
+                    <line x1="218" y1="119" x2="218" y2="71"/><rect x="211" y="80" width="14" height="27"/>
+                    <line x1="332" y1="108" x2="332" y2="59"/><rect x="325" y="69" width="14" height="25"/>
+                    <line x1="408" y1="99" x2="408" y2="49"/><rect x="401" y="58" width="14" height="27"/>
+                    <line x1="484" y1="92" x2="484" y2="45"/><rect x="477" y="54" width="14" height="24"/>
+                  </g>
+                  <path d="M12 129 C90 114 142 108 214 101 S350 77 506 60" fill="none" stroke="#f4c56c" stroke-width="2.5"/>
+                  <path d="M12 150 C110 141 190 126 278 114 S411 94 506 83" fill="none" stroke="#8cbff3" stroke-width="2" stroke-dasharray="6 5"/>
+                  <line x1="12" y1="78" x2="506" y2="78" stroke="#d94b45" stroke-dasharray="4 5"/>
+                </svg>
+              </div>
+              <div class="benchmark-row">
+                <span class="benchmark-pill active">上证指数 · 全市场风险门</span>
+                <span class="benchmark-pill">自动主基准：科创50</span>
+                <span class="benchmark-pill">创业板指</span>
+                <span class="benchmark-pill">沪深300</span>
+                <span class="benchmark-pill">QQQ</span>
+              </div>
+              <div class="market-permission" aria-label="大盘许可层">
+                <div class="permission-cell caution">
+                  <small>上证指数 · 风险门</small>
+                  <strong>谨慎许可</strong>
+                  <em>仍在MA20与市场地板之间</em>
+                </div>
+                <div class="permission-cell caution">
+                  <small>科创50 · 主基准</small>
+                  <strong>相对转弱</strong>
+                  <em>未满足提高观察优先级的条件</em>
+                </div>
+                <div class="permission-cell">
+                  <small>创业板指 · 辅助</small>
+                  <strong>中性</strong>
+                  <em>仅做成长风格交叉验证</em>
+                </div>
+              </div>
+              <h3>技术指标</h3>
+              <div class="indicator-list">
+                <div class="indicator"><small>MA20</small><strong class="positive">已站上0.7%</strong></div>
+                <div class="indicator"><small>MACD</small><strong class="warning">弱金叉候选</strong></div>
+                <div class="indicator"><small>顶背离</small><strong>尚未形成</strong></div>
+                <div class="indicator"><small>斐波那契</small><strong>0.382支撑附近</strong></div>
+              </div>
+            </section>
+            <section class="panel strategy-card">
+              <div class="eyebrow">主策略 · 非持仓查询</div>
+              <h2>等待确认，不把技术修复直接视为买点</h2>
+              <div class="rule"><span class="rule-key">IF</span><span class="rule-value">连续3根已完成15分钟K线站上确认位，上证指数不跌破市场地板，且相对科创50不再转弱 <span tabindex="0" data-tip="站上：连续3根已完成15分钟K线收盘价高于确认位；影线可短暂穿越。上证指数是全市场风险门，科创50是当前自动主基准。">i</span></span></div>
+              <div class="rule"><span class="rule-key">THEN</span><span class="rule-value">进入观察优先级；等待回踩确认，不在第一波拉升追入</span></div>
+              <div class="rule"><span class="rule-key">UNTIL</span><span class="rule-value">未来3个交易日或下一次日线收盘</span></div>
+              <div class="rule invalid"><span class="rule-key">INVALID</span><span class="rule-value">日线重新跌破MA20且行业同步转弱</span></div>
+              <div class="strategy-note">当前不是实际持仓，因此不输出减仓比例、股数或个性化风险预算。加入持仓后才结合成本、权重与Beta分类。</div>
+              <div class="evidence-tags"><span>日线 + 30分钟</span><span>MA20 / MACD</span><span>上证风险门</span><span>AI调用 none</span></div>
+              <div class="actions">
+                <button class="secondary" type="button" data-theme-detail>查看所属AI硬件主题温度</button>
+              </div>
+            </section>
+          </div>
+        </div>`;
+    }
+
+    function renderReview() {
+      return `
+        <div class="route-stack">
+          <div class="metrics-grid">
+            <div class="metric-card"><small>本次计划</small><strong>3</strong><em>1项条件触发</em></div>
+            <div class="metric-card"><small>纪律遵守</small><strong>3 / 3</strong><em>没有临时追高</em></div>
+            <div class="metric-card"><small>策略可判定</small><strong>1 / 3</strong><em>T+5样本仍在形成</em></div>
+            <div class="metric-card"><small>试用进度</small><strong>4 / 10</strong><em>不足以评价收益优势</em></div>
+          </div>
+          <div class="review-grid">
+            <section class="panel score-panel">
+              <header><div><div class="eyebrow">Strategy Quality</div><h2>策略质量</h2></div><span class="score">待定</span></header>
+              <ul>
+                <li>触发条件是否清晰且可复现</li>
+                <li>失效条件是否在结果前声明</li>
+                <li>按T+1 / T+5 / T+20分别评价，不用单日涨跌盖棺定论</li>
+              </ul>
+            </section>
+            <section class="panel score-panel">
+              <header><div><div class="eyebrow">Execution Quality</div><h2>执行质量</h2></div><span class="score">良好</span></header>
+              <ul>
+                <li>已在08:30完成3项计划处理，异议与拒绝单独留痕</li>
+                <li>未把“极度恐慌”当作自动抄底理由</li>
+                <li>没有在条件未成立时提高高Beta仓位</li>
+              </ul>
+            </section>
+          </div>
+          <section class="panel route-panel">
+            <div class="route-toolbar">
+              <div><h2>计划—触发—执行账本</h2><p>先评价是否遵守计划，再评价策略有没有统计价值。</p></div>
+              <span class="status-chip">2026-07-24 · 收盘后</span>
+            </div>
+            <div class="review-ledger">
+              <div class="review-head"><span>对象</span><span>盘前计划</span><span>实际触发</span><span>执行</span><span>结果</span></div>
+              ${reviewRows.map(row => `
+                <article class="review-row">
+                  <div><strong>${row.name}</strong><br><small>${row.id.toUpperCase()}</small></div>
+                  <div>${row.plan}</div>
+                  <div>${row.event}</div>
+                  <div class="good">✓ ${row.execution}</div>
+                  <button class="text-button pending" type="button" data-review-detail="${row.id}">${row.outcome} →</button>
+                </article>`).join("")}
+            </div>
+          </section>
+          <section class="panel backtest-panel">
+            <div class="route-toolbar">
+              <div>
+                <div class="eyebrow">Point-in-time Replay</div>
+                <h2>规则回测情况</h2>
+                <p>只展示声明周期、相对基准、回撤与样本外结果；不让单一胜率冒充稳定优势。</p>
+              </div>
+              <span class="status revised">尚未运行可信回测</span>
+            </div>
+            <div class="backtest-status">
+              <div class="backtest-metric"><small>点时样本</small><strong>待跑</strong><em>必须排除未来数据</em></div>
+              <div class="backtest-metric"><small>T+5相对基准</small><strong>待跑</strong><em>主基准随标的声明</em></div>
+              <div class="backtest-metric"><small>最大不利波动</small><strong>待跑</strong><em>不能只看最终收益</em></div>
+              <div class="backtest-metric"><small>盈亏比 / 期望值</small><strong>待跑</strong><em>胜率仅作辅助</em></div>
+              <div class="backtest-metric"><small>市场环境稳定性</small><strong>样本不足</strong><em>牛熊与震荡分层</em></div>
+            </div>
+            <div class="actions">
+              <button class="secondary" type="button" data-backtest-detail>查看回测准入条件</button>
+              <span class="status-chip">规则版本 prototype-v1 · 不展示虚构收益</span>
+            </div>
+          </section>
+          <section class="panel route-panel">
+            <div class="route-toolbar">
+              <div><h3>10次晨间试用</h3><p>当前仅验证是否更容易记住、处理和遵守计划。</p></div>
+              <strong>第4次</strong>
+            </div>
+            <div class="pilot-progress">${[1,2,3,4,5,6,7,8,9,10].map(i => `<i class="${i < 4 ? "done" : i === 4 ? "current" : ""}"></i>`).join("")}</div>
+          </section>
+        </div>`;
+    }
+
+    function renderTheme() {
+      const lowCount = themeEtfs.filter(item => item.value < 35).length;
+      return `
+        <div class="theme-page">
+          <section class="panel theme-hero">
+            <div class="route-toolbar">
+              <button class="text-button" type="button" data-theme-back>← 返回行动简报</button>
+              <span class="status-chip">固定参考数据 · 2026-07-22</span>
+            </div>
+            <div class="theme-hero-grid">
+              <div>
+                <div class="eyebrow">AI Hardware · Cross-sectional Median</div>
+                <h2 style="margin:7px 0 5px">AI硬件板块温度</h2>
+                <p style="margin:0 0 16px;color:var(--muted)">用9个代表ETF观察半导体、芯片、AI、通信、算力与商业航天。统一值取子板块温度中位数，不继承参考页未公开的计算公式。</p>
+                <div class="theme-score">33<small> / 100 · 低位候选</small></div>
+                <div class="evidence-tags">
+                  <span>地板线 35</span><span>中性线 50</span><span>天花板线 80</span><span>${lowCount}/9低于地板</span>
+                </div>
+              </div>
+              <div class="theme-rule-card">
+                <strong>低温不等于可以买</strong>
+                <p>当前只进入“黄金坑候选”观察。还需要上证风险门不否决、主题广度止跌、相对强度改善和完成K线确认。</p>
+                <div class="actions">
+                  <button class="secondary" type="button" data-theme-method>查看计算与授权边界</button>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section class="panel theme-chart-panel">
+            <div class="route-toolbar">
+              <div><h2>统一温度趋势</h2><p>天花板/地板负责定位，不直接生成定投或买卖动作。</p></div>
+              <span class="status revised">接近地板 · 尚未反转确认</span>
+            </div>
+            <div class="theme-canvas-wrap">
+              <canvas id="theme-chart" class="theme-canvas" aria-label="AI硬件主题温度、AI、通信CPO与半导体趋势，含35地板线和80天花板线"></canvas>
+            </div>
+            <div class="theme-legend">
+              <span><i style="--legend-color:#f4f0e8"></i>统一中位数</span>
+              <span><i style="--legend-color:#d94b45"></i>AI人工智能</span>
+              <span><i style="--legend-color:#73a9df"></i>通信CPO</span>
+              <span><i style="--legend-color:#d6a74a"></i>半导体材料设备</span>
+              <span><i style="--legend-color:#e17a74"></i>天花板80</span>
+              <span><i style="--legend-color:#73a9df"></i>地板35</span>
+            </div>
+          </section>
+          <section class="panel route-panel">
+            <div class="route-toolbar">
+              <div><h2>子板块ETF代理</h2><p>一个代表ETF对应一个子板块，避免相似ETF重复计权；流动性、跟踪误差和纯度仍需在生产口径中校验。</p></div>
+              <span class="status-chip">${lowCount}个低位候选</span>
+            </div>
+            <div class="theme-etf-grid">
+              ${themeEtfs.map(item => `
+                <article class="theme-etf ${item.value < 35 ? "low" : ""}">
+                  <div><strong>${item.sector}</strong><small>${item.name} · ${item.code}</small></div>
+                  <div style="text-align:right"><b>${item.value.toFixed(2)}%</b><small>${item.value < 35 ? "低位候选" : "观察"}</small></div>
+                </article>`).join("")}
+            </div>
+          </section>
+          <section class="panel strategy-card">
+            <div class="eyebrow">主题策略合同 · 规则版</div>
+            <h2>只在“低位 + 止跌 + 大盘许可”同时成立时提高观察优先级</h2>
+            <div class="rule"><span class="rule-key">IF</span><span class="rule-value">统一温度低于35，至少5/9子板块不再创新低，上证指数未跌破市场地板，且目标子板块相对强度连续2个完成日线改善</span></div>
+            <div class="rule"><span class="rule-key">THEN</span><span class="rule-value">进入定投/黄金坑观察队列；等待个股或ETF自身条件确认，不自动买入</span></div>
+            <div class="rule"><span class="rule-key">UNTIL</span><span class="rule-value">下一次完成日线重算，或温度返回50以上</span></div>
+            <div class="rule invalid"><span class="rule-key">INVALID</span><span class="rule-value">上证跌破市场地板、低温由单一ETF异常造成，或板块相对强度继续恶化</span></div>
+          </section>
+        </div>`;
+    }
+
+    function drawThemeChart() {
+      const canvas = document.getElementById("theme-chart");
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const ratio = Math.max(1, window.devicePixelRatio || 1);
+      const width = Math.max(320, rect.width);
+      const height = Math.max(240, rect.height);
+      canvas.width = Math.round(width * ratio);
+      canvas.height = Math.round(height * ratio);
+      const ctx = canvas.getContext("2d");
+      ctx.scale(ratio, ratio);
+      ctx.clearRect(0, 0, width, height);
+
+      const pad = { left: 46, right: 20, top: 20, bottom: 36 };
+      const chartWidth = width - pad.left - pad.right;
+      const chartHeight = height - pad.top - pad.bottom;
+      const x = index => pad.left + chartWidth * index / (themeSeries.labels.length - 1);
+      const y = value => pad.top + chartHeight * (100 - value) / 100;
+
+      ctx.font = '10px "Segoe UI", "Microsoft YaHei", sans-serif';
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      [0, 20, 35, 50, 60, 80, 100].forEach(value => {
+        ctx.beginPath();
+        ctx.strokeStyle = value === 35 ? "rgba(115,169,223,.62)" : value === 80 ? "rgba(217,75,69,.62)" : "rgba(154,181,207,.12)";
+        ctx.setLineDash(value === 35 || value === 80 ? [6, 5] : []);
+        ctx.moveTo(pad.left, y(value));
+        ctx.lineTo(width - pad.right, y(value));
+        ctx.stroke();
+        ctx.fillStyle = "#91a4b7";
+        ctx.fillText(`${value}`, pad.left - 8, y(value));
+      });
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      themeSeries.labels.forEach((label, index) => {
+        if (width < 560 && index % 2 === 1) return;
+        ctx.fillStyle = "#91a4b7";
+        ctx.fillText(label, x(index), height - pad.bottom + 10);
+      });
+
+      const lines = [
+        { values: themeSeries.unified, color: "#f4f0e8", width: 3 },
+        { values: themeSeries.ai, color: "#d94b45", width: 1.8 },
+        { values: themeSeries.cpo, color: "#73a9df", width: 1.8 },
+        { values: themeSeries.semiconductor, color: "#d6a74a", width: 1.8 }
+      ];
+      lines.forEach(line => {
+        ctx.beginPath();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = line.color;
+        ctx.lineWidth = line.width;
+        line.values.forEach((value, index) => {
+          if (index === 0) ctx.moveTo(x(index), y(value));
+          else ctx.lineTo(x(index), y(value));
+        });
+        ctx.stroke();
+      });
+    }
+
+    function bindStage() {
+      const acceptAll = stage.querySelector("[data-accept-all]");
+      if (acceptAll) {
+        acceptAll.addEventListener("click", () => {
+          visiblePlans().forEach(plan => {
+            if (responseFor(plan).status === "pending") {
+              state.responses.set(plan.id, { status: "accepted", reason: "" });
+            }
+          });
+          render();
+        });
+      }
+      stage.querySelectorAll("[data-plan-response]").forEach(button => {
+        button.addEventListener("click", () => {
+          const id = button.dataset.planResponse;
+          const responseStatus = button.dataset.responseStatus;
+          if (responseStatus === "disputed") {
+            openResponseDrawer(id);
+            return;
+          }
+          state.responses.set(id, { status: responseStatus, reason: "" });
+          render();
+        });
+      });
+      stage.querySelectorAll("[data-detail]").forEach(button => {
+        button.addEventListener("click", () => openDrawer(button.dataset.detail));
+      });
+      stage.querySelectorAll("[data-market-detail]").forEach(button => {
+        button.addEventListener("click", () => openMarketDrawer(button.dataset.marketDetail));
+      });
+      stage.querySelectorAll("[data-theme-detail]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.route = "theme";
+          closeDrawer();
+          render();
+          window.scrollTo({ top: 0, behavior: "auto" });
+        });
+      });
+      const themeBack = stage.querySelector("[data-theme-back]");
+      if (themeBack) {
+        themeBack.addEventListener("click", () => {
+          state.route = "today";
+          render();
+          window.scrollTo({ top: 0, behavior: "auto" });
+        });
+      }
+      const themeMethod = stage.querySelector("[data-theme-method]");
+      if (themeMethod) themeMethod.addEventListener("click", openThemeMethodDrawer);
+      stage.querySelectorAll("[data-select]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.selected = button.dataset.select;
+          render();
+        });
+      });
+      const emptyDetail = stage.querySelector("[data-empty-detail]");
+      if (emptyDetail) emptyDetail.addEventListener("click", () => openDrawer("alpha", true));
+      const holdingSearch = stage.querySelector("[data-holding-search]");
+      if (holdingSearch) {
+        holdingSearch.addEventListener("submit", event => {
+          event.preventDefault();
+          state.holdingQuery = new FormData(holdingSearch).get("query") || "";
+          render();
+        });
+      }
+      stage.querySelectorAll("[data-holding-action]").forEach(button => {
+        button.addEventListener("click", () => openHoldingAction(button.dataset.holdingAction));
+      });
+      stage.querySelectorAll("[data-holding-detail]").forEach(button => {
+        button.addEventListener("click", () => openHoldingDrawer(button.dataset.holdingDetail));
+      });
+      const lookupForm = stage.querySelector("[data-stock-lookup]");
+      if (lookupForm) {
+        lookupForm.addEventListener("submit", event => {
+          event.preventDefault();
+          const code = String(new FormData(lookupForm).get("code") || "").trim().toUpperCase();
+          state.lookupCode = code || "512480";
+          render();
+        });
+      }
+      stage.querySelectorAll("[data-review-detail]").forEach(button => {
+        button.addEventListener("click", () => openReviewDrawer(button.dataset.reviewDetail));
+      });
+      const backtestDetail = stage.querySelector("[data-backtest-detail]");
+      if (backtestDetail) backtestDetail.addEventListener("click", openBacktestDrawer);
+    }
+
+    function render() {
+      const route = routeMeta[state.route];
+      const plansNow = visiblePlans();
+      document.getElementById("page-title").textContent = route.title;
+      document.getElementById("page-eyebrow").textContent = route.eyebrow;
+      document.getElementById("data-state").innerHTML = route.chips.map(chip => `<span class="chip">${chip}</span>`).join("");
+      document.querySelectorAll("[data-route]").forEach(button => {
+        button.classList.toggle("active", button.dataset.route === state.route);
+      });
+      if (state.route === "today") {
+        stage.innerHTML = state.variant === "A" ? renderA(plansNow)
+          : state.variant === "B" ? renderB(plansNow)
+          : renderC(plansNow);
+      } else if (state.route === "holdings") {
+        stage.innerHTML = renderHoldings();
+      } else if (state.route === "lookup") {
+        stage.innerHTML = renderLookup();
+      } else if (state.route === "review") {
+        stage.innerHTML = renderReview();
+      } else {
+        stage.innerHTML = renderTheme();
+      }
+      prototypeBar.style.display = state.route === "today" ? "" : "none";
+      document.getElementById("variant-name").textContent = variantMeta[state.variant];
+      document.getElementById("prototype-state").textContent =
+        `${state.scenario}项场景 · 已处理${plansNow.filter(p => responseFor(p).status !== "pending").length}/${plansNow.length}`;
+      document.querySelectorAll(".scenario").forEach(button => {
+        button.classList.toggle("active", Number(button.dataset.scenario) === state.scenario);
+      });
+      bindStage();
+      if (state.route === "theme") requestAnimationFrame(drawThemeChart);
+      writeQuery();
+    }
+
+    function openResponseDrawer(id) {
+      const plan = plans.find(item => item.id === id) || plans[0];
+      const existing = responseFor(plan);
+      let selectedReason = existing.reason || "触发条件太严格";
+      const reasons = ["触发条件太严格", "触发条件太宽松", "点位需要调整", "大盘判断有异议", "证据缺失或过期", "我不准备执行"];
+      document.getElementById("drawer-title").textContent = `${plan.name} · 提出异议`;
+      drawerContent.innerHTML = `
+        <p style="color:var(--muted)">异议不会改写规则生成版，也不会激活新计划预警。保存后形成一份可追溯的“用户修订请求”。</p>
+        <h3>异议类型</h3>
+        <div class="objection-options">
+          ${reasons.map(reason => `<button class="objection-option ${reason === selectedReason ? "active" : ""}" type="button" data-objection-reason="${reason}">${reason}</button>`).join("")}
+        </div>
+        <h3>希望怎样调整</h3>
+        <textarea class="field objection-note" data-objection-note placeholder="例如：确认根数保留3根，但上证指数应改为收盘跌破地板才否决；请补充对应回测。"></textarea>
+        <div class="proxy-contract">
+          <div class="proxy-line"><b>当前规则版</b>${plan.ifText}</div>
+          <div class="proxy-line"><b>保存后的生效语义</b>本条保持“有异议”，不开启机会型预警；上一份已接受计划继续作为可追溯基线。</div>
+        </div>
+        <div class="actions">
+          <button class="primary" type="button" data-save-objection>保存异议</button>
+          <button class="text-button" type="button" data-cancel-objection>取消</button>
+        </div>`;
+      drawerContent.querySelectorAll("[data-objection-reason]").forEach(button => {
+        button.addEventListener("click", () => {
+          selectedReason = button.dataset.objectionReason;
+          drawerContent.querySelectorAll("[data-objection-reason]").forEach(option => option.classList.toggle("active", option === button));
+        });
+      });
+      drawerContent.querySelector("[data-save-objection]").addEventListener("click", () => {
+        const note = drawerContent.querySelector("[data-objection-note]").value.trim();
+        state.responses.set(plan.id, { status: "disputed", reason: selectedReason, note });
+        closeDrawer();
+        render();
+      });
+      drawerContent.querySelector("[data-cancel-objection]").addEventListener("click", closeDrawer);
+      drawer.classList.add("open");
+      drawer.setAttribute("aria-hidden", "false");
+      document.querySelector(".drawer-close").focus();
+    }
+
+    function openThemeMethodDrawer() {
+      document.getElementById("drawer-title").textContent = "AI硬件主题温度 · 计算边界";
+      drawerContent.innerHTML = `
+        <p style="color:var(--muted)">参考页证明了ETF代理、趋势线和35/80阈值的展示价值，但没有公开底层单ETF温度公式。本原型只验证产品结构，不声称复现其算法。</p>
+        <h3>原型口径</h3>
+        <div class="proxy-contract">
+          <div class="proxy-line"><b>子板块</b>每个子板块保留一个代表ETF，避免相似产品重复计权。</div>
+          <div class="proxy-line"><b>统一温度</b>当前横截面取9个子板块温度中位数；未来需验证流动性、历史长度、跟踪误差和主题纯度。</div>
+          <div class="proxy-line"><b>地板 / 天花板</b>35和80先作为待回测阈值，不是自然常数，也不直接授权交易。</div>
+          <div class="proxy-line"><b>AI缓存</b>规则数据、ETF清单或版本没有变化时读取同一JSON解释，不重复调用AI。</div>
+        </div>
+        <h3>进入真实回测前</h3>
+        <ul class="evidence-list">
+          <li>明确每只ETF温度的完整公式与滚动窗口。</li>
+          <li>处理ETF上市日期差异、停牌、复权、流动性和幸存者偏差。</li>
+          <li>按上证风险状态和牛熊震荡环境分层评估T+5/T+20结果。</li>
+          <li>AI文案必须绑定同一数据指纹；当前值与解释不一致时直接阻塞展示。</li>
+        </ul>`;
+      drawer.classList.add("open");
+      drawer.setAttribute("aria-hidden", "false");
+      document.querySelector(".drawer-close").focus();
+    }
+
+    function openBacktestDrawer() {
+      document.getElementById("drawer-title").textContent = "规则回测 · 准入条件";
+      drawerContent.innerHTML = `
+        <p style="color:var(--muted)">这里不会用脱敏示意数字冒充历史优势。只有完成点时数据与无前视验证后，回测卡才会从“待跑”升级。</p>
+        <h3>必须同时满足</h3>
+        <ul class="evidence-list">
+          <li>规则版本、参数、基准和评价周期在结果出现前固定。</li>
+          <li>使用当时可见的行情、成分、公告和持仓上下文，不读取未来修订数据。</li>
+          <li>展示样本数、样本外区间、T+1/T+5/T+20、最大不利波动、盈亏比和最大回撤。</li>
+          <li>按上证风险门、趋势/震荡环境和板块强弱分层，报告冲突与覆盖缺口。</li>
+          <li>短样本只标“诊断”，不能升级风险预算或成为买卖授权。</li>
+        </ul>
+        <div class="proxy-line"><b>当前状态</b>prototype-v1仅验证信息架构；可信回测未运行，所有收益字段保持“待跑”。</div>`;
+      drawer.classList.add("open");
+      drawer.setAttribute("aria-hidden", "false");
+      document.querySelector(".drawer-close").focus();
+    }
+
+    function openDrawer(id, continuation = false) {
+      const plan = plans.find(p => p.id === id) || plans[0];
+      document.getElementById("drawer-title").textContent = continuation ? "延续计划摘要" : `${plan.name} · 策略依据`;
+      drawerContent.innerHTML = `
+        <p style="color:var(--muted)">${plan.why}</p>
+        <div class="mini-chart" aria-label="示意K线与MA20图">
+          <svg viewBox="0 0 420 130" role="img">
+            <path d="M0 96 C45 86 57 102 93 79 S151 91 189 61 S244 74 280 48 S340 58 420 26" fill="none" stroke="#d94b45" stroke-width="3"/>
+            <path d="M0 105 C65 96 112 91 164 82 S270 70 420 52" fill="none" stroke="#f4c56c" stroke-width="2" stroke-dasharray="6 5"/>
+            <line x1="0" y1="68" x2="420" y2="68" stroke="#d94b45" stroke-width="1" stroke-dasharray="4 5"/>
+          </svg>
+        </div>
+        <h3>支持与反对证据</h3>
+        <ul class="evidence-list">
+          ${plan.evidence.map(x => `<li>${x}</li>`).join("")}
+          <li>条件词典：连续3根已完成15分钟K线收盘确认，当前${plan.progress}/3。</li>
+          <li>基准：自动选择主基准；QQQ/SOX仅作辅助映射。</li>
+        </ul>
+        <h3>审计</h3>
+        <p style="color:var(--muted)">${plan.source}<br>固定原型数据 · 规则版本 prototype-v1 · AI调用 none</p>`;
+      drawer.classList.add("open");
+      drawer.setAttribute("aria-hidden", "false");
+      document.querySelector(".drawer-close").focus();
+    }
+
+    function openMarketDrawer(id) {
+      if (id === "all") {
+        document.getElementById("drawer-title").textContent = "全部市场 · 约束与依据";
+        drawerContent.innerHTML = `
+          <p style="color:var(--muted)">首页只保留影响今日持仓计划的两个主要驱动。其余市场状态在这里留痕，不与行动争夺注意力。</p>
+          <div class="proxy-contract">
+            ${markets.map(market => `
+              <button class="market-tile" style="display:block;width:100%;margin-bottom:8px" type="button" data-market-detail="${market.id}">
+                <header><strong>${market.name}</strong><span>${market.mode}</span></header>
+                <div class="temperature">${market.temperature}</div>
+                <footer><span class="${market.confirmationClass}">${market.confirmation}</span><time>${market.asOf}</time></footer>
+              </button>`).join("")}
+          </div>
+          <h3>使用边界</h3>
+          <ul class="evidence-list">
+            <li>直接指数主判，ETF篮子只做交叉确认；滞后数据明确降级。</li>
+            <li>温度、恐慌贪婪和拥挤度只约束风险预算，不单独授权动作。</li>
+            <li>固定脱敏原型数据 · 规则版本 prototype-market-v1 · AI调用 none</li>
+          </ul>`;
+        drawerContent.querySelectorAll("[data-market-detail]").forEach(button => {
+          button.addEventListener("click", () => openMarketDrawer(button.dataset.marketDetail));
+        });
+        drawer.classList.add("open");
+        drawer.setAttribute("aria-hidden", "false");
+        document.querySelector(".drawer-close").focus();
+        return;
+      }
+      const market = markets.find(item => item.id === id) || markets[0];
+      document.getElementById("drawer-title").textContent = `${market.name} · 市场温度依据`;
+      drawerContent.innerHTML = `
+        <p style="color:var(--muted)">${market.summary}</p>
+        <div class="mini-chart" aria-label="${market.name}近30日温度示意">
+          <svg viewBox="0 0 420 130" role="img">
+            <path d="${market.path}" fill="none" stroke="#8cbff3" stroke-width="3"/>
+            <line x1="0" y1="65" x2="420" y2="65" stroke="#91a4b7" stroke-width="1" stroke-dasharray="4 5"/>
+          </svg>
+        </div>
+        <h3>五维拆解</h3>
+        <div class="temperature-grid">
+          ${Object.entries(market.dimensions).map(([name, value]) => `
+            <div class="temperature-row">
+              <span>${name}</span>
+              <span class="temperature-meter"><i style="width:${value}%"></i></span>
+              <strong>${value}/100</strong>
+            </div>`).join("")}
+        </div>
+        <h3>指数与ETF代理合同</h3>
+        <div class="proxy-contract">
+          <div class="proxy-line"><b>主判</b>${market.primary}</div>
+          <div class="proxy-line"><b>ETF确认</b>${market.proxy}</div>
+          <div class="proxy-line"><b>一致性 / 缺口</b>${market.integrity}<br><small>截至 ${market.asOf} · 固定脱敏原型数据</small></div>
+        </div>
+        <h3>使用边界</h3>
+        <ul class="evidence-list">
+          <li>温度只约束风险预算，不单独授权买入、卖出或抄底。</li>
+          <li>恐慌与拥挤分别计算；低情绪不等于低风险。</li>
+          <li>境内QDII ETF在08:30尚未开盘，不得冒充海外实时行情。</li>
+          <li>规则版本 prototype-market-v1 · AI调用 none</li>
+        </ul>`;
+      drawer.classList.add("open");
+      drawer.setAttribute("aria-hidden", "false");
+      document.querySelector(".drawer-close").focus();
+    }
+
+    function openHoldingDrawer(id) {
+      const allRows = [...holdingRows, ...(state.previewAdded ? [{
+        id: "h5", code: "000005.EX", name: "刚加入的示例标的", weight: "未知",
+        risk: "新加入 · 信息待补", plan: "仅进入资料补全队列", note: "尚未生成持仓动作"
+      }] : [])];
+      const holding = allRows.find(row => row.id === id) || allRows[0];
+      document.getElementById("drawer-title").textContent = `${holding.name} · 持仓详情`;
+      drawerContent.innerHTML = `
+        <p style="color:var(--muted)">${holding.code} · 权重 ${holding.weight} · ${holding.risk}</p>
+        <h3>当前条件计划</h3>
+        <div class="rule"><span class="rule-key">IF</span><span class="rule-value">关键位得到3根已完成15分钟K线确认，且市场风险预算未继续降级</span></div>
+        <div class="rule"><span class="rule-key">THEN</span><span class="rule-value">${holding.plan}；不自动生成订单</span></div>
+        <div class="rule invalid"><span class="rule-key">INVALID</span><span class="rule-value">日线收盘跌破既有失效位，或持仓假设被新证据推翻</span></div>
+        <h3>持仓上下文</h3>
+        <div class="proxy-contract">
+          <div class="proxy-line"><b>位置</b>成本、可用股数与盈亏均保持原始导入状态；缺失字段不会补0。</div>
+          <div class="proxy-line"><b>风险</b>${holding.risk}。Beta未知时阻塞账户级风险归因。</div>
+          <div class="proxy-line"><b>今日</b>${holding.note}。</div>
+        </div>
+        <p style="color:var(--muted)">固定脱敏原型数据 · 无交易 · AI调用 none</p>`;
+      drawer.classList.add("open");
+      drawer.setAttribute("aria-hidden", "false");
+      document.querySelector(".drawer-close").focus();
+    }
+
+    function openHoldingAction(kind) {
+      const isAdd = kind === "add";
+      document.getElementById("drawer-title").textContent = isAdd ? "添加标的" : "导入持仓";
+      drawerContent.innerHTML = isAdd ? `
+        <p style="color:var(--muted)">从全市场5,299只标的中搜索。加入后只进入本地持仓资料补全队列，不自动生成交易动作。</p>
+        <label for="demo-add-code">股票代码</label>
+        <input id="demo-add-code" class="field" style="width:100%;margin:8px 0 12px" value="000005.EX">
+        <div class="proxy-contract">
+          <div class="proxy-line"><b>必填</b>代码、名称、是否实际持有</div>
+          <div class="proxy-line"><b>风险字段</b>权重与Beta可以暂时未知，但会阻塞账户级结论</div>
+        </div>
+        <button class="primary" type="button" data-demo-add>加入本次原型</button>` : `
+        <p style="color:var(--muted)">支持多种入口，但生产版仍必须“预览差异 → 用户确认 → 原子保存”。</p>
+        <div class="proxy-contract">
+          <div class="proxy-line"><b>券商文件</b>TSV / CSV / XLSX，保留原始空字段</div>
+          <div class="proxy-line"><b>粘贴导入</b>复制券商持仓表，先解析后预览</div>
+          <div class="proxy-line"><b>结构化导入</b>JSON接口为后续Redis/MySQL迁移保留</div>
+          <div class="proxy-line"><b>手工录入</b>少量标的逐只添加</div>
+        </div>
+        <button class="secondary" type="button" data-demo-import>查看差异预览</button>`;
+      drawer.classList.add("open");
+      drawer.setAttribute("aria-hidden", "false");
+      const addButton = drawerContent.querySelector("[data-demo-add]");
+      if (addButton) {
+        addButton.addEventListener("click", () => {
+          state.previewAdded = true;
+          closeDrawer();
+          render();
+        });
+      }
+      const importButton = drawerContent.querySelector("[data-demo-import]");
+      if (importButton) {
+        importButton.addEventListener("click", () => {
+          importButton.textContent = "✓ 预览：新增1、变更2、移除0（未保存）";
+          importButton.classList.add("confirmed");
+        });
+      }
+      document.querySelector(".drawer-close").focus();
+    }
+
+    function openReviewDrawer(id) {
+      const row = reviewRows.find(item => item.id === id) || reviewRows[0];
+      document.getElementById("drawer-title").textContent = `${row.name} · 复盘依据`;
+      drawerContent.innerHTML = `
+        <h3>盘前声明</h3>
+        <p>${row.plan}</p>
+        <h3>盘中事实</h3>
+        <p>${row.event}</p>
+        <div class="proxy-contract">
+          <div class="proxy-line"><b>执行质量</b>${row.execution}。只判断有没有遵守已确认计划。</div>
+          <div class="proxy-line"><b>策略质量</b>${row.outcome}。等待声明周期结束后再评价。</div>
+          <div class="proxy-line"><b>禁止后见之明</b>不用收盘后才知道的价格重写盘前规则。</div>
+        </div>
+        <h3>观察窗口</h3>
+        <ul class="evidence-list">
+          <li>T+1：短期方向与最大不利波动</li>
+          <li>T+5：条件策略的主要评价窗口</li>
+          <li>T+20：只评估中期假设，不替代T+5结果</li>
+        </ul>`;
+      drawer.classList.add("open");
+      drawer.setAttribute("aria-hidden", "false");
+      document.querySelector(".drawer-close").focus();
+    }
+
+    function closeDrawer() {
+      drawer.classList.remove("open");
+      drawer.setAttribute("aria-hidden", "true");
+    }
+
+    function cycle(delta) {
+      if (state.route !== "today") return;
+      const keys = Object.keys(variantMeta);
+      const index = keys.indexOf(state.variant);
+      state.variant = keys[(index + delta + keys.length) % keys.length];
+      render();
+    }
+
+    document.querySelectorAll("[data-route]").forEach(button => {
+      button.addEventListener("click", () => {
+        state.route = button.dataset.route;
+        closeDrawer();
+        render();
+        window.scrollTo({ top: 0, behavior: "auto" });
+      });
+    });
+    document.getElementById("prev").addEventListener("click", () => cycle(-1));
+    document.getElementById("next").addEventListener("click", () => cycle(1));
+    document.querySelectorAll(".scenario").forEach(button => {
+      button.addEventListener("click", () => {
+        state.scenario = Number(button.dataset.scenario);
+        state.responses.clear();
+        state.selected = "alpha";
+        render();
+      });
+    });
+    document.querySelector(".drawer-close").addEventListener("click", closeDrawer);
+    drawer.addEventListener("click", event => {
+      if (event.target === drawer) closeDrawer();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") closeDrawer();
+      const tag = document.activeElement && document.activeElement.tagName;
+      if (["INPUT", "TEXTAREA"].includes(tag) || document.activeElement?.isContentEditable) return;
+      if (event.key === "ArrowLeft") cycle(-1);
+      if (event.key === "ArrowRight") cycle(1);
+    });
+    window.addEventListener("resize", () => {
+      if (state.route === "theme") requestAnimationFrame(drawThemeChart);
+    });
+
+    readQuery();
+    render();
+  </script>
+</body>
+</html>

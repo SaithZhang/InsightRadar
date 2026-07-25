@@ -1,0 +1,14 @@
+{
+  "factor_config": "configs/factor_lab.json",
+  "data_dir": "data/factor_pipeline",
+  "validation_dates": 60,
+  "promotion_gates": {
+    "min_validation_dates": 20,
+    "min_rank_ic": 0.02,
+    "min_positive_ic_rate": 0.52,
+    "min_net_top_bottom": 0.0,
+    "min_quintile_monotonicity": 0.5,
+    "max_condition_number": 50.0,
+    "max_vif": 10.0
+  }
+}

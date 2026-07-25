@@ -1,0 +1,1 @@
+{"version":"20260713-example","as_of":"2026-07-13","model_type":"ridge_v1","validation_status":"failed","promotion":{"promoted":false,"reason":"candidate_failed_hard_gates"},"validation_metrics":{"period_count":60,"rank_ic_mean":-0.01}}

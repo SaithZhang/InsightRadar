@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InfluencerObservation",
+  "type": "object",
+  "required": ["id", "date", "author", "source", "source_type", "summary"],
+  "properties": {
+    "id": {"type": "string"},
+    "date": {"type": "string"},
+    "author": {"type": "string"},
+    "source": {"type": "string"},
+    "source_url": {"type": "string"},
+    "source_post_id": {"type": "string"},
+    "source_type": {
+      "type": "string",
+      "enum": ["first_party", "secondary", "manual", "unknown"]
+    },
+    "summary": {"type": "string"},
+    "symbols": {"type": "array", "items": {"type": "string"}},
+    "industries": {"type": "array", "items": {"type": "string"}},
+    "themes": {"type": "array", "items": {"type": "string"}},
+    "direction": {
+      "type": "string",
+      "enum": ["bullish", "bearish", "neutral", "mixed"]
+    },
+    "confidence": {
+      "type": "string",
+      "enum": ["high", "medium", "low", "unknown"]
+    },
+    "impact_horizon": {
+      "type": "string",
+      "enum": ["intraday", "short", "medium", "long", "unknown"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["verified", "unverified", "watching", "invalidated"]
+    },
+    "verification": {"type": "array", "items": {"type": "string"}},
+    "metrics": {"type": "object"},
+    "collected_at": {"type": "string"}
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "universe_name": "中证1000历史时点成分",
+  "universe_type": "official_index_intervals",
+  "universe_mode": "point_in_time",
+  "universe_id": "000852_sh_pit_v1",
+  "membership_path": "data/factor_universe/csi1000_membership.csv",
+  "benchmark": "000852.SH",
+  "begin_date": 20250101,
+  "horizon_days": 5,
+  "rebalance_days": 5,
+  "min_train_days": 100,
+  "train_window_days": 252,
+  "ridge_alpha": 10.0,
+  "top_n": 50,
+  "transaction_cost_bps": 10
+}

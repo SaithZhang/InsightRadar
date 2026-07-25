@@ -1,0 +1,635 @@
+{
+  "features": [
+    {
+      "id": "feat-001",
+      "name": "Daily after-close Markdown report",
+      "description": "Generate a daily after-close Markdown report from Galaxy portfolio data, AmazingData market data, CNInfo fresh filings, peer profit notices, and external viewpoint observations.",
+      "dependencies": [],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260708-194022-after-close.md"
+    },
+    {
+      "id": "feat-002",
+      "name": "Daily after-close HTML report",
+      "description": "Generate a matching daily after-close HTML report while preserving the Markdown report and keeping source links clickable.",
+      "dependencies": [
+        "feat-001"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260708-194022-after-close.html"
+    },
+    {
+      "id": "feat-003",
+      "name": "Replayable portfolio context",
+      "description": "Promote Galaxy portfolio snapshots into replayable portfolio context with buy thesis, initial risk line, adjustment records, and review status.",
+      "dependencies": [
+        "feat-001"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260708-195401-after-close.md and reports/20260708-195401-after-close.html; context overlay smoke check returned watch 1"
+    },
+    {
+      "id": "feat-004",
+      "name": "Self-evolution backlog alignment",
+      "description": "Keep the evolve workflow aligned with current repo capabilities by avoiding stale gaps and scanning business reports rather than previous evolution reports.",
+      "dependencies": [
+        "feat-001"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m stock_assist.cli evolve generated reports/20260708-220226-evolution.md with feat-004 pass, local data gaps, and capability-aware backlog"
+    },
+    {
+      "id": "feat-005",
+      "name": "Harness continuity",
+      "description": "Maintain AGENTS.md, feature_list.json, progress.md, init.sh, and session-handoff.md so future coding-agent sessions can start, verify, and resume reliably.",
+      "dependencies": [],
+      "status": "pass",
+      "evidence": "node C:\\Users\\Saith\\.codex\\skills\\harness-creator\\scripts\\validate-harness.mjs --target C:\\Users\\Saith\\Documents\\stock-assist returned 100/100"
+    },
+    {
+      "id": "feat-006",
+      "name": "Research hypothesis tracker",
+      "description": "Extend replayable portfolio context with catalysts, falsification evidence, expected observation windows, and next review dates so each holding has a testable research hypothesis.",
+      "dependencies": [
+        "feat-003"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260708-220857-after-close.md and reports/20260708-220857-after-close.html with research hypothesis and falsification section; .venv\\Scripts\\python -m stock_assist.cli evolve generated reports/20260708-220904-evolution.md"
+    },
+    {
+      "id": "feat-007",
+      "name": "Peer comparison evidence layer",
+      "description": "Add peer and industry comparison blocks to the after-close workflow so single-stock decisions are checked against comparable companies, valuation anchors, and sector price action.",
+      "dependencies": [
+        "feat-001",
+        "feat-003"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260708-221420-after-close.md and reports/20260708-221420-after-close.html with peer comparison evidence section; .venv\\Scripts\\python -m stock_assist.cli evolve generated reports/20260708-221429-evolution.md"
+    },
+    {
+      "id": "feat-008",
+      "name": "Event calendar and filing watchlist",
+      "description": "Track upcoming earnings, shareholder meetings, lockup expiries, policy events, and critical CNInfo filings so reports can separate event risk from ordinary price movement.",
+      "dependencies": [
+        "feat-001"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260708-223430-after-close.md and reports/20260708-223430-after-close.html with event calendar and CNInfo filing watchlist section"
+    },
+    {
+      "id": "feat-009",
+      "name": "Crypto Hyperliquid monitor",
+      "description": "Generate a read-only crypto monitoring report from Hyperliquid market, account, and market-radar data, including watched symbols, configured addresses, top positions, liquidation-risk scans, notional position size, liquidation distance, and explicit data gaps.",
+      "dependencies": [],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m stock_assist.cli crypto-monitor generated reports/20260708-215545-crypto-monitor.md with dex=xyz, matched 0xec4a...cf62 positions, and market anomaly radar"
+    },
+    {
+      "id": "feat-010",
+      "name": "HTML research dashboard and global macro context",
+      "description": "Upgrade after-close HTML from a Markdown-style page into a research dashboard with portfolio KPI cards, CSS bar charts, cross-market A-share/US/Korea context, and responsive dark visual design.",
+      "dependencies": [
+        "feat-001",
+        "feat-002",
+        "feat-007"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260708-222957-after-close.md and reports/20260708-222957-after-close.html; browser check confirmed 3 market cards, 3 chart panels, no console errors, and no desktop/mobile horizontal overflow"
+    },
+    {
+      "id": "feat-011",
+      "name": "External viewpoint evidence audit",
+      "description": "Render external viewpoints with source links, source quality, portfolio/peer mapping, verification prompts, and initial A-share price aftertests so public opinions are auditable rather than raw summaries.",
+      "dependencies": [
+        "feat-001",
+        "feat-004"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260708-224507-after-close.md and reports/20260708-224507-after-close.html with links, mapping, verification prompts, and A-share price aftertests"
+    },
+    {
+      "id": "feat-012",
+      "name": "Research report monitor",
+      "description": "Collect public research-report metadata, surface SkillHub/GitHub report-collection candidates, map recent reports to holdings and watch themes, and convert product gaps into next improvements.",
+      "dependencies": [
+        "feat-001",
+        "feat-011"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m json.tool configs\\research_sources.example.json; .venv\\Scripts\\python -m json.tool configs\\research_sources.json; .venv\\Scripts\\python -m stock_assist.cli research-monitor generated reports/20260708-225710-research-monitor.md with Eastmoney stock/industry/strategy report metadata, SkillHub/GitHub candidates, holdings/theme matches, and product gap roadmap"
+    },
+    {
+      "id": "feat-013",
+      "name": "Research report thesis delta",
+      "description": "Attempt PDF text extraction for matched reports, generate thesis_delta records, append them to local research memory, and surface recent report-view changes inside the after-close report.",
+      "dependencies": [
+        "feat-012",
+        "feat-006"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m stock_assist.cli research-monitor generated reports/20260708-230238-research-monitor.md with PDF blocked status and Thesis Delta section; data/research_deltas.jsonl contains 16 deduped thesis_delta records; .venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260708-230607-after-close.md and .html with 研报观点变化 section"
+    },
+    {
+      "id": "feat-014",
+      "name": "Stable research report provider",
+      "description": "Promote report-cli as the priority research-report provider, keep Eastmoney public metadata as fallback, and use a curl-based PDF download fallback so matched reports can be read as full text when available.",
+      "dependencies": [
+        "feat-012",
+        "feat-013"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m json.tool configs\\research_sources.example.json; .venv\\Scripts\\python -m json.tool configs\\research_sources.json; .venv\\Scripts\\python -m stock_assist.cli research-monitor generated reports/20260708-231817-research-monitor.md with report-cli 93 records, eastmoney_public 60 records, and 5 ok PDF text extractions; data/research_deltas.jsonl status count includes 5 ok full-text records"
+    },
+    {
+      "id": "feat-015",
+      "name": "Product rename to InsightRadar",
+      "description": "Rename the user-facing product from stock-assist / 股票助手 to InsightRadar while keeping the existing Python package and legacy CLI commands compatible.",
+      "dependencies": [],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m json.tool feature_list.json; TOML parse check for pyproject.toml; .venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m stock_assist.cli architecture-view generated docs/architecture.html with InsightRadar title and IR mark; .venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260709-090401-after-close.md and reports/20260709-090401-after-close.html with InsightRadar brand and IR mark; .venv\\Scripts\\python -m pip install -e . installed insight-radar; insight-radar.exe --help, shenyan-radar.exe --help, and stock-assist.exe --help all show InsightRadar"
+    },
+    {
+      "id": "feat-016",
+      "name": "Product-grade InsightRadar foundation",
+      "description": "Add a product registry, product-map workflow, grouped CLI/product help, and documented data/config boundaries so InsightRadar has a stable product skeleton before deeper validator or UI work.",
+      "dependencies": [
+        "feat-015"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m json.tool feature_list.json; TOML parse check for pyproject.toml; .venv\\Scripts\\python -m stock_assist.cli product-map generated reports/20260709-090959-product-map.md; .venv\\Scripts\\insight-radar.exe --help shows InsightRadar modules and product-map; .venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260709-091030-after-close.md and .html; .venv\\Scripts\\python -m stock_assist.cli research-monitor generated reports/20260709-091104-research-monitor.md; .venv\\Scripts\\python -m stock_assist.cli evolve generated reports/20260709-091145-evolution.md with feat-016 pass"
+    },
+    {
+      "id": "feat-017",
+      "name": "Visual intelligence dashboard",
+      "description": "Refactor after-close HTML toward a HyperInsight-style intelligence dashboard with chart-first signal cards, portfolio heatmap, action/risk distribution, and collapsible evidence text.",
+      "dependencies": [
+        "feat-010",
+        "feat-016"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m json.tool feature_list.json; TOML parse check for pyproject.toml; .venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260709-120437-after-close.md and reports/20260709-120437-after-close.html with Intelligence Signals, Action Mix, Market Breadth, Position Heatmap, and 14 collapsible evidence sections; Playwright QA confirmed 5 heat tiles, 14 details sections, no console errors, and no desktop/mobile horizontal overflow; .venv\\Scripts\\python -m stock_assist.cli evolve generated reports/20260709-120542-evolution.md with feat-017 pass"
+    },
+    {
+      "id": "feat-018",
+      "name": "Conclusion-first card report",
+      "description": "Simplify the after-close HTML into a conclusion-first card interface: one executive brief, compact per-position decision cards, visual metrics, and collapsed evidence sections.",
+      "dependencies": [
+        "feat-017"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m json.tool feature_list.json; TOML parse check for pyproject.toml; .venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260709-121513-after-close.md and reports/20260709-121513-after-close.html with 4 executive brief cards, 5 per-position decision cards, 5 heat tiles, and 14 collapsed evidence sections; Playwright QA confirmed no console errors, no desktop/mobile horizontal overflow, and 0 evidence sections open by default; .venv\\Scripts\\python -m stock_assist.cli evolve generated reports/20260709-121557-evolution.md with feat-018 pass"
+    },
+    {
+      "id": "feat-019",
+      "name": "Source-priority signal queue",
+      "description": "Add a top-three signal queue to the after-close HTML so portfolio risk actions, data gaps, research deltas, event risks, and external viewpoints are ranked before the full evidence archive.",
+      "dependencies": [
+        "feat-018",
+        "feat-014",
+        "feat-011"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m json.tool feature_list.json; TOML parse check for pyproject.toml; .venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260709-123453-after-close.md and reports/20260709-123453-after-close.html with 3 priority cards before decision cards; browser QA via Codex node_repl confirmed 3 priority cards, 5 decision cards, 4 brief cards, 5 heat tiles, 14 collapsed evidence sections, no console errors, and no desktop/mobile horizontal overflow; .venv\\Scripts\\python -m stock_assist.cli evolve generated reports/20260709-123734-evolution.md with feat-019 pass"
+    },
+    {
+      "id": "feat-020",
+      "name": "A-share live market pulse",
+      "description": "Add a PPT-style real-time A-share market pulse workflow using Galaxy AmazingData snapshots first and public Eastmoney intraday data as fallback, with index direction, ETF support proxies, futures-basis gaps, state-team ETF proxy notes, and responsive HTML cards.",
+      "dependencies": [
+        "feat-016"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m json.tool configs\\a_share_pulse.json; .venv\\Scripts\\python -m json.tool configs\\a_share_pulse.example.json; .venv\\Scripts\\python -m stock_assist.cli --help shows market-pulse; .venv\\Scripts\\python -m stock_assist.cli market-pulse generated reports/20260709-125013-market-pulse.md and reports/20260709-125013-market-pulse.html using Galaxy AmazingData query_snapshot for 7 indexes and 5 ETFs; Codex node_repl browser QA confirmed 16 cards, 12 Galaxy source rows, 5 panels, no console errors, and no desktop/mobile horizontal overflow; .venv\\Scripts\\python -m stock_assist.cli evolve generated reports/20260709-125028-evolution.md with feat-020 pass"
+    },
+    {
+      "id": "feat-021",
+      "name": "Market pulse source audit log",
+      "description": "Move market-pulse data-source details out of visible Markdown/HTML and into a backend JSONL audit log so the product report stays clean while sources remain traceable.",
+      "dependencies": [
+        "feat-020"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m json.tool feature_list.json; .venv\\Scripts\\python -m json.tool configs\\a_share_pulse.json; .venv\\Scripts\\python -m stock_assist.cli market-pulse generated reports/20260709-125534-market-pulse.md and reports/20260709-125534-market-pulse.html with no visible source labels; Select-String found no source:/Galaxy AmazingData/Eastmoney/来源 text in the generated report; data/market_pulse_sources.jsonl appended 12 traceable snapshot source records; local HTML check counted 16 cards, 6 panel-class blocks, and 0 visible source terms; .venv\\Scripts\\python -m stock_assist.cli evolve generated reports/20260709-125622-evolution.md with feat-021 pass; in-app browser file URL QA was blocked by browser security policy"
+    },
+    {
+      "id": "feat-022",
+      "name": "Realtime futures-basis pulse",
+      "description": "Add verified IF/IH/IC/IM futures-basis observations to market-pulse using AmazingData snapshots, including four-minute basis change, a clean HTML basis table, conditional action rows, and backend audit records.",
+      "dependencies": [
+        "feat-020",
+        "feat-021"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m json.tool configs\\a_share_pulse.json; .venv\\Scripts\\python -m json.tool configs\\a_share_pulse.example.json; .venv\\Scripts\\python -m stock_assist.cli market-pulse generated reports/20260709-130317-market-pulse.md and reports/20260709-130317-market-pulse.html with 8 verified IF/IH/IC/IM basis rows and 3 conditional action rows; data/market_pulse_sources.jsonl appended 8 futures_basis audit records; source text check remained 0 for source:/Galaxy AmazingData/Eastmoney/来源; browser QA via local http://127.0.0.1:8765 confirmed 16 cards, 6 panels, 2 tables, 8 basis rows, 3 action rows, no console errors, and no desktop/mobile horizontal overflow"
+    },
+    {
+      "id": "feat-023",
+      "name": "Insight payload contract",
+      "description": "Make market-pulse emit a structured InsightRadar JSON payload first, then render Markdown and HTML from the same contract so future iOS, Android, Windows, and Web clients can share one product data model.",
+      "dependencies": [
+        "feat-020",
+        "feat-021",
+        "feat-022"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m json.tool feature_list.json; TOML parse check for pyproject.toml; .venv\\Scripts\\python -m stock_assist.cli market-pulse generated reports/20260709-154915-market-pulse.json, reports/20260709-154915-market-pulse.md, and reports/20260709-154915-market-pulse.html; payload inspection confirmed schema_version insight-payload/v1, 6 components, 4 summary cards, 7 indexes, 5 ETFs, 8 basis rows, 3 action rows, backend-log-only audit visibility, and explicit data gaps; local HTML structure check confirmed 16 cards, 2 tables, 8 basis rows, 3 action rows, and 0 visible source terms; .venv\\Scripts\\python -m stock_assist.cli evolve generated reports/20260709-155319-evolution.md with feat-023 pass; in-app browser QA was blocked after node_repl reset removed browser agent context"
+    },
+    {
+      "id": "feat-024",
+      "name": "After-close payload bridge",
+      "description": "Add a shared report payload helper and make after-close emit JSON, Markdown, and HTML together so Portfolio Intelligence can migrate toward native clients without losing the existing dashboard.",
+      "dependencies": [
+        "feat-001",
+        "feat-002",
+        "feat-023"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m json.tool feature_list.json; TOML parse check for pyproject.toml; .venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260709-182917-after-close.json, reports/20260709-182917-after-close.md, and reports/20260709-182917-after-close.html; after-close payload inspection confirmed schema_version insight-payload/v1, kind after_close, 4 components, 3 summary cards, 14 sections, 5 actions, and 1 data gap; .venv\\Scripts\\python -m stock_assist.cli market-pulse generated reports/20260709-183101-market-pulse.json, .md, and .html after shared payload helper refactor; market-pulse payload remained insight-payload/v1 and visible source-term count remained 0; .venv\\Scripts\\python -m stock_assist.cli evolve generated reports/20260709-183121-evolution.md with feat-024 pass"
+    },
+    {
+      "id": "feat-025",
+      "name": "Manual broker portfolio input",
+      "description": "Support a private data/portfolio.manual.tsv file for manually pasted broker holdings, using 当前持仓 as the true current position while ignoring same-day sold rows with 当前持仓=0.",
+      "dependencies": [
+        "feat-001",
+        "feat-024"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m json.tool feature_list.json; parser smoke test loaded data/portfolio.manual.tsv as 3 holdings: HOLDING-C.EX, 688126.SH, HOLDING-D.EX; git status --ignored confirmed data/portfolio.manual.tsv is ignored and data/portfolio.manual.example.tsv is trackable; .venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260709-183940-after-close.json, .md, and .html with 3 parsed holding actions and no sold rows as current holdings; .venv\\Scripts\\python -m stock_assist.cli evolve generated reports/20260709-184001-evolution.md with feat-025 pass"
+    },
+    {
+      "id": "feat-026",
+      "name": "Actionable after-close playbook",
+      "description": "Replace vague holding guidance with execution-oriented next-day playbooks: position action, upside trigger, downside trigger, flat-market handling, and priority for each current holding.",
+      "dependencies": [
+        "feat-024",
+        "feat-025"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; .venv\\Scripts\\python -m json.tool feature_list.json; .venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260709-190126-after-close.json, .md, and .html; payload check confirmed 3 actions with position_action, upside_trigger, downside_trigger, flat_trigger, and priority; generated Markdown contains 0 occurrences of the vague phrase 趋势未给出强动作信号; examples include ????C as 高仓位持有，优先降集中度 and ????D as 持有，保护浮盈; .venv\\Scripts\\python -m stock_assist.cli evolve generated reports/20260709-190220-evolution.md with feat-026 pass"
+    },
+    {
+      "id": "feat-027",
+      "name": "Signal outcome ledger",
+      "description": "Persist one deduplicated after-close signal per stock and day, then refresh 1/5/20-session returns, direction-adjusted hit rates, and 20-session maximum favorable/adverse excursion without scoring immature samples.",
+      "dependencies": [
+        "feat-024",
+        "feat-026"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m compileall stock_assist; controlled fake-client smoke verified 1/5/20-session returns of 1%/5%/20%, 20-session hit rate 100%, MFE/MAE, and as-of filtering; .venv\\Scripts\\python -m stock_assist.cli after-close generated reports/20260710-083803-after-close.json, .md, and .html; payload has outcomes summary/component, standard action codes, and signal_outcomes; data/signal_outcomes.jsonl contains 6 unique signal ids with all immature samples pending as of 2026-07-09; .venv\\Scripts\\python -m stock_assist.cli evolve generated reports/20260710-083909-evolution.md with feat-027 pass, the same scorecard, and the next calibrated backlog"
+    },
+    {
+      "id": "feat-028",
+      "name": "Native Windows trading-discipline reminder",
+      "description": "Run a native Windows tray application at logon, remain silent outside the configured session, and show an always-on-top personal trading-discipline banner with repeated visual/audio reinforcement during A-share trading hours without depending on Codex or a chat session.",
+      "dependencies": [],
+      "status": "pass",
+      "evidence": "powershell -ExecutionPolicy Bypass -File scripts\\install-discipline-reminder.ps1 published dist\\InsightRadar.DisciplineReminder\\InsightRadar.DisciplineReminder.exe and registered the interactive AtLogOn task InsightRadar-DisciplineReminder; task state Running with MSFT_TaskLogonTrigger; --show-now visual QA on 2026-07-12 confirmed a 2560px-wide content-sized topmost/noactivate banner with complete title, primary rule, rotating rule, status text, acknowledge button, and snooze button with no ellipsis or clipping; config validation passed with 24 priority-ordered reminders; Windows SAPI speech test passed with Microsoft Huihui; on 2026-07-13 the trading-session blocks were removed so the user can always close or snooze the banner and can pause or exit the resident app from the tray; on 2026-07-14 standalone dr-002 transferred runtime ownership to D:\\work\\reminder and the original implementation was retired from this repository after verification"
+    },
+    {
+      "id": "feat-029",
+      "name": "Multi-timeframe market level indicator",
+      "description": "Generate an A-share index level map across monthly, weekly, daily, 60-minute, 15-minute, and aggregated 3-minute K-lines using reproducible Chan-theory approximations, MACD strength, and multi-evidence support/resistance clusters, with hold, invalidation, and reclaim conditions rather than predictions.",
+      "dependencies": [
+        "feat-020",
+        "feat-023"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m unittest tests.test_market_levels passed 4 tests; .venv\\Scripts\\python -m compileall stock_assist passed; configs\\market_levels.json and example passed json.tool; .venv\\Scripts\\python -m stock_assist.cli market-levels generated reports/20260714-120410-market-levels.json, .md, and .html with all 6 timeframes and 0 data gaps; concise conclusion identified observed low 3869.30, 3/15/60-minute confluence 3867-3881, confirmation 3912-3927, and monthly/weekly fallback 3762-3820; prior in-app browser QA confirmed 4 cards, 6 timeframe panels, 0 console errors, and no horizontal overflow at desktop or 390px mobile width"
+    },
+    {
+      "id": "feat-030",
+      "name": "Leakage-aware local factor lab",
+      "description": "Run a local A-share cross-sectional factor study with point-in-time daily factors, a five-session benchmark-relative label, horizon embargo, rolling ridge weights, RankIC, quintile stratification, VIF/condition-number diagnostics, turnover costs, and explicit validation gates before any paper-trading use.",
+      "dependencies": [
+        "feat-023",
+        "feat-027"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m unittest tests.test_factor_lab passed 3 tests; .venv\\Scripts\\python -m compileall stock_assist passed; configs\\factor_lab.json passed json.tool; .venv\\Scripts\\python -m stock_assist.cli factor-lab generated reports/20260714-143250-factor-lab.json, .md, and .html from real AmazingData daily K-lines; incomplete 2026-07-14 bar was excluded; 43 out-of-sample five-day periods correctly failed validation with RankIC -0.0089, positive-IC rate 46.5%, average Top-Bottom -0.67%, quintile monotonicity -0.50, condition number 83.57, and explicit survivor-bias/custom-universe warnings; strict JSON parse and static HTML checks passed; in-app visual QA was blocked by the local file URL policy"
+    },
+    {
+      "id": "feat-031",
+      "name": "Personal factor-model daily pipeline",
+      "description": "Maintain a private idempotent observation ledger, mature five-session labels, retrain a low-cost local Ridge v1 challenger, version every data/model specification, and promote only candidates that pass IC, cost-adjusted stratification, monotonicity, VIF, and condition-number gates.",
+      "dependencies": [
+        "feat-027",
+        "feat-030"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m unittest tests.test_factor_pipeline tests.test_factor_lab passed 6 tests; .venv\\Scripts\\python -m compileall stock_assist passed; factor pipeline config and model schema passed json.tool; real `.venv\\Scripts\\python -m stock_assist.cli factor-pipeline` generated reports/20260714-144314-factor-pipeline.json, .md, and .html plus 6,447 private observation rows, 6,347 mature labels, 100 pending rows, versioned candidate 20260713-07d5a907da, and a deduplicated registry; same-data rerun had new_rows=0 and did not duplicate the registry version; the candidate correctly failed predictive gates and left champion.json absent; excluding collinear Amihud from Ridge v1 reduced validation condition number from 84.71 to 20.54 and max VIF from 16.19 to 4.31; PowerShell runner passed with UTF-8 log and no NUL bytes; scheduled-task installer was added but not executed"
+    },
+    {
+      "id": "feat-032",
+      "name": "Point-in-time CSI 1000 universe lineage",
+      "description": "Sync historical CSI 1000 constituent intervals, filter factor cross-sections by membership effective on each date after computing lookback features, and isolate observation/model lineage by universe id and manifest hash without mixing the legacy custom pilot ledger.",
+      "dependencies": [
+        "feat-030",
+        "feat-031"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python -m unittest tests.test_universe tests.test_factor_lab tests.test_factor_pipeline passed 9 tests; compileall and JSON checks passed; real `.venv\\Scripts\\python -m stock_assist.cli factor-universe-sync` generated reports/20260714-183223-factor-universe.json, .md, and .html plus ignored data/factor_universe/csi1000_membership.csv with 3,439 intervals, 2,839 historical codes, exactly 1,000 open intervals, earliest in-date 2014-10-17, and manifest hash 38c927299353...; real factor-pipeline migration generated reports/20260714-183404-factor-pipeline.json/.md/.html and same-data rerun reported new_rows=0 with universe_id custom_pilot_v1, factor-model/v2 lineage, and no champion; static responsive HTML checks and git diff --check passed; in-app file URL visual QA was blocked by browser policy and was not claimed"
+    },
+    {
+      "id": "feat-033",
+      "name": "Point-in-time industry and float-cap neutralization",
+      "description": "Attach date-valid industry and free-float market-cap exposures to the historical CSI 1000 panel, report exposure coverage, and neutralize each factor cross-section before model fitting without weakening validation gates.",
+      "dependencies": [
+        "feat-030",
+        "feat-032"
+      ],
+      "status": "pending",
+      "evidence": "Parked on 2026-07-14 by ADR-0003 during the core expansion freeze; not started. Do not enable a production model until point-in-time exposure coverage and neutralization tests pass, and do not resume until feat-037 establishes the core reliability baseline."
+    },
+    {
+      "id": "feat-034",
+      "name": "Version-controlled project memory and architecture freshness",
+      "description": "Keep long-running InsightRadar work recoverable across chats and machines with a bounded root memory index, on-demand topic files, executable source/generated freshness checks, complete ProductCommand topology coverage, and a refreshed interactive architecture view.",
+      "dependencies": [
+        "feat-005",
+        "feat-016"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python scripts\\validate_project_memory.py passed with 3 topics and architecture command coverage 17/17; architecture-view regenerated docs/architecture.html from 18 nodes and 5 lanes; harness validator remained 100/100; in-app browser QA confirmed desktop sidebar/inspector, unique architecture-memory node interaction, 390px body without horizontal overflow, zero console errors, and zero replacement characters; compileall, architecture json.tool, and git diff --check passed"
+    },
+    {
+      "id": "feat-035",
+      "name": "Bounded current state and product continuity charter",
+      "description": "Keep long-running product work focused across sessions with a bounded current-state snapshot, durable ADRs, an A-share decision-intelligence charter, explicit Core/Lab/Satellite/Extension/Governance rings, and executable validation of the next feature and architecture boundaries.",
+      "dependencies": [
+        "feat-034"
+      ],
+      "status": "pass",
+      "evidence": ".venv\\Scripts\\python scripts\\validate_project_memory.py passed with a 57-line current-state snapshot, 4 routed topics, next feature feat-033, 5/5 product rings, and 17/17 ProductCommand coverage; architecture-view regenerated docs/architecture.html with ring labels and matching SHA-256; harness validator remained 100/100; compileall, feature_list/config JSON validation, static generated-HTML checks, and git diff --check passed; SkillHub memory/context/ADR/product-strategy candidates were reviewed and no overlapping framework was installed"
+    },
+    {
+      "id": "feat-036",
+      "name": "Standalone discipline-reminder extraction kit",
+      "description": "Package the native Windows reminder as a self-contained personal-app handoff with source, config, scripts, bounded context, feature state, verification bootstrap, SHA-256 manifest, scheduled-task cutover checklist, and rollback while leaving the current install untouched.",
+      "dependencies": [
+        "feat-028",
+        "feat-035"
+      ],
+      "status": "pass",
+      "evidence": "scripts\\export-discipline-reminder.ps1 generated the original verified extraction bundle with 18 mapped files plus SOURCE_MANIFEST.json; isolated init.ps1 parsed 24 configured rules and built Release with 0 warnings/0 errors; all exported SHA-256 hashes and required ZIP members passed; standalone harness validation reached 100/100. On 2026-07-14 dr-002 completed at D:\\work\\reminder: the task and sole resident process point to D, visible acknowledge/snooze controls, speech, and normal restart passed, 128 historical logs were merged into 138 standalone records, and the duplicate source/export artifacts were removed from InsightRadar"
+    },
+    {
+      "id": "feat-037",
+      "name": "Core decision-loop reliability baseline",
+      "description": "Freeze feature expansion, run the existing portfolio, A-share market, research-evidence, and outcome paths on real local inputs, measure decision-ready holding coverage, inventory reliability/data-gap failures, and remove accidental Lab/Extension dependencies without adding new capabilities.",
+      "dependencies": [
+        "feat-027",
+        "feat-034",
+        "feat-035"
+      ],
+      "status": "pass",
+      "evidence": "Completed 2026-07-19 from the canonical D-drive workspace with real local inputs and fresh after-close, market-pulse, market-levels, research-monitor, risk-watch, ai-capex-watch, outcome-ledger, and evolve artifacts. The newest explicit user snapshot replaced a stale broker TSV and contains one live holding; after-close reports 1/1 structural action coverage but 0/1 strict decision-ready coverage because shares, cost, broker market price, single-position P&L, and the original risk line were not provided. Missing values now render as 未提供 rather than zero. The real weekend market-pulse run exposed and fixed an unbounded AmazingData wait by skipping realtime SDK calls outside the A-share live session and emitting bounded public-fallback gaps; the fresh report completed in 13.8 seconds with 17 explicit gaps instead of hanging. The real market-levels run exposed and fixed empty-support-zone synthesis; fresh six-timeframe artifacts completed with no gaps. Research-monitor added 34 deltas including HOLDING-C.EX evidence; outcome tracking has 15 matured 1d and 6 matured 5d samples, still insufficient for stable performance claims. Full 44-test regression plus focused reliability tests, compileall, real CLI artifacts, JSON/config checks, project-memory validation, harness validation, CLI help, and git diff checks passed. No Lab or Extension dependency was promoted into Core."
+    },
+    {
+      "id": "feat-038",
+      "name": "NGA Great Times local session monitor",
+      "description": "Add a read-only optional Extension that stores the NGA session outside the repository, captures fid=706 topic snapshots, ranks reply-velocity heat, exposes title-level sentiment and watch-term proxies, and supports a recurring local monitor without becoming a Core dependency.",
+      "dependencies": [
+        "feat-035"
+      ],
+      "status": "pass",
+      "evidence": "Explicitly reprioritized by the user on 2026-07-15. Implemented parser, repository-external Cookie store, nga-auth/nga-monitor commands, configs, tests, documentation, and architecture registration. Live fid=706 captures succeeded with 35 topics; successive snapshots produced real reply deltas and contained no Cookie fields. Created ACTIVE local Codex automation `nga`, later calibrated by user preference to workday 08:50 and 15:50 only, with read-only behavior and auth-failure disclosure; event days can be sampled manually. All 16 unit tests, compileall, config/feature JSON checks, CLI help, architecture generation, project-memory validation with 19/19 command coverage, harness 100/100, and git diff --check passed."
+    },
+    {
+      "id": "feat-039",
+      "name": "NGA Great Times AI daily topic digest",
+      "description": "Generate a daily editorial-style NGA Great Times digest from real thread metadata and high-score replies, using one optional OpenAI-compatible call for semantic clustering while validating all cited thread ids and degrading explicitly when AI is unavailable.",
+      "dependencies": [
+        "feat-038"
+      ],
+      "status": "pass",
+      "evidence": "Explicitly reprioritized by the user on 2026-07-15. Added authenticated NGA JSON topic/thread collection with timestamp and malformed-response compatibility, repository-external llm-auth storage, optional one-call nga-daily semantic synthesis, strict thread-id validation, deterministic topic/link/floor/score backfill, and a labelled rule-based fallback. Live generation collected 24 current-day topics and produced five clusters with gpt-4o-mini-2024-07-18; the commissioning call used 8,182 tokens and wrote JSON/Markdown/HTML artifacts. The user then chose Codex-native automation: the ACTIVE workday task keeps 08:50 as nga-monitor and at 15:50 runs nga-daily without --llm, reads its JSON evidence, and uses gpt-5.4 medium reasoning to write the report itself. Its quality contract follows NGA tid=47185220 and forbids external AI calls; the gateway code remains opt-in for later tuning."
+    },
+    {
+      "id": "feat-040",
+      "name": "NGA time-window Codex-native report productization",
+      "description": "Split NGA evidence into a same-day premarket window and a same-day after-close window, recover topics through paged metadata, rate-limit detail reads, merge first/latest-page evidence, and validate a Codex-native five-theme report before promoting it as an accepted InsightRadar Extension.",
+      "dependencies": [
+        "feat-039"
+      ],
+      "status": "pending",
+      "evidence": "User-requested acceptance gate on 2026-07-15. Implemented --window morning (00:00-09:00) and --window day (00:00-15:59), paged metadata discovery, three-second detail throttling, and exact reply-window filtering. Added the required sentiment dashboard contract and a separate nine-account influential-author layer. Explicit long-thread tracking now uses NGA thread-local author filtering over complete HTML, validates exact UIDs, and recovers old-thread replies that ordinary first/last-page sampling missed. Live artifact reports/20260715-223952-nga-daily.json selected 35 topics with zero influencer collection gaps and recovered 8 fuelish, 10 铁锤狂砸盘, and 11 村上吹树 day-window replies. 幸运阿sai has a capped 1.15 user-provided, unverified KOL prior excluded from public sentiment. The report renderer now detects the NGA contract and produces a visual-first summary: conclusion cards, 100% sentiment composition, four intensity bars, sector heat, KOL signals, and five conclusion cards; long evidence remains collapsed. On 2026-07-16 the tracked technology-mainline review was recorded as a provenance-labelled decision framework with candidate drawdown bands, separate industry/trading-structure axes, three mainline gates, anti-washout guardrails, and an external-view firewall. External viewpoints cannot authorize trades or cancel reductions; earnings narratives require official disclosure, expectation comparison, and price confirmation. Candidate monthly-profit giveback bands remain inactive until user approval. Acceptance remains pending until the user reviews the revised output. Parked on 2026-07-18 because the user explicitly reprioritized a Core daily drawdown-warning system."
+    },
+    {
+      "id": "feat-041",
+      "name": "Daily cross-market and portfolio risk watch",
+      "description": "Add a Core after-close risk temperature that combines equal-weight A-share breadth, A-share internal structure, overseas technology/Asian markets, dated crowding observations, and portfolio concentration; expose conditional risk budgets and a no-lookahead replay without executing trades.",
+      "dependencies": [
+        "feat-027",
+        "feat-034"
+      ],
+      "status": "pass",
+      "evidence": "Explicitly reprioritized by the user on 2026-07-18 after a profit giveback from about CNY170k to CNY10k. Implemented risk-watch JSON/Markdown/HTML, optional Iwencai 883957.TI enrichment, Tencent/Eastmoney A-share indexes, Yahoo global histories, dated behavior and portfolio profiles, five capped signal families, multi-family confirmation, slow de-escalation, and a red risk-budget lock until three confirmed green sessions. Added a Korea event gate covering KOSPI, KOSDAQ, 10-session shock latching, repeat declines, and a 20-session second-circuit-breaker escalation. No-lookahead replay for 2026-05-01 through 2026-07-17 first confirmed yellow on 2026-05-19, orange on 2026-06-03, and red on 2026-06-09; the June 23 second KOSPI circuit breaker was detected that day and remained active through July 1. The latest report is red 76/100 at 100% source coverage while the current 20% total exposure is below the 30% red cap. Created ACTIVE local automation `insightradar`, scheduled on workdays at 16:20 to run the read-only report and compare the prior artifact; its prompt headlines new Korea event gates. All 31 unit tests, compileall, live CLI artifact generation, architecture generation, 22/22 command coverage, project-memory validation, CLI help, and git diff --check passed. The workflow remains read-only; Iwencai failure is a visible non-blocking gap rather than a required Core dependency."
+    },
+    {
+      "id": "feat-042",
+      "name": "Objective crowding telemetry and generalized global shock gates",
+      "description": "Extend risk-watch with an auditable A-share turnover-concentration snapshot and volatility-normalized event gates for US technology, the S&P 500, Japan, and Korea without granting unvalidated community narratives direct trade authority.",
+      "dependencies": [
+        "feat-041"
+      ],
+      "status": "pass",
+      "evidence": "Explicitly reprioritized by the user on 2026-07-18. Added an Iwencai as-of snapshot for total A-share turnover, top-1/top-10/top-20/top-50 turnover shares, partial turnover HHI, and the leading stock's turnover/free-float ratio. The snapshot is visible in JSON/Markdown/HTML but remains diagnostic until at least 20 daily observations exist for percentile calibration. Added S&P 500 history and volatility-normalized shock/repeat-shock gates for S&P 500, QQQ, SOX, and Nikkei, plus cross-region US/Asia concurrence while preserving Korea-specific circuit-breaker logic. Live 2026-07-17 output reports CNY2.672tn total turnover, top-20 14.7%, top-50 24.2%, and HOLDING-C.EX as the 2.1% turnover leader with 7.0% turnover/free-float. The active 16:20 automation now headlines any cross-market shock family and reports concentration telemetry. Eight focused risk-watch tests and the full 33-test suite passed; compileall, live JSON/Markdown/HTML generation, architecture regeneration, 22/22 command coverage, project-memory validation, CLI help, JSON validation, and git diff check also passed. Futu community retrieval was live-verified at 50 timestamped posts each for 300308, 300502, and 300394, but narrative scoring remains observation-only because the endpoint lacks interaction fields and no point-in-time history has matured."
+    },
+    {
+      "id": "feat-043",
+      "name": "AI CapEx and optical-demand transmission watch",
+      "description": "Turn official hyperscaler capital-expenditure disclosures into an evidence-bound industry KPI, require network and supplier transmission checks before drawing CPO conclusions, and expose conditional guidance without overriding portfolio risk budgets.",
+      "dependencies": [
+        "feat-041",
+        "feat-042"
+      ],
+      "status": "pass",
+      "evidence": "Explicitly reprioritized by the user on 2026-07-19 as the first productized indicator from the day's AI/CPO review. Added the ai-capex-watch JSON/Markdown/HTML workflow, a five-company official-IR CapEx evidence set, confidence-adjusted CapEx momentum, optical-network transmission, supplier-realization gates, source freshness, no-future-evidence filtering, explicit data gaps, and conditional guidance that cannot override risk-watch or authorize trades. The workday 16:20 automation now runs both risk-watch and ai-capex-watch and emphasizes CapEx only when official evidence or conclusions change. Fresh artifact reports/20260719-002412-ai-capex-watch.* reports CapEx momentum 70.3/100 at 54% coverage, optical transmission 74.4/100 at 60% coverage, and supplier realization pending; conclusion: industry evidence is supportive but not a chasing signal. Four focused and 37 full tests passed; compileall, live CLI, JSON checks, architecture regeneration with 23/23 command coverage, project-memory validation, CLI help, and git diff check passed. Direct file:// browser QA was blocked by Browser URL policy and remains an explicit visual-validation gap."
+    },
+    {
+      "id": "feat-044",
+      "name": "Official IR discovery and supplier-realization ingestion",
+      "description": "Automatically discover timestamped official hyperscaler and 中际 disclosures, bind material evidence changes to the AI CapEx supplier-realization gate, and track gross margin, operating cash flow, inventory, receivables, and disclosed 800G/1.6T realization without granting research evidence trade authority.",
+      "dependencies": [
+        "feat-037",
+        "feat-043"
+      ],
+      "status": "pending",
+      "evidence": "Prioritized after the 2026-07-19 Core reliability baseline. Not started. First scope is source discovery, point-in-time provenance, deduplication, freshness, and explicit missing-field behavior; valuation-duration inference and automated execution remain out of scope."
+    },
+    {
+      "id": "feat-045",
+      "name": "State-team ETF share exit proxy",
+      "description": "Extend market-pulse with an auditable lower-bound estimate of disclosed Huijin exits from four CSI 300 ETFs, compare current total ETF shares with 2023 baselines, and preserve explicit boundaries around in-kind redemptions, direct stock holdings, and trade authority.",
+      "dependencies": [
+        "feat-023",
+        "feat-037"
+      ],
+      "status": "pass",
+      "evidence": "Explicitly reprioritized by the user on 2026-07-19. Extended market-pulse with serial AmazingData fund-share history for 510300.SH, 510310.SH, 510330.SH, and 159919.SZ; dated 2025 annual-report Huijin holdings and source URLs; 2023-03/08/10 baselines; and a hard lower-bound exit formula that explicitly forbids relabelling ETF-unit exits as cash selling or full 2015 rescue-book liquidation. Fresh reports/20260719-151119-market-pulse JSON/Markdown/HTML show 462.74亿 current ETF units versus 2069.34亿 disclosed Huijin units and prove a minimum 1606.59亿-unit exit, 77.64%, through 2026-07-17; current units are +25.33% versus 2023-03, -4.40% versus 2023-08, and -29.67% versus 2023-10. Four focused tests and the full 48-test suite passed; compileall, config/feature/architecture JSON checks, real CLI generation, static report-contract checks, architecture regeneration, 23/23 project-memory validation, harness 100/100, and git diff --check passed. Direct holdings and in-kind redemption destinations remain explicit gaps."
+    },
+    {
+      "id": "feat-046",
+      "name": "Recurring state-team ETF delta monitor",
+      "description": "Turn the state-team ETF lower-bound snapshot into a recurring monitor with one-, five-, and twenty-observation share changes, mixed-horizon classification, lower-bound tightening, prior-artifact comparison, and a workday automation that cannot attribute current sellers or authorize style rotation trades.",
+      "dependencies": [
+        "feat-041",
+        "feat-045"
+      ],
+      "status": "pass",
+      "evidence": "Explicitly reprioritized by the user on 2026-07-19. Added per-product and aggregate 1/5/20-observation ETF total-share changes, lower-bound tightening, and mixed-horizon classification to market-pulse JSON/Markdown/HTML. Fresh reports/20260719-153523-market-pulse.* reports +17.88% over five observations but -33.38% over twenty, correctly classifying the structure as short-term replenishment inside a still-contracting medium window; the twenty-observation decline tightens the cumulative minimum-exit bound by 231.86亿 units without attributing the current seller. Updated the ACTIVE workday 16:20 `insightradar` automation to run risk-watch, market-pulse, and ai-capex-watch, compare prior artifacts, highlight only new state-team dates/changes, and preserve the no-cash-flow/no-current-seller/no-2015-direct-book boundaries. Full product run generated fresh risk-watch, market-pulse, ai-capex-watch, after-close, and evolve artifacts. Six focused and 50 full tests passed; compileall, config/feature/architecture JSON validation, architecture regeneration, static report and automation assertions, project-memory validation, harness 100/100, and git diff --check passed."
+    },
+    {
+      "id": "feat-047",
+      "name": "Unified next-session decision layer",
+      "description": "Make after-close consume the latest risk-watch, market-pulse state-team proxy, and ai-capex-watch artifacts, then expose one fail-closed next-session plan with a first action, risk budget, opening/upside/flat/downside scenarios, blocked actions, unlock conditions, source freshness, and explicit missing-data degradation.",
+      "dependencies": [
+        "feat-041",
+        "feat-043",
+        "feat-046"
+      ],
+      "status": "pass",
+      "evidence": "Explicitly reprioritized by the user on 2026-07-19 because the prior after-close surface did not make the next session executable. Added stock_assist/unified_decision.py and integrated it into after-close JSON/Markdown/HTML. The layer loads latest risk-watch, market-pulse state-team, and ai-capex-watch payloads; checks source age; applies a risk-first fail-closed stance; emits plan date, first action, budget, opening/upside/flat/downside scenarios, blocked actions, unlock conditions, evidence effects, and decision gaps. Fresh reports/20260719-181600-after-close.* gives a 2026-07-20 defensive-observation plan: no added high beta; preferentially use a rebound below the 1187.29 confirmation line to reduce about one quarter and bring high beta from 20% toward its 15% cap; if neither branch triggers, do not panic-sell the open; reduce one quarter if 950.08 breaks or the sector clearly weakens; a confirmed reclaim remains hold-only until risk and supplier-realization gates unlock. Fixed the HTML dashboard so the unified red budget cannot coexist with a misleading CALM label, and incomplete broker fields render NA without removing the live holding. Updated the ACTIVE 16:20 workday automation to run after-close after the three monitors and lead with unified_decision. Eight focused and 54 full tests passed; compileall, live CLI, JSON and static contract checks, headless-Chrome visual QA, architecture regeneration, project-memory validation, harness 100/100, automation assertions, and git diff checks passed."
+    },
+    {
+      "id": "feat-048",
+      "name": "Market regime cockpit and local broker import",
+      "description": "Extend the unified next-session decision surface with diagnostic bear-bull, fear-greed, and crowding gauges; consume market-levels as explicit support/confirmation/resistance state transitions; expose an intraday observation checklist; and add a local-only broker TSV import path that preserves unknown fields and requires user-approved portfolio.json saving.",
+      "dependencies": [
+        "feat-037",
+        "feat-042",
+        "feat-047"
+      ],
+      "status": "pass",
+      "evidence": "Explicitly reprioritized by the user on 2026-07-19. Extended unified_decision with the latest market-levels payload, a diagnostic 0-10 bear-bull composite, 0-100 fear-greed and crowding composites, explicit as-of/calibration labels, support/confirmation/weekly-pressure/daily-repair zones, and a four-stage intraday observation checklist. Added a first-screen HTML cockpit with three directly labelled gauges and an index state ladder. Added a local-only broker TSV importer that previews with safe DOM text, preserves unknowns as null, converts the user's supplied Galaxy-format row to canonical portfolio.json, requires a user-approved save, and states that after-close must be rerun; it does not upload or silently overwrite data, and it keeps risk_watch_profile high-beta classification as an explicit separate input. Fresh reports/20260719-184801-after-close.* reports 2.0/10 bear-bull (熊市风险开启), 28/100 fear-greed (恐慌), 52/100 crowding (中性; fewer than 20 daily snapshots), Shanghai 3742.07-3770.09 support, 3789.96-3826.16 first confirmation, 3863.12-3913.11 stronger resistance, and 3943.56-3980.25 daily repair. Updated the ACTIVE workday 16:20 automation to run market-levels before after-close and lead with market_regime, market_levels, and tomorrow_watchlist. Ten focused and 56 full tests passed; compileall, live after-close generation, inline-JS syntax/static report assertions, architecture regeneration, JSON validation, 23/23 project-memory validation, harness 100/100, automation assertions, and git diff checks passed. In-app file:// visual automation remained policy-blocked and is recorded as an explicit QA limitation rather than bypassed."
+    },
+    {
+      "id": "feat-049",
+      "name": "Fixed-anchor A-share breadth and equivalent-index diagnostics",
+      "description": "Quantify how many point-in-time eligible A-shares remain below the 2024-09-24 anchor, compare official Shanghai performance with equal-weight and median-stock equivalent points, expose technology/non-technology diagnostics, and carry coverage-gated conclusions into the unified next-session cockpit without treating equivalent points as an official index or a trade signal.",
+      "dependencies": [
+        "feat-041",
+        "feat-047",
+        "feat-048"
+      ],
+      "status": "pass",
+      "evidence": "Explicitly reprioritized by the user on 2026-07-19. Added a serial paginated 同花顺问财 fixed-anchor cross-section, listing-date eligibility, provider-adjusted interval returns, hard pagination/coverage checks, pure breadth aggregation, equal-weight and median-stock equivalent Shanghai levels, current-free-float and explicit Shenwan technology diagnostics, a 3900-stock claim audit, and a cumulative anchor-width gauge separated from short-cycle risk. Live reports/20260719-192028-risk-watch.* and reports/20260719-192054-after-close.* return 5538 unique rows, exclude 230 post-anchor listings and 9 rows with missing listing dates, and cover 5299/5299 eligible stocks through 2026-07-17: 925 (17.46%) are below 2024-09-24, so the same-method 3900-stock claim is not supported; median-stock equivalent Shanghai is 3845.54 and arithmetic equal-weight equivalent is 5060.68 versus official 3764.15. The unified plan remains defensive because current risk is red and bear-bull is 2.0/10; the 78/100 anchor-width score is labelled cumulative, not a current reversal signal. Focused market-structure/unified/risk tests, full 59-test suite, compileall, live risk-watch and after-close artifacts, static JSON/Markdown/HTML contract checks, architecture regeneration, JSON validation, project-memory validation, harness validation, and diff checks passed."
+    },
+    {
+      "id": "feat-050",
+      "name": "Auditable score state machine and operator timeline",
+      "description": "Replace the continuous bear-bull display with a persisted candidate/finalized score state machine, give market-level states real stance and risk-budget authority, and expose a compact first-screen operator strip plus four exact decision checkpoints.",
+      "dependencies": [
+        "feat-047",
+        "feat-048",
+        "feat-049"
+      ],
+      "status": "pass",
+      "evidence": "Explicitly reprioritized as the first of three consecutive Core P0 features on 2026-07-19; feat-044 remains pending and paused without deletion. Added a configuration-driven persisted score state machine with formal/candidate separation, structured positive/negative ledger entries, close-only finalization, daily +/-1 cap, same-rule/day deduplication, zone hysteresis, stale/missing fail-closed behavior and risk-budget veto. market_level_state now changes stance and budget review state. The first-screen operator strip and exact four-window timeline render before secondary gauges. Final fresh reports/20260719-203143-after-close.* reports formal 2.0, candidate 2.0, support_testing, red risk veto and 0 strict decision-ready coverage. Fifteen focused tests and the final 80-test suite passed; desktop 1440x900 visually shows the operator strip and four checkpoints without scrolling, and an exact 390px CDP layout check reported inner width 390, document/body width 375, and no overflowing elements."
+    },
+    {
+      "id": "feat-051",
+      "name": "Approved portfolio import and executable-lot closure",
+      "description": "Turn local broker TSV import into an approved, atomic and recoverable save flow that reconciles the risk profile, reruns required workflows, reopens the latest report, and converts trim ratios into safe board-lot quantities without placing orders.",
+      "dependencies": [
+        "feat-050"
+      ],
+      "status": "pass",
+      "evidence": "Explicitly reprioritized as the second Core P0 feature on 2026-07-19. Added `portfolio-import` preview/approve CLI and a token-protected 127.0.0.1 UI; both preserve nulls, show old/new differences, require explicit approval, atomically replace portfolio and risk-profile files with timestamped backups, keep beta classification explicit/unknown, and rerun market-levels, risk-watch, market-pulse, style-rotation and after-close serially before opening the latest report. Added execution-lot contracts that floor to 100-share lots without exceeding the target ratio or available shares; 100 shares trimmed by 25% returns 0 executable shares and a manual-choice reason. Seventeen focused import/reliability/unified tests, compileall and the final 80-test suite passed. A real read-only preview of the existing Galaxy TSV parsed three holdings but correctly converted zero weight fields to unknown and blocked reconciliation because weights and beta classifications were not supplied; no user asset was written because no approval was given. Final reports/20260719-203143-after-close.html exposes the secure importer even when the adopted portfolio file is invalid/empty. No trading API or order side effect exists."
+    },
+    {
+      "id": "feat-052",
+      "name": "Technology-financial-dividend rotation confirmation matrix",
+      "description": "Add a fixed, replayable style matrix for technology growth, large financials and high dividend using multi-horizon relative strength, breadth, moving-average participation, turnover/fund proxies, persistence and explicit source coverage without granting standalone trade authority.",
+      "dependencies": [
+        "feat-050",
+        "feat-051"
+      ],
+      "status": "pass",
+      "evidence": "Explicitly reprioritized as the third Core P0 feature on 2026-07-19. Added the `style-rotation` JSON/Markdown/HTML workflow with fixed technology (electronics/communications/computer ETFs), large-financial (bank/non-bank/insurance ETFs) and high-dividend (declared dividend-index ETFs) proxy baskets; 5/20/60-day CSI300-relative returns; up/MA20/MA60 breadth; public-K-line close-times-volume turnover proxy and limitation; persistence; source coverage; unavailable earnings revisions; conflict and missing-data gates; and diagnostic_unbacktested calibration. Synthetic focused tests prove persistent confirmation requires relative strength, breadth, turnover and days; horizon conflict and missing styles cannot confirm. Fresh reports/20260719-202258-style-rotation.* has 100% proxy coverage through 2026-07-17 and reports signal conflict: large financials lead 20-day excess at +11.83%, high dividend +8.69%, technology -8.92%; technology is weakest, but financial breadth is only 33%, turnover does not confirm, earnings revisions are unavailable, and the leader has persisted only three sessions. Therefore the matrix cannot yet distinguish a durable rotation from a short switch and cannot change the risk budget. Final reports/20260719-203143-after-close.* embeds the same fail-closed conclusion. Focused tests and the final 80-test suite passed; compileall, JSON/config checks, real five-workflow sequential generation, 25/25 architecture coverage, project-memory validation, harness 100/100, desktop visual QA, exact 390px no-overflow QA and diff checks completed."
+    },
+    {
+      "id": "feat-053",
+      "name": "Guarded Iwencai futures-basis close adapter",
+      "description": "Add a bounded project-owned Iwencai OpenAPI adapter for date-aligned completed-close IF/IH/IC/IM basis, volume and open interest, with dynamic active-contract discovery, stale/live-session rejection, diagnostic-only close semantics, and serial AmazingData realtime fallback.",
+      "dependencies": [
+        "feat-022",
+        "feat-037",
+        "feat-049"
+      ],
+      "status": "pass",
+      "evidence": "Explicitly reprioritized and approved by the user on 2026-07-19 after live capability checks. The adapter resolves one shared latest spot close date, queries every CFFEX IF/IH/IC/IM contract for that exact date, rejects expired zero-open-interest rows, selects the nearest two active contracts without hard-coded months, and maps close, volume, open interest, optional daily open-interest change, future-minus-spot basis and basis rate. It retries an empty query once, reads IWENCAI_API_KEY only from the environment, rejects stale completed closes during a live session, keeps serial AmazingData as the realtime fallback, and never fabricates the unavailable four-minute basis change. Fresh reports/20260719-212631-market-pulse.* contains eight 2026-07-17 IF/IH/IC/IM 2608/2609 rows, diagnostic-only action wording, visible positioning coverage, and no credential/source leakage in normal cards; the latest backend audit has eight error-free 同花顺问财 OpenAPI close-snapshot rows. Seven focused tests and the full 85-test suite passed, along with compileall, config/feature/architecture JSON validation, real CLI generation, static payload/Markdown/HTML assertions, secret-redaction assertions, architecture regeneration, project-memory validation, harness validation, and git diff checks. Browser QA found 8 rows, zero console errors and no desktop overflow; at 390px the page remained 375px wide and the 876px table scrolled inside its 317px overflow container."
+    },
+    {
+      "id": "feat-054",
+      "name": "Agent Harness governance and observability bootstrap",
+      "description": "Add bounded product-experiment governance, truthful full-catalog evolution reporting, project-scoped read-only agent contracts, versioned task/trace/checkpoint/privacy contracts, and deterministic smoke evidence without changing investment decisions or adding trade authority.",
+      "dependencies": [
+        "feat-004",
+        "feat-035",
+        "feat-053"
+      ],
+      "status": "pass",
+      "evidence": "Ultimate independent read-only review at d115e2e returned PASS with Critical/Important/Minor 0/0/0. The feat-054 bootstrap is closed with bounded experiment governance, exact read-only non-recursive agent contracts, executable task manifests, PUBLIC-only traces, goal-bound 0..64 checkpoints, structural fail-closed public privacy, deterministic smoke, and truthful input validation. Focused 111/111 and full 196/196 tests pass; Python 3.10 parsing, compileall, agent-contract and project-memory validators, and Harness 100/100 pass. Final artifacts are reports/20260722-034028-agents.md, reports/20260722-035031-evolution.md, reports/20260722-034029-harness-smoke.md, and ignored run data/harness_eval/runs/smoke-20260721t194029z. The run has exactly three files, 13 sequential public events, checkpoint sequence 13, final pass, zero pending steps, all four fixed report assertions, and trace SHA-256 08b5c8cfb1ffd2d779ebe71e6b019f421bb8871607e8f0cf99d3c15abb57b217. This proves deterministic contracts only: no model-performance benefit or trade authority. feat-056 remains pending next and sole queued, with no pilot or benchmark started."
+    },
+    {
+      "id": "feat-055",
+      "name": "Jin10 verified event-intelligence ingestion",
+      "description": "Add an independent Jin10 MCP discovery layer that normalizes and deduplicates fast news, uses repeated weekend/pre-open/midday/after-close digests as missed-event reconciliation checkpoints, preserves provider importance/red-highlight as unknown when structured fields are absent, distinguishes incremental from cumulative facts, requires primary-source confirmation for critical claims, maps material events to approved holdings or market context, and promotes only evidence-gated items into reports or key alerts without trade authority.",
+      "dependencies": [
+        "feat-035",
+        "feat-047"
+      ],
+      "status": "pending",
+      "evidence": "User approved the independent event-intelligence approach on 2026-07-20 and confirmed the written design, adding Jin10's repeated weekend/pre-open/midday/after-close digest items as high-density reconciliation checkpoints. Canonical design: docs/superpowers/specs/2026-07-20-jin10-event-intelligence-design.md; Chinese human-review copy: docs/superpowers/specs/2026-07-20-jin10-event-intelligence-design.zh-CN.md; future TDD implementation plan: docs/superpowers/plans/2026-07-20-jin10-event-intelligence.md. The user-scoped Codex MCP connection successfully negotiated protocol 2025-11-25, listed all eight declared tools plus quote://codes, and returned structuredContent with cursor pagination for a live list_flash call. Searches retrieved the 2026-07-19 China Reform Holdings cumulative CNY50bn-plus market-support item and China Chengtong recent near-CNY10bn buying item, while a generic national-team search produced sports/industry false positives. A live search for important-news summaries returned 52 items; the structured item-key union was only content/time/title/url and the Sunday digest itself exposed content/time/url, so current APP red/highlight state is an explicit unknown rather than an inferred priority. This validates source feasibility, compound classification, digest reconciliation, and the provider-importance gap; no product runtime adapter, report integration, or implementation agent has started. Queue after feat-044; no automatic execution or standalone decision authority."
+    },
+    {
+      "id": "feat-056",
+      "name": "Agent Harness real-task benchmark baseline",
+      "description": "Build 20-30 private or sanitized real-world tasks, run no-Harness, instructions-only, current-Harness, and improved-Harness profiles, and report deterministic success, evidence correctness, false completion, scope drift, privacy, recovery, cost, latency, and human-correction baselines without claiming unmeasured model superiority.",
+      "dependencies": ["feat-054"],
+      "status": "pending",
+      "evidence": "Approved as phase two of the 2026-07-21 Agent Harness engineering design. feat-054 is now closed pass, but feat-056 remains pending next and is the sole queued experiment; no pilot, benchmark implementation plan, or run has started. Its first action is a separate written plan."
+    },
+    {
+      "id": "feat-057",
+      "name": "Energy-to-technology macro transmission shadow",
+      "description": "Add point-in-time energy-supply, technology-duration, and Korea import-stress shadow states beside risk-watch, with independent-event replay, oil-only versus joint-confirmation calibration, explicit primary-source evidence, and no risk-budget or trade authority.",
+      "dependencies": ["feat-041", "feat-042"],
+      "status": "pass",
+      "evidence": "Implemented on codex/feat-057-macro-transmission-shadow in 491e67b, c18fef5, 0bf9e76, and 0cf5326. risk-watch now renders independent energy_supply_shock, duration_pressure, and korea_import_stress states with source/as-of evidence, counter-evidence, explicit gaps, no-lookahead replay, oil-only/oil-plus-rates/triple-confirmation comparisons, 5/20-session absolute and S&P-relative outcomes, threshold sensitivity, and diagnostic_only authority. Tests prove oil-only cannot confirm duration pressure and macro state cannot change the risk snapshot, budget, actions, alerts, or event alerts. Fresh full verification is 218/218 tests plus compileall, JSON validation, project-memory validation, generated architecture parity, and Harness 100/100. Real artifact reports/20260723-150747-risk-watch.{json,md,html} covers 2016-01-01 through 2026-07-23 and preserves clickable source links; Yahoo SP500 and QQQ timed out, leaving 5/7 macro series, 0 independent triple-confirmation episodes, insufficient_events calibration, energy=observe, duration=unavailable, and Korea=unavailable. The live result therefore does not confirm the proposed 2026 causal chain and cannot promote this layer."
+    },
+    {
+      "id": "feat-058",
+      "name": "After-close decision workbench",
+      "description": "Deliver the owner-approved four-page after-close decision workbench with exact pending-plan handling, version-scoped responses, explicit data health, conditional holding actions, and no trade authority; validate it through ten real morning trials without expanding the frozen scope.",
+      "dependencies": ["feat-047", "feat-057"],
+      "status": "in_progress",
+      "evidence": "The five-route workbench remains pending user visual acceptance. Root launchers expose report generation/opening and a loopback-only local app without typed CLI commands. InsightRadar.cmd now starts or reuses that app; users can paste broker TSV, preview readable old/new differences, choose beta per holding, explicitly approve atomic save/serial refresh, open the latest report, and stop the app. Static reports explain that the app must be running and preserve pasted text via clipboard best effort instead of opening an unexplained dead localhost link. The project venv was rebuilt, AmazingData doctor passes, the real launcher generated reports/20260724-172654-after-close.{json,md,html}, focused importer tests pass, and the user's four-row TSV was previewed without saving. On 2026-07-24 the owner approved docs/superpowers/specs/2026-07-24-0830-decision-loop-v1-design.md as the follow-on V1 delivery wedge: preserve the North Star, but center the local product on an 08:30 remembered-plan loop with zero to three conditional decisions, explicit response, local degradation, and review. The owner then selected the action-brief visual direction and approved a blue-black default with restrained vermilion, amber, cool-blue, and warm-white semantic emphasis. The local prototype at .superpowers/brainstorm/0830-decision-loop-v1/today-prototype.html now implements accept/dispute/reject/defer states, non-overwriting batch acceptance, a labelled V2 alert-handoff preview for accepted plans, a Shanghai Composite risk gate in Stock Lookup, honest backtest readiness in Review, and a secondary AI-hardware temperature route with nine ETF proxies plus 35/80 floor-ceiling boundaries. Browser checks covered 1280 desktop and 390x844 mobile without horizontal overflow; structured objection save, accepted-plan alert attachment, all routes, and empty browser diagnostics passed. P0 runtime integration is now implemented as an additive decision-workspace/v1 contract over the canonical after-close JSON, a loopback-only four-route workspace that strictly matches the supplied V3 blue-black HTML structure, atomic accept/dispute/reject/defer responses, quiet plan-version JSONL history, morning freshness restaging, real portfolio import, and explicit source health. Prototype market values and simulated charts are not copied; current local states or explicit P1 gaps are rendered instead. The final strict-match artifact was reports/20260725-003439-after-close.{json,md,html}. The final P0 repair artifact is reports/20260725-010125-after-close.{json,md,html}: its Today queue is derived exactly from pending actionable plans, includes pending ????D, rejects acceptance of blocked versions in both the domain ledger and loopback API, records blocked acknowledgement without monitor eligibility, and separates first generation, content/version changes, and execution-only blocked changes. Full discovery passes 250/250 tests, including the three required state scenarios; compileall passes; all four frozen routes were exercised in the loopback browser with zero runtime or console errors. feat-058 stays in_progress only for owner acceptance; P1/P2 and trade authority remain out of scope."
+      ,"baseline_audit": {
+        "date": "2026-07-25",
+        "scope": "documentation, public-data boundary, privacy audit, and verification only",
+        "verification": "dependency check, compileall, project-memory validation, 250/250 tests, isolated package build, real after-close generation, and loopback/browser checks passed",
+        "known_debt": "audit-only Ruff and Mypy checks report 301 and 377 pre-existing findings",
+        "publication": "fresh sanitized public history required by ADR-0011; legacy history remains local"
+      }
+      ,"p0_acceptance": {
+        "status": "passed",
+        "accepted_at": "2026-07-25",
+        "product_version": "InsightRadar V3.0 Pilot — Scope Frozen",
+        "pilot_status": "ten_real_morning_trials_active",
+        "allowed_changes": [
+          "data_error",
+          "plan_mismatch",
+          "state_persistence_failure",
+          "security_issue",
+          "core_flow_blocker"
+        ],
+        "deferred": ["P1", "P2", "ordinary_experience_improvements"]
+      }
+    }
+  ]
+}

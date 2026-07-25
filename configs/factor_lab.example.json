@@ -1,0 +1,16 @@
+{
+  "universe_name": "我的研究股票池",
+  "universe_type": "explicit_custom",
+  "universe_mode": "static_codes",
+  "universe_id": "custom_pilot_v1",
+  "codes": ["000001.SZ", "000002.SZ", "600000.SH", "600036.SH"],
+  "benchmark": "000852.SH",
+  "begin_date": 20250101,
+  "horizon_days": 5,
+  "rebalance_days": 5,
+  "min_train_days": 100,
+  "train_window_days": 252,
+  "ridge_alpha": 10.0,
+  "top_n": 2,
+  "transaction_cost_bps": 10
+}

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>InsightRadar Focused Design QA Comparison</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 18px;
+      color: #f4f0e8;
+      background: #050c13;
+      font: 13px/1.4 "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    h1 { margin: 0 0 12px; font-size: 19px; }
+    .comparison {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+    figure { margin: 0; }
+    figcaption { margin-bottom: 7px; color: #91a4b7; }
+    .crop {
+      height: 405px;
+      overflow: hidden;
+      border: 1px solid rgba(154, 181, 207, .26);
+      border-radius: 9px;
+      background: #07111b;
+    }
+    img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>焦点对照：标题、市场约束与首项决策</h1>
+  <div class="comparison">
+    <figure>
+      <figcaption>视觉目标</figcaption>
+      <div class="crop"><img src="../selected-action-brief-blue-red.png" alt="视觉目标顶部区域"></div>
+    </figure>
+    <figure>
+      <figcaption>浏览器实现</figcaption>
+      <div class="crop"><img src="./06-today-blue-red.png" alt="实现顶部区域"></div>
+    </figure>
+  </div>
+</body>
+</html>

@@ -1,0 +1,74 @@
+{
+  "preferred_source": "amazingdata",
+  "basis_lookback_minutes": 4,
+  "futures_basis_provider_order": ["iwencai", "amazingdata"],
+  "iwencai_futures_timeout_seconds": 30,
+  "iwencai_futures_max_age_days": 4,
+  "index_watch": [
+    {"code": "000001.SH", "secid": "1.000001", "label": "上证指数", "category": "broad"},
+    {"code": "399001.SZ", "secid": "0.399001", "label": "深证成指", "category": "broad"},
+    {"code": "399006.SZ", "secid": "0.399006", "label": "创业板指", "category": "growth"},
+    {"code": "000300.SH", "secid": "1.000300", "label": "沪深300", "category": "core"},
+    {"code": "000905.SH", "secid": "1.000905", "label": "中证500", "category": "mid"},
+    {"code": "000852.SH", "secid": "1.000852", "label": "中证1000", "category": "small"},
+    {"code": "000688.SH", "secid": "1.000688", "label": "科创50", "category": "growth"}
+  ],
+  "etf_watch": [
+    {"code": "510300.SH", "secid": "1.510300", "label": "沪深300ETF", "category": "core_etf"},
+    {"code": "510050.SH", "secid": "1.510050", "label": "上证50ETF", "category": "core_etf"},
+    {"code": "510500.SH", "secid": "1.510500", "label": "中证500ETF", "category": "broad_etf"},
+    {"code": "588000.SH", "secid": "1.588000", "label": "科创50ETF", "category": "growth_etf"},
+    {"code": "159915.SZ", "secid": "0.159915", "label": "创业板ETF", "category": "growth_etf"}
+  ],
+  "futures_basis": [
+    {"contract": "IF当月", "underlying": "沪深300", "basis": null, "status": "pending_provider"},
+    {"contract": "IH当月", "underlying": "上证50", "basis": null, "status": "pending_provider"},
+    {"contract": "IC当月", "underlying": "中证500", "basis": null, "status": "pending_provider"},
+    {"contract": "IM当月", "underlying": "中证1000", "basis": null, "status": "pending_provider"}
+  ],
+  "futures_basis_watch": [
+    {"family": "IF", "underlying_code": "000300.SH", "underlying_label": "沪深300", "contracts": 2},
+    {"family": "IH", "underlying_code": "000016.SH", "underlying_label": "上证50", "contracts": 2},
+    {"family": "IC", "underlying_code": "000905.SH", "underlying_label": "中证500", "contracts": 2},
+    {"family": "IM", "underlying_code": "000852.SH", "underlying_label": "中证1000", "contracts": 2}
+  ],
+  "state_team_etf_proxy": {
+    "disclosure_as_of": "2025-12-31",
+    "baseline_dates": {
+      "pre_buildup": "2023-03-31",
+      "pre_first_announcement": "2023-08-01",
+      "pre_rescue_acceleration": "2023-10-20"
+    },
+    "direct_holding_gap": "2015年证金/汇金直接持股尚未接入；2026年半年报股东数据最迟需等披露期结束后再做全样本核验。",
+    "items": [
+      {
+        "code": "510300.SH",
+        "label": "华泰柏瑞沪深300ETF",
+        "disclosed_state_shares": 73513000000,
+        "source_label": "2025年年报披露汇金持有份额（上海证券报转载）",
+        "source_url": "https://www.jinantimes.com.cn/news-70-10212350.html"
+      },
+      {
+        "code": "510310.SH",
+        "label": "易方达沪深300ETF",
+        "disclosed_state_shares": 55894085452,
+        "source_label": "2025年年报披露两家中央汇金账户持有份额",
+        "source_url": "https://www.sse.com.cn/disclosure/fund/announcement/c/new/2026-03-31/510310_20260331_K996.pdf"
+      },
+      {
+        "code": "510330.SH",
+        "label": "华夏沪深300ETF",
+        "disclosed_state_shares": 42028022295,
+        "source_label": "2025年年报披露汇金持有份额",
+        "source_url": "https://www.sse.com.cn/disclosure/fund/announcement/c/new/2026-03-31/510330_20260331_X8KM.pdf"
+      },
+      {
+        "code": "159919.SZ",
+        "label": "嘉实沪深300ETF",
+        "disclosed_state_shares": 35498494985,
+        "source_label": "2025年年报披露汇金持有份额",
+        "source_url": "https://static.cninfo.com.cn/finalpage/2026-03-30/1225041523.PDF"
+      }
+    ]
+  }
+}
