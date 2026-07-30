@@ -179,6 +179,64 @@ class UnifiedDecisionTests(unittest.TestCase):
         self.assertTrue(any(item["status"] == "current" for item in decision["source_reports"]))
         self.assertEqual(len(decision["source_reports"]), 5)
 
+    def test_nested_market_timestamps_enter_source_report_contract(self) -> None:
+        with TemporaryDirectory() as temporary:
+            report_dir = Path(temporary)
+            (report_dir / "20260730-market-pulse.json").write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-07-30T15:10:00",
+                        "indexes": [
+                            {
+                                "code": "000001",
+                                "update_time": "2026-07-30 15:00",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (report_dir / "20260730-market-levels.json").write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-07-30T15:11:00",
+                        "timeframes": [
+                            {
+                                "timeframe": "15m",
+                                "as_of": "2026-07-30 15:00",
+                            },
+                            {
+                                "timeframe": "day",
+                                "as_of": "2026-07-30",
+                            },
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            decision = build_unified_decision(
+                ACTIONS,
+                RELIABILITY,
+                report_dir=report_dir,
+                now=datetime(2026, 7, 30, 18, 30),
+                persist_score_state=False,
+            )
+
+        by_workflow = {
+            item["workflow"]: item for item in decision["source_reports"]
+        }
+        self.assertEqual(
+            by_workflow["market_pulse"]["source_time"],
+            "2026-07-30 15:00",
+        )
+        self.assertEqual(
+            by_workflow["market_levels"]["as_of"],
+            "2026-07-30 15:00",
+        )
+
     def test_missing_monitor_reports_fail_closed(self) -> None:
         with TemporaryDirectory() as tmp:
             decision = build_unified_decision(
@@ -223,6 +281,19 @@ class UnifiedDecisionTests(unittest.TestCase):
         self.assertIn("## 明日统一指引", section)
         self.assertIn("跌破950.08", section)
         self.assertLess(merged.index("## 明日统一指引"), merged.index("## 可选扩展缺口"))
+
+    def test_markdown_handles_null_technology_definition(self) -> None:
+        decision = {
+            "market_structure": {
+                "status": "unavailable",
+                "technology_definition": None,
+            }
+        }
+
+        section = render_unified_decision_markdown(decision)
+
+        self.assertIsInstance(section, str)
+        self.assertTrue(section)
 
     def test_dashboard_preserves_holding_with_unknown_broker_fields_and_red_budget(self) -> None:
         markdown = """# 盘后持仓操作指引

@@ -16,6 +16,8 @@ from stock_assist.paths import DATA_DIR, REPORT_DIR
 LEDGER_PATH = DATA_DIR / "signal_outcomes.jsonl"
 HORIZONS = (1, 5, 20)
 CODE_PATTERN = re.compile(r"(?P<code>\d{6}\.(?:SZ|SH))")
+MA20_VALUE_PATTERN = re.compile(r"20日线\s*([0-9]+(?:\.[0-9]+)?)")
+PRICE_BASIS_MISMATCH_LIMIT = 0.35
 
 
 def refresh_signal_outcomes(
@@ -55,7 +57,35 @@ def load_outcome_snapshot(ledger_path: Path = LEDGER_PATH) -> dict[str, object]:
 def build_outcome_snapshot(records: list[dict[str, object]]) -> dict[str, object]:
     """Build a compact, client-readable scorecard from ledger rows."""
 
-    eligible = [row for row in records if row.get("action_class") in {"hold", "risk_reduce"}]
+    included: list[dict[str, object]] = []
+    quarantined: list[dict[str, object]] = []
+    for row in records:
+        item = dict(row)
+        quarantine_reason = str(item.get("quarantine_reason") or "")
+        if item.get("evaluation_status") == "quarantined":
+            quarantine_reason = (
+                quarantine_reason
+                or "上游已标记口径异常，缺少可安全纳入统计的证据。"
+            )
+        else:
+            quarantine_reason = price_basis_quarantine_reason(
+                str(item.get("reason") or ""),
+                item.get("reference_price"),
+            ) or ""
+        if quarantine_reason:
+            item["evaluation_status"] = "quarantined"
+            item["quarantine_reason"] = quarantine_reason
+            quarantined.append(item)
+            continue
+        item["evaluation_status"] = "eligible"
+        item["quarantine_reason"] = None
+        included.append(item)
+
+    eligible = [
+        row
+        for row in included
+        if row.get("action_class") in {"hold", "risk_reduce"}
+    ]
     horizons: dict[str, dict[str, object]] = {}
     for horizon in HORIZONS:
         return_key = f"return_{horizon}d"
@@ -71,21 +101,56 @@ def build_outcome_snapshot(records: list[dict[str, object]]) -> dict[str, object
         }
 
     latest = sorted(
-        records,
+        included,
         key=lambda row: (str(row.get("signal_date", "")), str(row.get("code", ""))),
         reverse=True,
     )[:8]
-    evaluated_dates = [str(row.get("last_price_date")) for row in records if row.get("last_price_date")]
+    quarantined_latest = sorted(
+        quarantined,
+        key=lambda row: (str(row.get("signal_date", "")), str(row.get("code", ""))),
+        reverse=True,
+    )[:8]
+    evaluated_dates = [
+        str(row.get("last_price_date"))
+        for row in included
+        if row.get("last_price_date")
+    ]
     return {
-        "tracked_signals": len(records),
-        "tracked_symbols": len({str(row.get("code")) for row in records if row.get("code")}),
-        "pending_signals": sum(1 for row in records if row.get("status") == "pending"),
+        "tracked_signals": len(included),
+        "tracked_symbols": len(
+            {str(row.get("code")) for row in included if row.get("code")}
+        ),
+        "pending_signals": sum(
+            1 for row in included if row.get("status") == "pending"
+        ),
+        "quarantined_signals": len(quarantined),
         "as_of_trade_date": max(evaluated_dates) if evaluated_dates else None,
         "horizons": horizons,
         "latest": latest,
+        "quarantined_latest": quarantined_latest,
         "ledger": str(LEDGER_PATH),
         "method": "盘后信号以信号日最近有效收盘价为基准；持有类后续上涨为命中，降风险类后续下跌为命中。",
     }
+
+
+def price_basis_quarantine_reason(
+    rule_text: str,
+    reference_price: object,
+) -> str | None:
+    """Return a quarantine reason when an MA20 threshold has an incompatible basis."""
+
+    if not isinstance(reference_price, (int, float)) or reference_price <= 0:
+        return None
+    ma_values = [
+        float(value)
+        for value in MA20_VALUE_PATTERN.findall(rule_text)
+    ]
+    if any(
+        abs(value / float(reference_price) - 1.0) > PRICE_BASIS_MISMATCH_LIMIT
+        for value in ma_values
+    ):
+        return "历史20日线与当前价格偏差超过35%，复权或标的映射口径待核对。"
+    return None
 
 
 def outcome_markdown_lines(snapshot: dict[str, object]) -> list[str]:

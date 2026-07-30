@@ -58,6 +58,92 @@
 
 final result: passed
 
+# 2026-07-30 P0 Blocked-State Repair
+
+## Source and Runtime Evidence
+
+- Today source: private local prototype reference, retained outside the public repository.
+- Today runtime and side-by-side comparison were captured privately at 1280 x 720.
+- Review source: private local prototype reference, retained outside the public repository.
+- Review runtime and side-by-side comparison were captured privately at 1440 x 1024.
+- Mobile runtime was captured privately from the 390 x 844 CSS viewport.
+- Runtime artifact: private local report triplet generated from the current portfolio.
+
+## Findings and Fixes
+
+1. [P0] A blocked plan disappeared from Today after the user acknowledged the blocker, producing a false `0`.
+   - Fixed by separating pending responses from unresolved blocked attention. Today now retains every blocked plan, labels the runtime `blocked_waiting`, disables execution-like controls, and makes `继续等待` the compliant primary branch.
+2. [P0] Global reliability messages were copied onto every plan, so an unrelated local holding gap could block the wrong plan.
+   - Fixed by mapping structured blockers to the matching holding while preserving true portfolio-wide risk reconciliation constraints.
+3. [P0] Nested source timestamps were discarded, which could turn stale evidence into a false missing state or make report-generation time look like market time.
+   - Fixed by carrying authoritative `source_time` separately from `generated_at`; the data drawer now shows source time, repair action, owner, and next check.
+4. [P0] A historical plan threshold used an incompatible price basis and remained eligible for review and outcome aggregation.
+   - Fixed by quarantining implausible fresh-history/current-price basis mismatches. Review visibly marks the affected version `口径异常，已隔离` and excludes the bad signal from tracked, matured, hit-rate, and average-effect aggregates.
+5. [P1] Review mode and horizon controls appeared interactive despite the decision-value series being unavailable.
+   - Fixed by rendering all seven controls disabled with explicit unavailable labels.
+6. [P2] The first repaired blocked card was too tall, and the narrow stage rail exposed a browser scrollbar.
+   - Fixed by compressing acknowledged-version detail into one status note and hiding the mobile rail scrollbar while preserving horizontal navigation.
+
+## Fidelity and Functional Gate
+
+- Hierarchy: passed. The runtime preserves the reference's four-task shell, staged decision rail, dominant first action, causal chain, holding impact strip, evidence-on-demand, and review ledger.
+- Truthfulness: passed. Synthetic executable actions and positive review curves were not copied. The real state remains `blocked`, `stale`, or `unknown`, with no automatic trade authority.
+- Typography, spacing, colors, borders, and density: passed. The blue-black tokens, warm-white hierarchy, coral blocker rail, amber waiting state, and compact cards match the latest prototype language.
+- Responsive layout: passed. Desktop and mobile document width has no horizontal overflow. The mobile bottom navigation works and the stage rail remains contained.
+- Core interactions: passed. Four-route navigation, data-status open/close, Portfolio attention count, disabled Review controls, and mobile navigation were exercised against the final real artifact.
+- Runtime diagnostics: passed. Browser warning/error log was empty.
+- Automated verification: passed. Focused 42-test gate and full 260-test suite passed; compileall, project-memory validation, JSON validation, and `git diff --check` passed.
+- Independent product audit: passed after one revise cycle. The reviewer first caught that a quarantined signal still affected outcome aggregates; the final implementation closes that gap and the reviewer returned PASS. Its non-blocking fail-closed test suggestion for an explicit quarantine without a reason was also added.
+- Remaining P0/P1/P2 visual or interaction findings in the agreed repair scope: none.
+
+final result: passed
+
+# 2026-07-30 Risk-card Workbench Prototype Match
+
+## Visual Truth and Runtime State
+
+- Visual authority:
+  - Today: private local prototype reference (1280x720).
+  - Review: private local prototype reference (1487x1058), normalized to 1440x1024 for the comparison.
+- Runtime authority: private local report triplet generated from the current portfolio and source-health state.
+- Runtime state rendered in the comparison used a private portfolio; only the UI state categories and interaction results are documented publicly.
+- The prototype's positive performance numbers and simulated decision-value curve were not copied. Missing account-path, drawdown, execution, and no-action-baseline evidence remains visibly `unknown` or `blocked`.
+
+## Comparison Evidence
+
+- Today desktop implementation and source/runtime comparison were captured privately at 1280 x 720.
+- Review desktop implementation and source/runtime comparison were captured privately at 1440 x 1024.
+- Today and Review mobile implementations were captured privately at 390 x 844.
+- The raw runtime captures were 1921x1080, 2161x1536, and 586x1266 because Windows rendered the requested CSS viewports at 1.5x device scale. They were normalized to 1280x720, 1440x1024, and 390x844 before comparison.
+- Focused crops were not needed: the complete action-command hierarchy fits in the Today desktop viewport, while the Review comparison contains the complete summary, mode controls, evidence legend, and blocked chart state at readable scale.
+
+## Iteration History
+
+1. Iteration 1
+   - [P2] The primary Today card was too tall because all response options were exposed at once.
+   - Fix: kept the authority-safe response prominent and moved the remaining responses into a collapsed secondary control.
+2. Iteration 2
+   - [P1] Evidence strength incorrectly summed T+1, T+5, and T+20 signal windows, overstating independent decision-value samples.
+   - Fix: evidence strength now counts only matured T+20 decision episodes and renders `样本不足 0/20` for the current run.
+   - [P2] Review repeated its title and exposed English status labels.
+   - Fix: removed the duplicate heading and translated the visible runtime states.
+3. Final comparison
+   - No unresolved P0, P1, or P2 visual or interaction findings.
+   - The five production contract stages replace the prototype's six simulated intraday replay stages because intraday monitoring is not implemented.
+   - The blocked Review canvas intentionally replaces the prototype chart until continuous plan, account, point-in-time proxy, and no-action-baseline evidence exists.
+   - Text labels retain the reference hierarchy without adding external icon assets to the self-contained report.
+
+## Verification Evidence
+
+- Desktop viewports: 1280x720 for Today and 1440x1024 for Review.
+- Mobile viewport: 390x844 for Today and Review.
+- Root horizontal overflow: none. The desktop stage rail remains fully visible; the narrow mobile stage rail is an intentionally contained horizontal scroller.
+- Browser diagnostic logs: zero runtime errors in the final clean session.
+- Primary interactions tested: all four frozen routes, market-data drawer open/close, Review mode switching, Review window switching, and mobile bottom navigation.
+- Automated checks cover the single-action hierarchy, blocked/unknown Review contract, removal of prototype values, and matured T+20 evidence counting.
+
+final result: passed
+
 # InsightRadar V3 Strict Runtime Match
 
 ## Comparison Target
@@ -184,5 +270,14 @@ final result: passed
 The `InsightRadar V3 Strict Runtime Match` section supersedes the earlier
 red/white P0 comparison. The supplied V3 HTML is the current visual authority;
 the final runtime uses its blue-black system and truthful local data.
+
+final result: passed
+
+# Latest Repair Acceptance Authority
+
+The `2026-07-30 P0 Blocked-State Repair` section is the latest acceptance
+evidence. It preserves the V3 blue-black visual authority while replacing
+prototype-only executable and performance states with the current truthful
+blocked, stale, quarantined, and unknown runtime states.
 
 final result: passed

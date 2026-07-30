@@ -6,9 +6,14 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
+import pandas as pd
+
 from stock_assist.portfolio import Holding, Portfolio, load_manual_broker_portfolio, load_portfolio
 from stock_assist.workflows.after_close import (
     _broker_snapshot_lines,
+    _signal_from_broker_snapshot,
+    _signal_for_holding,
+    _holding_context_complete,
     build_after_close_bundle,
     build_after_close_payload,
 )
@@ -110,6 +115,18 @@ class AfterCloseReliabilityTests(unittest.TestCase):
 
         self.assertEqual(portfolio.as_of, "2026-07-18")
         self.assertEqual(portfolio.source_note, "user-confirmed snapshot")
+
+    def test_stale_context_uses_the_same_incomplete_rule_as_reliability(self) -> None:
+        holding = Holding(
+            code="900001.SH",
+            name="合成标的甲",
+            thesis="合成订单兑现待验证",
+            initial_risk_line="跌破结构位后复核",
+            risk_line="价格与基本面共同复核",
+            review_status="stale_context",
+        )
+
+        self.assertFalse(_holding_context_complete(holding))
 
     @patch("stock_assist.workflows.after_close.load_outcome_snapshot", side_effect=_outcome_snapshot)
     def test_placeholder_gap_is_not_counted_and_missing_snapshot_blocks_strict_readiness(self, _mock) -> None:
@@ -215,6 +232,43 @@ class AfterCloseReliabilityTests(unittest.TestCase):
         self.assertEqual(holding.pnl_pct, -26.695)
         self.assertEqual(holding.day_pnl, -13354.0)
         self.assertEqual(holding.weight_pct, 19.17)
+
+    def test_adjustment_basis_mismatch_quarantines_price_thresholds(self) -> None:
+        holding = Holding(
+            code="900002.SH",
+            name="合成标的乙",
+            shares=1000,
+            cost=1.2,
+            market_price=1.18,
+            pnl_pct=-1.7,
+        )
+        frame = pd.DataFrame({"close": [3.2 + index * 0.01 for index in range(20)]})
+
+        signal = _signal_for_holding(holding, frame)
+
+        self.assertEqual(signal.action, "等待数据，不做主动交易")
+        self.assertIn("复权或标的映射口径不一致", signal.reason)
+        self.assertIn("不使用当前均线或价格阈值", signal.position_action)
+        self.assertEqual(signal.priority, "高")
+
+    def test_broker_only_fallback_does_not_invent_cost_or_price_triggers(self) -> None:
+        signal = _signal_from_broker_snapshot(
+            Holding(
+                code="900001.SH",
+                name="合成标的甲",
+                cost=130.0,
+                market_price=96.0,
+                pnl_pct=-20.0,
+            )
+        )
+
+        self.assertEqual(signal.action, "等待数据，不做主动交易")
+        self.assertNotIn("130.00", signal.upside_trigger)
+        self.assertNotIn("96.00", signal.downside_trigger)
+        self.assertEqual(
+            signal.decision_contract["cost_reference"]["authority"],
+            "reference_only",
+        )
 
 
 if __name__ == "__main__":

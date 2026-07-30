@@ -16,8 +16,13 @@ from pathlib import Path
 import tempfile
 from typing import Literal, Mapping, TypedDict
 
+from stock_assist.decision_evidence import (
+    build_decision_evidence,
+    link_evidence_to_plans,
+)
 from stock_assist.paths import DATA_DIR
-from stock_assist.portfolio import Portfolio
+from stock_assist.portfolio import Portfolio, portfolio_version
+from stock_assist.signal_outcomes import price_basis_quarantine_reason
 
 
 DataStatus = Literal["ready", "stale", "missing", "blocked", "pending", "failed"]
@@ -51,6 +56,12 @@ def _requires_user_action(plan: Mapping[str, object]) -> bool:
     )
 
 
+def _requires_today_attention(plan: Mapping[str, object]) -> bool:
+    if plan.get("status") == "blocked":
+        return True
+    return _requires_user_action(plan)
+
+
 class DataHealthItem(TypedDict):
     id: str
     label: str
@@ -63,6 +74,9 @@ class DataHealthItem(TypedDict):
     error_code: str | None
     gap_reason: str | None
     evidence: str | None
+    repair_action: str | None
+    owner: str
+    next_check: str
 
 
 class DecisionPlan(TypedDict):
@@ -72,13 +86,24 @@ class DecisionPlan(TypedDict):
     plan_version: str
     previous_version: str | None
     status: PlanStatus
+    current_branch: str
+    current_action: str
+    current_next_event: str
     if_condition: str
     then_action: str
     until_condition: str
     invalid_condition: str
     market_permission: str
+    priority: str
     risk_constraints: list[str]
+    blocking_reasons: list[str]
+    authority_state: str
+    next_event: str
+    continue_waiting: str
     evidence_refs: list[str]
+    branches: list[dict[str, object]]
+    technical_snapshot: dict[str, object]
+    cost_reference: dict[str, object]
     change_reasons: list[str]
     created_at: str
     effective_after_user_confirmation: bool
@@ -104,14 +129,23 @@ def build_decision_workspace(
     market_matrix = _mapping(payload.get("market_matrix"))
     responses = load_plan_responses(response_ledger)
     latest_by_plan = _latest_responses(responses)
-    plan_history = load_plan_versions(plan_ledger)
-    previous_plans = _latest_plan_versions(plan_history)
-    plans = _plans(decision, now, latest_by_plan, previous_plans)
+    raw_plan_history = load_plan_versions(plan_ledger)
+    previous_plans = _latest_plan_versions(raw_plan_history)
+    plan_history = _annotate_plan_history(raw_plan_history, portfolio)
+    plans = _plans(decision, reliability, now, latest_by_plan, previous_plans)
     gaps = _string_list(payload.get("data_gaps"))
     data_health = _data_health(decision, gaps, now)
+    decision_evidence = build_decision_evidence(
+        decision,
+        data_health,
+        plans,
+    )
+    link_evidence_to_plans(plans, decision_evidence)
     market_gate = _market_gate(decision, data_health)
     positions = _portfolio_positions(portfolio, plans)
     actionable = [plan for plan in plans if _requires_user_action(plan)]
+    today_plans = [plan for plan in plans if _requires_today_attention(plan)]
+    unresolved_blocked = [plan for plan in plans if plan["status"] == "blocked"]
     accepted = [
         plan
         for plan in plans
@@ -121,12 +155,17 @@ def build_decision_workspace(
     return {
         "schema_version": "decision-workspace/v1",
         "generated_at": now.isoformat(timespec="seconds"),
-        "source_generated_at": now.isoformat(timespec="seconds"),
+        "source_generated_at": str(
+            payload.get("generated_at") or now.isoformat(timespec="seconds")
+        ),
+        "portfolio_version": portfolio_version(portfolio),
         "effective_market_date": str(decision.get("plan_date") or now.date().isoformat()),
         "run_stage": run_stage,
         "runtime_status": (
             "awaiting_confirmation"
-            if any(item["user_response_status"] == "pending" for item in actionable)
+            if actionable
+            else "blocked_waiting"
+            if unresolved_blocked
             else "reviewed"
         ),
         "stage_note": (
@@ -135,13 +174,24 @@ def build_decision_workspace(
             else "晨间增量复核：仅重算现有来源时效；本阶段未接入实时行情刷新。"
         ),
         "data_health": data_health,
+        "decision_evidence": decision_evidence,
         "market_gate": market_gate,
         "theme_observations": _theme_observations(market_matrix),
         "portfolio_summary": _portfolio_summary(portfolio, reliability),
         "portfolio_positions": positions,
         "plan_changes": actionable,
+        "today_plans": today_plans,
+        "attention_summary": {
+            "pending_response_count": len(actionable),
+            "unresolved_blocked_count": len(unresolved_blocked),
+            "effective_plan_count": len(accepted),
+        },
         "active_plans": plans,
         "plan_version_history": plan_history,
+        "quarantined_plan_version_count": sum(
+            item.get("evaluation_status") == "quarantined"
+            for item in plan_history
+        ),
         "research_tasks": _research_tasks(payload),
         "user_responses": responses,
         "monitor_handoffs": [
@@ -200,10 +250,17 @@ def record_plan_versions(
                 str(previous.get("plan_version")) if previous else None
             ),
             "status": str(item.get("status") or "blocked"),
+            "priority": str(item.get("priority") or "中"),
+            "current_branch": str(item.get("current_branch") or ""),
+            "current_action": str(item.get("current_action") or ""),
+            "current_next_event": str(item.get("current_next_event") or ""),
             "if_condition": str(item.get("if_condition") or ""),
             "then_action": str(item.get("then_action") or ""),
             "until_condition": str(item.get("until_condition") or ""),
             "invalid_condition": str(item.get("invalid_condition") or ""),
+            "blocking_reasons": _string_list(item.get("blocking_reasons")),
+            "authority_state": str(item.get("authority_state") or "blocked"),
+            "next_event": str(item.get("next_event") or ""),
             "change_reasons": _string_list(item.get("change_reasons")),
             "created_at": str(item.get("created_at") or datetime.now().isoformat(timespec="seconds")),
         }
@@ -213,7 +270,36 @@ def record_plan_versions(
         path,
         "".join(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n" for item in rows),
     )
-    return rows
+    workspace_history = workspace.get("plan_version_history")
+    annotations = {
+        (
+            str(item.get("plan_id") or ""),
+            str(item.get("plan_version") or ""),
+        ): {
+            "evaluation_status": item.get("evaluation_status"),
+            "quarantine_reason": item.get("quarantine_reason"),
+        }
+        for item in (
+            workspace_history if isinstance(workspace_history, list) else []
+        )
+        if isinstance(item, Mapping) and item.get("evaluation_status")
+    }
+    return [
+        {
+            **item,
+            **annotations.get(
+                (
+                    str(item.get("plan_id") or ""),
+                    str(item.get("plan_version") or ""),
+                ),
+                {
+                    "evaluation_status": "eligible",
+                    "quarantine_reason": None,
+                },
+            ),
+        }
+        for item in rows
+    ]
 
 
 def overlay_plan_responses(
@@ -226,7 +312,7 @@ def overlay_plan_responses(
     result = deepcopy(dict(workspace))
     responses = load_plan_responses(response_ledger)
     latest = _latest_responses(responses)
-    for key in ("plan_changes", "active_plans"):
+    for key in ("plan_changes", "today_plans", "active_plans"):
         rows = result.get(key)
         if not isinstance(rows, list):
             continue
@@ -246,9 +332,36 @@ def overlay_plan_responses(
             for item in active_plans
             if isinstance(item, dict) and _requires_user_action(item)
         ]
+        today_plans = [
+            item
+            for item in active_plans
+            if isinstance(item, dict) and _requires_today_attention(item)
+        ]
+        unresolved_blocked = [
+            item
+            for item in active_plans
+            if isinstance(item, dict) and item.get("status") == "blocked"
+        ]
+        accepted = [
+            item
+            for item in active_plans
+            if isinstance(item, dict)
+            and item.get("user_response_status") == "accepted"
+            and item.get("status") not in {"voided", "blocked"}
+        ]
         result["plan_changes"] = actionable
+        result["today_plans"] = today_plans
+        result["attention_summary"] = {
+            "pending_response_count": len(actionable),
+            "unresolved_blocked_count": len(unresolved_blocked),
+            "effective_plan_count": len(accepted),
+        }
         result["runtime_status"] = (
-            "awaiting_confirmation" if actionable else "reviewed"
+            "awaiting_confirmation"
+            if actionable
+            else "blocked_waiting"
+            if unresolved_blocked
+            else "reviewed"
         )
     return result
 
@@ -383,6 +496,7 @@ def load_runtime_state(path: Path = DEFAULT_RUNTIME_STATE) -> dict[str, object] 
 
 def _plans(
     decision: Mapping[str, object],
+    reliability: Mapping[str, object],
     now: datetime,
     latest_responses: Mapping[str, Mapping[str, object]],
     previous_plans: Mapping[str, Mapping[str, object]],
@@ -390,7 +504,7 @@ def _plans(
     raw = decision.get("holding_plans")
     rows = raw if isinstance(raw, list) else []
     market_permission = str(decision.get("stance") or "等待确认")
-    blocked = _string_list(decision.get("blocked_actions"))
+    global_constraints = _string_list(decision.get("blocked_actions"))
     plans: list[DecisionPlan] = []
     for item in rows:
         if not isinstance(item, dict):
@@ -399,20 +513,61 @@ def _plans(
         if not symbol:
             continue
         plan_id = f"holding:{symbol}"
-        content = {
-            "symbol": symbol,
-            "if": str(item.get("upside_trigger") or item.get("flat_trigger") or "等待条件明确"),
-            "then": str(item.get("position_action") or item.get("action") or "保持原计划"),
-            "until": str(item.get("flat_trigger") or "下一次有效复核"),
-            "invalid": str(item.get("downside_trigger") or "风险线被触发"),
-            "permission": market_permission,
-        }
+        priority = str(item.get("priority") or "中")
+        contract = _mapping(item.get("decision_contract"))
+        contract_branches = _decision_branches(contract)
+        repair = contract_branches.get("repair_observe", {})
+        risk = contract_branches.get("risk_reduce_review", {})
+        waiting = contract_branches.get("continue_waiting", {})
+        if contract_branches:
+            current_branch, current_action, current_next_event = _current_plan_state(
+                contract,
+                repair=repair,
+                risk=risk,
+                waiting=waiting,
+            )
+            content = {
+                "symbol": symbol,
+                "current_branch": current_branch,
+                "current_action": current_action,
+                "current_next_event": current_next_event,
+                "if": _branch_condition(repair),
+                "then": str(repair.get("action") or "修复成立后转为持有观察"),
+                "until": _branch_condition(waiting),
+                "invalid": _branch_condition(risk),
+                "permission": market_permission,
+            }
+        else:
+            current_action = str(
+                item.get("position_action") or item.get("action") or "保持原计划"
+            )
+            content = {
+                "symbol": symbol,
+                "current_branch": "legacy_current",
+                "current_action": current_action,
+                "current_next_event": str(
+                    item.get("upside_trigger")
+                    or item.get("flat_trigger")
+                    or "等待条件明确"
+                ),
+                "if": str(item.get("upside_trigger") or item.get("flat_trigger") or "等待条件明确"),
+                "then": current_action,
+                "until": str(item.get("flat_trigger") or "下一次有效复核"),
+                "invalid": str(item.get("downside_trigger") or "风险线被触发"),
+                "permission": market_permission,
+            }
         version = "v-" + hashlib.sha256(
             json.dumps(content, ensure_ascii=False, sort_keys=True).encode("utf-8")
         ).hexdigest()[:10]
         previous = previous_plans.get(plan_id)
         previous_version = str(previous.get("plan_version")) if previous else None
-        if blocked:
+        blocking_reasons = _plan_blockers(
+            symbol=symbol,
+            action=content["current_action"],
+            decision=decision,
+            reliability=reliability,
+        )
+        if blocking_reasons:
             status: PlanStatus = "blocked"
         elif "退出" in content["then"] or "作废" in content["then"]:
             status = "voided"
@@ -430,6 +585,14 @@ def _plans(
             response_status = str(previous_response.get("response"))  # type: ignore[assignment]
             response_note = str(previous_response.get("note") or "")
             response_at = str(previous_response.get("created_at") or "") or None
+        if status != "blocked" and response_status == "blocked_acknowledged":
+            response_status = "pending"
+            response_note = "原回应仅确认知悉阻断；阻断解除后需重新确认当前计划。"
+            response_at = None
+        elif status == "blocked" and response_status == "accepted":
+            response_status = "pending"
+            response_note = "当前新增阻断已撤销旧执行授权；需先知悉阻断。"
+            response_at = None
         plans.append(
             {
                 "plan_id": plan_id,
@@ -438,19 +601,38 @@ def _plans(
                 "plan_version": version,
                 "previous_version": previous_version,
                 "status": status,
+                "current_branch": content["current_branch"],
+                "current_action": content["current_action"],
+                "current_next_event": content["current_next_event"],
                 "if_condition": content["if"],
                 "then_action": content["then"],
                 "until_condition": content["until"],
                 "invalid_condition": content["invalid"],
                 "market_permission": market_permission,
-                "risk_constraints": blocked,
+                "priority": priority,
+                "risk_constraints": _dedupe_strings(
+                    [*blocking_reasons, *global_constraints]
+                ),
+                "blocking_reasons": blocking_reasons,
+                "authority_state": (
+                    "blocked"
+                    if status == "blocked"
+                    else "effective"
+                    if response_status == "accepted"
+                    else "awaiting_confirmation"
+                ),
+                "next_event": content["current_next_event"],
+                "continue_waiting": content["until"],
                 "evidence_refs": ["unified_decision", f"holding:{symbol}"],
+                "branches": list(contract_branches.values()),
+                "technical_snapshot": _mapping(contract.get("technical")),
+                "cost_reference": _mapping(contract.get("cost_reference")),
                 "change_reasons": (
                     ["首次形成可审核计划"]
                     if status == "new"
                     else ["计划内容相对已回应版本发生变化"]
                     if status == "revised"
-                    else ["核心数据缺口阻断执行"]
+                    else blocking_reasons
                     if status == "blocked"
                     else ["计划内容未变化"]
                 ),
@@ -461,7 +643,131 @@ def _plans(
                 "user_response_at": response_at,
             }
         )
-    return plans
+    return sorted(
+        plans,
+        key=lambda plan: (
+            {"高": 0, "中": 1, "低": 2}.get(plan["priority"], 3),
+            0 if plan["status"] == "blocked" else 1,
+            plan["symbol"],
+        ),
+    )
+
+
+def _current_plan_state(
+    contract: Mapping[str, object],
+    *,
+    repair: Mapping[str, object],
+    risk: Mapping[str, object],
+    waiting: Mapping[str, object],
+) -> tuple[str, str, str]:
+    technical = _mapping(contract.get("technical"))
+    state = str(technical.get("state") or "unknown")
+    risk_trigger = str(risk.get("trigger") or "")
+    risk_active = state == "weak" and "已" in risk_trigger
+    if risk_active:
+        return (
+            "risk_reduce_review",
+            str(contract.get("action") or risk.get("action") or "降低仓位复核"),
+            str(risk.get("persistence") or risk_trigger or "等待风险分支确认"),
+        )
+    return (
+        "continue_waiting",
+        str(contract.get("action") or waiting.get("action") or "继续等待"),
+        (
+            "下一有效收盘检查：修复="
+            + str(repair.get("trigger") or "等待条件明确").rstrip("。； ")
+            + "；风险="
+            + str(risk.get("trigger") or "等待条件明确").rstrip("。； ")
+        )
+        or str(waiting.get("persistence") or "等待下一次有效收盘"),
+    )
+
+
+def _decision_branches(
+    contract: Mapping[str, object],
+) -> dict[str, dict[str, object]]:
+    raw = contract.get("branches")
+    rows = raw if isinstance(raw, list) else []
+    result: dict[str, dict[str, object]] = {}
+    for item in rows:
+        if not isinstance(item, Mapping):
+            continue
+        branch_id = str(item.get("branch_id") or "")
+        if branch_id:
+            result[branch_id] = dict(item)
+    required = {"repair_observe", "risk_reduce_review", "continue_waiting"}
+    return result if required.issubset(result) else {}
+
+
+def _branch_condition(branch: Mapping[str, object]) -> str:
+    trigger = str(branch.get("trigger") or "等待条件明确")
+    persistence = str(branch.get("persistence") or "")
+    return f"{trigger} 持续条件：{persistence}" if persistence else trigger
+
+
+def _plan_blockers(
+    *,
+    symbol: str,
+    action: str,
+    decision: Mapping[str, object],
+    reliability: Mapping[str, object],
+) -> list[str]:
+    blockers: list[str] = []
+    budget = _mapping(decision.get("risk_budget"))
+    risk_level = str(budget.get("risk_level") or "unknown")
+    if risk_level == "unknown":
+        blockers.append("风险预算缺失，当前计划不能进入执行授权。")
+    if _adds_exposure(action) and (
+        risk_level in {"red", "orange"}
+        or bool(budget.get("upgrade_blocked"))
+        or not bool(budget.get("upgrade_eligible", True))
+    ):
+        blockers.append("当前风险预算禁止新增或提高风险仓位。")
+
+    reconciliation = str(
+        reliability.get("risk_reconciliation_status") or ""
+    )
+    if reconciliation == "blocked":
+        blockers.append("组合风险预算对账未完成，计划只能保留为条件草案。")
+
+    holding_rows = reliability.get("holdings")
+    matching: Mapping[str, object] | None = None
+    for item in holding_rows if isinstance(holding_rows, list) else []:
+        if isinstance(item, Mapping) and str(item.get("code") or "") == symbol:
+            matching = item
+            break
+    if matching is not None:
+        missing_fields = _string_list(matching.get("missing_snapshot_fields"))
+        if missing_fields:
+            blockers.append(
+                "持仓快照缺少字段：" + "、".join(missing_fields[:4]) + "。"
+            )
+        if matching.get("context_complete") is False:
+            blockers.append("该持仓上下文未补全，需先恢复持仓级证据。")
+        holding_reconciliation = str(
+            matching.get("risk_reconciliation_status") or ""
+        )
+        if holding_reconciliation == "blocked" and reconciliation != "blocked":
+            blockers.append("该持仓风险预算对账未完成。")
+        if (
+            matching.get("decision_ready") is False
+            and not blockers
+        ):
+            blockers.append("该持仓尚未达到严格决策就绪门槛。")
+    return _dedupe_strings(blockers)
+
+
+def _adds_exposure(action: str) -> bool:
+    clean = action.strip()
+    if any(
+        marker in clean
+        for marker in ("不加仓", "不主动加仓", "不补仓", "不追涨", "不得加仓")
+    ):
+        return False
+    return any(
+        marker in clean
+        for marker in ("加仓", "补仓", "新增仓位", "提高仓位", "追涨")
+    )
 
 
 def _data_health(
@@ -484,7 +790,11 @@ def _data_health(
             continue
         workflow = str(item.get("workflow") or "unknown")
         raw_status = str(item.get("status") or "missing")
-        as_of = str(item.get("as_of") or "") or None
+        as_of = str(
+            item.get("source_time")
+            or item.get("as_of")
+            or ""
+        ) or None
         source_date = _parse_date(as_of)
         if raw_status == "current" and source_date:
             status: DataStatus = (
@@ -515,6 +825,17 @@ def _data_health(
                 "error_code": None if status in {"ready", "stale"} else "SOURCE_UNAVAILABLE",
                 "gap_reason": gap_reason,
                 "evidence": str(item.get("path") or "") or None,
+                "repair_action": (
+                    None
+                    if status == "ready"
+                    else f"重新运行 {workflow} 并校验权威 source_time/as_of。"
+                ),
+                "owner": workflow,
+                "next_check": (
+                    "下一次 after-close 生成时"
+                    if status != "ready"
+                    else "晨间复核检查新鲜度"
+                ),
             }
         )
     if gaps:
@@ -531,6 +852,9 @@ def _data_health(
                 "error_code": "CORE_DATA_GAP",
                 "gap_reason": "；".join(gaps[:3]),
                 "evidence": "after-close.data_gaps",
+                "repair_action": "补齐命中的持仓上下文或账户字段后，重新生成 after-close。",
+                "owner": "portfolio / after-close",
+                "next_check": "字段补齐并重新生成计划版本后",
             }
         )
     return result
@@ -669,6 +993,53 @@ def _latest_plan_versions(
     return {str(item["plan_id"]): item for item in rows}
 
 
+def _annotate_plan_history(
+    rows: list[dict[str, object]],
+    portfolio: Portfolio,
+) -> list[dict[str, object]]:
+    snapshot_date = _parse_date(portfolio.as_of)
+    market_prices = {
+        holding.code: holding.market_price
+        for holding in portfolio.holdings
+        if holding.market_price is not None and holding.market_price > 0
+    }
+    result = deepcopy(rows)
+    for item in result:
+        symbol = str(item.get("symbol") or "")
+        market_price = market_prices.get(symbol)
+        if market_price is None:
+            continue
+        created_date = _parse_date(item.get("created_at"))
+        if (
+            snapshot_date is None
+            or created_date is None
+            or abs((snapshot_date - created_date).days) > 10
+        ):
+            continue
+        rule_text = " ".join(
+            str(item.get(field) or "")
+            for field in (
+                "current_action",
+                "current_next_event",
+                "if_condition",
+                "then_action",
+                "until_condition",
+                "invalid_condition",
+            )
+        )
+        quarantine_reason = price_basis_quarantine_reason(
+            rule_text,
+            market_price,
+        )
+        if quarantine_reason:
+            item["evaluation_status"] = "quarantined"
+            item["quarantine_reason"] = quarantine_reason
+        else:
+            item["evaluation_status"] = "eligible"
+            item["quarantine_reason"] = None
+    return result
+
+
 def _mapping(value: object) -> dict[str, object]:
     return dict(value) if isinstance(value, Mapping) else {}
 
@@ -677,6 +1048,10 @@ def _string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _dedupe_strings(values: list[str]) -> list[str]:
+    return list(dict.fromkeys(item for item in values if item))
 
 
 def _parse_date(value: object) -> date | None:

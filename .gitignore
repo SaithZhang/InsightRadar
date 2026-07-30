@@ -18,6 +18,7 @@ data/*
 data/twitter_raw/
 reports/
 tmp/
+/*_cninfo_filings.json
 review-delivery/archive/
 .superpowers/brainstorm/.last-*
 .superpowers/brainstorm/launcher.stdout.log

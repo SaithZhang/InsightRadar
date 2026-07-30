@@ -36,7 +36,7 @@
 
 ### 当前关键缺陷已独立核对
 
-- `reports/20260728-155557-after-close.json` 中 4 个 active plan 全部为 `blocked`；
+- 私有运行样本中的 active plans 在核心上下文缺失时全部保持 `blocked`；
 - 同一产物把刚生成的 `market-pulse` 和 `market-levels` 判为 `missing`，理由是缺少 `source_time/as_of`；
 - `unified_decision.py` 的来源摘要同时传出 `generated_at` 与 `as_of`，但 `decision_workspace.py` 的健康判定只读取 `as_of`；
 - `decision_workspace.py` 当前把统一的 `blocked_actions` 列表应用到每个持仓计划，所以一个全局缺口会扩散成全部计划 blocked。

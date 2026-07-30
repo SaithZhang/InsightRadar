@@ -1679,3 +1679,44 @@ Read `AGENTS.md`, `feature_list.json`, and this file first. `feat-004`, `feat-00
 - The live `127.0.0.1:8765` service returns 200 for the workspace and importer, serves `decision-workspace/v1`, rejects an unauthenticated write with 403, switches across all four routes, and reports zero browser console errors.
 - Ruff and Mypy are audit-only in this baseline because the repository has no committed lint/type configuration. Ruff reports 301 findings (including one undefined `json` name in `stock_assist/workflows/agent_roster.py`); Mypy reports 377 errors across 37 files. These are recorded as pre-existing debt and were not hidden by changing business code.
 - `feat-058` remains `in_progress` for the ten-run frozen pilot. This baseline publication does not authorize P1, P2, automatic trading, or product redesign.
+
+## 2026-07-28 - approved portfolio refresh and after-close null-contract repair
+
+- Imported an owner-approved private broker snapshot through the existing preview/approval gate. The prior `portfolio.json` and `risk_watch_profile.json` were timestamp-backed up; beta classifications remain `unknown`, portfolio values remain private, and risk reconciliation remains visibly blocked.
+- Ran the Core monitors serially and generated fresh risk-watch, market-pulse, market-levels, ai-capex-watch, and final after-close JSON/Markdown/HTML artifacts. The exact private artifact remains local and ignored.
+- Reproduced a final-render blocker where an unavailable anchor-structure source produced `technology_definition: null` and `render_unified_decision_markdown()` attempted to iterate it. Added a focused regression test and normalized only that optional field to an empty iterable; no rule, risk budget, holding action, or trade authority changed.
+- Focused unified-decision and after-close reliability tests pass. The generated result remains strictly blocked because beta/risk reconciliation and holding context are incomplete.
+- Pilot observations retained for follow-up rather than hidden: one provider series appears to use an incompatible split/adjustment basis, and the Today headline could select a medium-priority item before a high-priority holding risk. Treat both as data/plan-mapping defects covered by synthetic minimal reproductions.
+
+## 2026-07-30 - latest risk-card prototype implemented for owner review
+
+- Created `codex/risk-card-workbench` and implemented the owner's latest prototype direction without promoting it into the frozen V3.0 baseline.
+- Upgraded Today into a single-action command surface: real workflow stages, one primary pending or blocked plan, the four-layer authority chain, holding impact, evidence/risk context, and a compact remaining-plan queue.
+- Upgraded Review into a decision-value workbench with core decision, exposure, and market modes plus 20/60/90/250-day controls. The current data contract truthfully renders decision value, drawdown change, execution deviation, account path, and baseline attribution as `unknown` or `blocked`.
+- Preserved the frozen four routes and the existing Portfolio and Lookup implementations. No fifth route, automatic trading, prototype return value, simulated chart, or synthetic runtime capability was added.
+- Fixed the evidence-strength computation to count matured T+20 decision episodes rather than summing overlapping T+1/T+5/T+20 signal windows.
+- Fresh private verification artifacts were generated locally. Sanitized visual and responsive results are recorded in `design-qa.md`; raw captures remain outside the public repository.
+- Owner visual review is the remaining acceptance step; `feat-058` stays `in_progress`, and the frozen V3.0 Pilot status is unchanged.
+
+## 2026-07-30 - feat-058 P0 blocked-state and data-contract repair
+
+- Reproduced the unusable real state: acknowledging all four blocked plan versions removed them from the pending queue, so Today appeared empty even though the blockers were unresolved.
+- Added a separate `today_plans` attention lane and `blocked_waiting` runtime state. A blocked acknowledgement remains visible as `继续等待`, cannot create an effective plan, and cannot enter monitoring or trade authority.
+- Replaced blanket blocker copying with structured per-plan mapping while retaining genuinely portfolio-wide risk-reconciliation constraints. High-priority holding risks now sort before medium-priority plans.
+- Preserved nested authoritative `source_time` independently from report `generated_at`; stale market-pulse and market-level evidence now shows its real 2026-07-28 15:00 source time plus a repair action, owner, and next check.
+- Added a price-basis guard and quarantined an incompatible historical threshold from Review instead of scoring it. The signal now exits tracked, matured, hit-rate, and average-effect aggregates; Review also disables its unavailable mode and horizon controls.
+- A final private artifact confirmed that unresolved blocked plans remain visible, pending-response counts stay separate, strict readiness remains fail-closed, and quarantined history does not affect outcome aggregates.
+- Verification passed: 42 focused tests, 260/260 full tests, compileall, project-memory validation, JSON validation, `git diff --check`, final desktop/mobile browser navigation and data-drawer checks, no document-level horizontal overflow, and zero browser warnings/errors. Source/runtime comparisons and the P0-P2 audit are in `design-qa.md`.
+- The independent product reviewer returned REVISE when the first quarantine label still contaminated outcome aggregates. After the statistical exclusion and regression test were added, the same reviewer returned PASS with no blocking finding. Its remaining non-blocking suggestion is also covered: an explicit upstream quarantine without a reason now remains fail-closed.
+- `feat-058` remains `in_progress` for owner re-review. No P1 research orchestration, P2 five-minute monitoring, fifth route, automatic trading, or public deployment was added.
+
+## 2026-07-30 - feat-058 decision evidence and local refresh service repair
+
+- Recorded the bounded P0 implementation plan in `docs/superpowers/plans/2026-07-30-risk-card-decision-service-p0.md` and committed it separately as `3a35549`; the initial technical-decision implementation was committed as `6aad17c`.
+- Added a provider-independent holding decision module. Cost and account P&L are now `reference_only`; completed daily bars determine MA20/MA60, slope, prior-20-day structure, ATR14, volume ratio, technical state, board-limit reachability, and complete repair/risk/wait branches.
+- Synthetic regression fixtures now prove that completed-bar structure drives repair/risk confirmation instead of cost or a fixed multiplier. Current weak-state UI says `降低仓位复核`; the repair action remains a separate conditional branch.
+- Added a decision-evidence contract with stable evidence ids, supports/opposes, counter-evidence, gaps, authority, plan linkage, and a concise conclusion: market stance, technology style, dividend style, risk score, major market level, industry transmission, and style evidence. Decision evidence and source-health repair remain separate drawers.
+- Portfolio import now atomically saves first and returns immediately with a background refresh id. A single-flight SQLite coordinator runs `market-levels -> risk-watch -> market-pulse -> style-rotation -> ai-capex-watch -> after-close`, persists step/error/restart state, and lets the UI poll or recover after reload. The workbench exposes stale-only and full refresh controls.
+- Browser QA against the real loopback service verified the four frozen routes, evidence drawer, data-health drawer, stale-source refresh `0/2 -> 1/2 -> automatic reload`, and the separate importer page. The refresh reduced limited sources from two to one without freezing the page.
+- Independent product re-review initially returned `REVISE` and identified four P0 gaps. The final implementation now computes blockers from `current_action`, quarantines undeclared >35% one-bar adjustment discontinuities, derives the top-level context gap from the same reliability predicate, and refuses refresh completion unless every step creates a new parseable artifact and final after-close creates a same-stem triplet bound to the saved `portfolio_version`.
+- A fresh private artifact confirmed that stale-only refresh can complete as one `after-close` step and SQLite binds the exact triplet to its matching `portfolio_version`; quarantined data remains blocked rather than ready. `feat-058` remains `in_progress` for owner re-review and the ten-run Pilot; there is still no automatic trade authority, fifth route, cloud dependency, or P1/P2 expansion.

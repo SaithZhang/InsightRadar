@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -81,6 +82,27 @@ class Portfolio:
     context_source: Path = DEFAULT_PORTFOLIO_CONTEXT_PATH
     context_missing: bool = False
     risk_reconciliation_status: str = "unverified"
+
+
+def portfolio_version(portfolio: Portfolio) -> str:
+    """Return a stable content version for refresh/report binding."""
+
+    payload = {
+        "cash": portfolio.cash,
+        "as_of": portfolio.as_of,
+        "missing": portfolio.missing,
+        "risk_reconciliation_status": portfolio.risk_reconciliation_status,
+        "holdings": [asdict(holding) for holding in portfolio.holdings],
+    }
+    digest = sha256(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        ).encode("utf-8")
+    ).hexdigest()
+    return f"portfolio-{digest[:16]}"
 
 
 def load_portfolio(path: Path = DEFAULT_PORTFOLIO_PATH) -> Portfolio:
@@ -313,6 +335,11 @@ def _load_position_contexts(path: Path) -> dict[str, dict[str, Any]]:
 def _merge_holding_context(holding: Holding, context: dict[str, Any]) -> Holding:
     if not context:
         return holding
+    context_conflict = _context_conflicts_with_snapshot(holding, context)
+    conflict_note = (
+        "旧持仓上下文与最新券商盈亏状态冲突，已停用原风险叙事；"
+        "请按当前技术结构和基本面证据重新确认。"
+    )
     return Holding(
         code=holding.code,
         name=holding.name or str(context.get("name", "")),
@@ -329,18 +356,71 @@ def _merge_holding_context(holding: Holding, context: dict[str, Any]) -> Holding
         market=holding.market,
         beta_classification=holding.beta_classification,
         thesis=str(context.get("buy_thesis") or context.get("thesis") or holding.thesis),
-        risk_line=str(context.get("current_risk_line") or context.get("risk_line") or holding.risk_line),
-        initial_risk_line=str(context.get("initial_risk_line") or holding.initial_risk_line),
+        risk_line=(
+            conflict_note
+            if context_conflict
+            else str(context.get("current_risk_line") or context.get("risk_line") or holding.risk_line)
+        ),
+        initial_risk_line=(
+            "旧风险线基于已失效的账户盈亏状态，待用户重建。"
+            if context_conflict
+            else str(context.get("initial_risk_line") or holding.initial_risk_line)
+        ),
         horizon=str(context.get("horizon") or holding.horizon),
-        review_status=str(context.get("review_status") or holding.review_status),
+        review_status=(
+            "stale_context"
+            if context_conflict
+            else str(context.get("review_status") or holding.review_status)
+        ),
         catalysts=_parse_string_list(context.get("catalysts", holding.catalysts)),
         falsification_signals=_parse_string_list(
             context.get("falsification_signals", holding.falsification_signals)
         ),
-        observation_window=str(context.get("observation_window") or holding.observation_window),
-        next_review_date=str(context.get("next_review_date") or holding.next_review_date),
+        observation_window=(
+            ""
+            if context_conflict
+            else str(context.get("observation_window") or holding.observation_window)
+        ),
+        next_review_date=(
+            ""
+            if context_conflict
+            else str(context.get("next_review_date") or holding.next_review_date)
+        ),
         adjustment_records=_parse_adjustment_records(context.get("adjustments", holding.adjustment_records)),
     )
+
+
+def _context_conflicts_with_snapshot(
+    holding: Holding,
+    context: dict[str, Any],
+) -> bool:
+    """Reject account-state narratives contradicted by the latest broker row."""
+
+    pnl_pct = holding.pnl_pct
+    if pnl_pct is None:
+        return False
+    review_status = str(context.get("review_status") or "").lower()
+    account_text = " ".join(
+        str(context.get(key) or "")
+        for key in (
+            "initial_risk_line",
+            "current_risk_line",
+            "risk_line",
+            "observation_window",
+        )
+    )
+    profit_context = (
+        review_status in {"profit_protect", "take_profit", "protect_profit"}
+        or "浮盈" in account_text
+        or "止盈" in account_text
+        or "保护利润" in account_text
+    )
+    loss_context = (
+        review_status in {"loss_review", "deep_drawdown"}
+        or "深度回撤" in account_text
+        or "亏损" in account_text
+    )
+    return (pnl_pct < 0 and profit_context) or (pnl_pct > 0 and loss_context)
 
 
 def _parse_adjustment_records(value: Any) -> tuple[AdjustmentRecord, ...]:

@@ -52,12 +52,16 @@ class OneClickLauncherTests(unittest.TestCase):
         self.assertIn('id="file"', html)
         self.assertIn("/api/preview", html)
         self.assertIn("/api/apply", html)
+        self.assertIn("/api/refresh/", html)
         self.assertIn("/api/shutdown", html)
         self.assertIn("X-InsightRadar-Token", html)
         self.assertIn("127.0.0.1", html)
         self.assertIn('id="beta-selectors"', html)
         self.assertIn('class="output"', html)
         self.assertIn("renderPreview", html)
+        self.assertIn("pollRefresh", html)
+        self.assertIn("后台刷新已取得任务号", html)
+        self.assertNotIn("正在原子保存并串行刷新，请勿关闭本页", html)
         self.assertNotIn("JSON.stringify(last,null,2)", html)
         self.assertIn("high_beta", html)
         self.assertIn("normal", html)
@@ -130,7 +134,11 @@ class OneClickLauncherTests(unittest.TestCase):
             ),
             patch("webbrowser.open") as open_browser,
         ):
-            serve_portfolio_import(port=8876, open_browser=True)
+            serve_portfolio_import(
+                port=8876,
+                open_browser=True,
+                refresh_coordinator=object(),  # Handler is not exercised here.
+            )
 
         self.assertEqual(state["address"], ("127.0.0.1", 8876))
         self.assertTrue(state["served"])
