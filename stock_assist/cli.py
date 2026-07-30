@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 
 from stock_assist.branding import PRODUCT_NAME, PRODUCT_TAGLINE
+from stock_assist.after_close_workbench_html import render_after_close_workbench
 from stock_assist.collectors.twitter_cli import collect_user_posts
 from stock_assist.collectors.twitter_observations import sync_observations_from_twitter_raw
 from stock_assist.data_sources.nga import clear_cookie, default_cookie_path, load_cookie, save_cookie
@@ -125,6 +126,7 @@ def main(argv: list[str] | None = None) -> int:
             workspace = payload.get("decision_workspace")
             if isinstance(workspace, dict):
                 workspace["plan_version_history"] = record_plan_versions(workspace)
+                html_content = render_after_close_workbench(payload, md_content)
             json_path, md_path, html_path = write_payload_report_triplet("after-close", payload, md_content, html_content)
             path = f"{json_path}\n{md_path}\n{html_path}"
         elif args.command == "portfolio-import":

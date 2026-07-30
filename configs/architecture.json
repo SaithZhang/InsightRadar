@@ -64,10 +64,10 @@
       "status": "active",
       "commands": ["portfolio-import"],
       "command": "python -m stock_assist.cli portfolio-import --serve",
-      "summary": "真实持仓、成本、风险线、显式beta分类和组合风险对账的本地来源；批准后原子保存并串行重跑。",
+      "summary": "真实持仓、成本、风险线、显式beta分类和组合风险对账的本地来源；批准后先原子保存，再由本地异步任务串行刷新，并以新产物、同stem三件套和portfolio_version校验完成态。",
       "inputs": ["券商TSV", "明确保存批准", "显式beta分类", "人工研究上下文"],
-      "outputs": ["原子portfolio.json", "风险画像同步", "可恢复备份", "当前持仓与风险状态"],
-      "next": ["继续保持私有且不入库", "不根据代码猜测高beta", "不连接实盘下单"]
+      "outputs": ["原子portfolio.json", "风险画像同步", "可恢复备份", "SQLite刷新任务与证据/计划镜像", "当前持仓与风险状态"],
+      "next": ["继续保持私有且不入库", "不根据代码猜测高beta", "不连接实盘下单", "保持保存与刷新事务分离"]
     },
     {
       "id": "research_monitor",
@@ -246,9 +246,9 @@
       "status": "active",
       "commands": ["after-close"],
       "command": "python -m stock_assist.cli after-close",
-      "summary": "把正式/候选评分状态机、持仓动作、风险、市场点位、风格轮动和产业证据合并成一个可审计的次日条件计划。",
+      "summary": "把正式/候选评分状态机、技术结构、持仓动作、风险、市场点位、风格轮动和产业证据合并成一个可审计的次日条件计划。",
       "inputs": ["真实持仓与风险对账", "行情与公告", "研报变化", "risk-watch", "market-pulse国家队代理", "market-levels", "style-rotation", "ai-capex-watch"],
-      "outputs": ["after-close JSON/Markdown/HTML", "additive market-matrix contract with bounded 30-session trajectories", "self-contained five-route after-close decision workbench", "评分账单与market_level_state决策权", "首屏操盘条", "四时点时间轴", "100股整数手执行建议", "风格确认矩阵", "开盘/上行/震荡/下行情景"],
+      "outputs": ["after-close JSON/Markdown/HTML", "成本仅作reference_only的技术决策契约", "稳定ID关联的决策证据链", "additive market-matrix contract with bounded 30-session trajectories", "self-contained four-task after-close decision workbench", "评分账单与market_level_state决策权", "首屏操盘条", "四时点时间轴", "100股整数手执行建议", "风格确认矩阵", "修复/风险/继续等待三分支"],
       "next": ["继续保持条件语言", "用结果账本校准而非凭印象调参"]
     },
     {

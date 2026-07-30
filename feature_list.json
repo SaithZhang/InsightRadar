@@ -630,6 +630,16 @@
         ],
         "deferred": ["P1", "P2", "ordinary_experience_improvements"]
       }
+      ,"risk_card_workbench_branch": {
+        "date": "2026-07-30",
+        "status": "p0_decision_service_implemented",
+        "branch": "codex/risk-card-workbench",
+        "reference": "D:\\work\\ir_design\\insightradar-risk-card-prototype",
+        "scope": "Upgrade the frozen Today and Review routes to the latest action-command and decision-value-review hierarchy while preserving Portfolio, Lookup, the four-route frame, and human trade authority.",
+        "truth_boundary": "Prototype performance values and simulated curves are not copied; missing decision-value inputs remain unknown or blocked.",
+        "repair_scope": "Use completed daily bars for cost-invariant repair/risk/wait branches; keep cost reference-only; quarantine undeclared adjustment discontinuities; add plan-linked decision evidence and a concise market/style conclusion; save imports before an idempotent SQLite-backed serial refresh that includes ai-capex-watch; require a new parseable artifact per step plus a same-stem after-close triplet bound to portfolio_version; expose active/progress/failure state without blocking the page.",
+        "evidence": "The decision contract uses completed bars and keeps cost authority reference_only; a synthetic regression fixture proves that an undeclared large one-bar discontinuity is quarantined. Loopback browser QA verified the four frozen routes, separate evidence/source-health drawers, asynchronous refresh progress, automatic one-time reload, and a completed SQLite run bound to the matching portfolio_version and exact same-stem report triplet. Private portfolio artifacts remain local; feat-058 stays in_progress for owner re-review and the ten-run Pilot."
+      }
     }
   ]
 }

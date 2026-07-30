@@ -18,6 +18,7 @@ from stock_assist.decision_workspace import build_decision_workspace
 from stock_assist.paths import CONFIG_DIR, DATA_DIR, REPORT_DIR
 from stock_assist.portfolio import Holding, Portfolio, load_portfolio
 from stock_assist.execution_plans import build_holding_execution_plans
+from stock_assist.holding_decision import HoldingDecision, build_holding_decision
 from stock_assist.report_payload import create_report_payload, first_markdown_title, markdown_sections, section_items
 from stock_assist.reports import bullet
 from stock_assist.signal_outcomes import (
@@ -42,6 +43,7 @@ class HoldingSignal:
     downside_trigger: str = ""
     flat_trigger: str = ""
     priority: str = "中"
+    decision_contract: dict[str, object] | None = None
 
 
 LITHIUM_PEERS = {
@@ -140,7 +142,7 @@ def build_after_close_report(
         missing_context = [
             holding.name or holding.code
             for holding in portfolio.holdings
-            if not holding.thesis or not holding.initial_risk_line or not holding.review_status
+            if not _holding_context_complete(holding)
         ]
         if missing_context:
             gaps.append(f"部分持仓上下文未补全：{', '.join(missing_context)}")
@@ -219,6 +221,15 @@ def build_after_close_report(
                 lines.append(f"- 震荡处理：{signal.flat_trigger}")
             if signal.priority:
                 lines.append(f"- 明日优先级：{signal.priority}")
+            if signal.decision_contract:
+                lines.append(
+                    "- 决策契约："
+                    + json.dumps(
+                        signal.decision_contract,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                )
     else:
         lines.append("- 暂无持仓动作。")
 
@@ -520,13 +531,15 @@ def _holding_context_complete(holding: Holding) -> bool:
     required = (holding.thesis, holding.initial_risk_line, holding.risk_line, holding.review_status)
     if not all(value.strip() for value in required):
         return False
+    if holding.review_status in {"needs_context", "stale_context"}:
+        return False
     initial = holding.initial_risk_line
     return not any(marker in initial for marker in ("待补", "未提供", "未知"))
 
 
 def _build_core_reliability(
     portfolio: Portfolio,
-    actions: list[dict[str, str]],
+    actions: list[dict[str, object]],
     outcome_snapshot: dict[str, object],
     data_gaps: list[str],
     optional_gaps: list[str],
@@ -1354,7 +1367,7 @@ def _frame_for_code(raw: object, code: str) -> pd.DataFrame:
     return pd.DataFrame()
 
 
-def _signal_for_holding(holding: Holding, frame: pd.DataFrame) -> HoldingSignal:
+def _legacy_basic_signal_for_holding(holding: Holding, frame: pd.DataFrame) -> HoldingSignal:
     if frame.empty:
         return HoldingSignal(holding, "等待", "未取到该股票行情。", "补充日线行情")
 
@@ -1372,8 +1385,6 @@ def _signal_for_holding(holding: Holding, frame: pd.DataFrame) -> HoldingSignal:
     ma60 = float(closes.tail(min(60, len(closes))).mean())
     change_5 = last / float(closes.tail(6).iloc[0]) - 1 if len(closes) >= 6 else 0.0
 
-    if holding.cost and last < holding.cost * 0.92:
-        return HoldingSignal(holding, "减仓/退出复核", f"最近有效收盘价较成本回撤超过 8%，收盘价 {last:.2f}。")
     if last < ma20 and ma20 < ma60:
         return HoldingSignal(holding, "降低仓位", f"价格低于 20 日线且 20 日线弱于中期均线，收盘价 {last:.2f}。")
     if last > ma20 and change_5 > 0.05:
@@ -1389,7 +1400,7 @@ def _pick_column(frame: pd.DataFrame, names: list[str]) -> str | None:
     return None
 
 
-def _signal_for_holding(holding: Holding, frame: pd.DataFrame) -> HoldingSignal:  # type: ignore[no-redef]
+def _legacy_signal_for_holding(holding: Holding, frame: pd.DataFrame) -> HoldingSignal:
     if frame.empty:
         return HoldingSignal(
             holding,
@@ -1433,32 +1444,37 @@ def _signal_for_holding(holding: Holding, frame: pd.DataFrame) -> HoldingSignal:
         )
 
     last = float(closes.iloc[-1])
+    broker_price = holding.market_price
+    if (
+        broker_price is not None
+        and broker_price > 0
+        and abs(last / broker_price - 1.0) > 0.35
+    ):
+        return HoldingSignal(
+            holding,
+            "等待数据，不做主动交易",
+            (
+                f"日线收盘价 {last:.2f} 与券商快照 {broker_price:.2f} "
+                "偏差超过35%，疑似复权或标的映射口径不一致。"
+            ),
+            "行情复权/映射口径待核对",
+            "不使用当前均线或价格阈值生成仓位动作。",
+            "同一标的、同一复权口径的收盘价与券商快照完成对账后再恢复判断。",
+            "若账户已有人工风控线，只按人工风控线处理，不采用当前模型阈值。",
+            "继续等待数据修复，不补仓、不追涨。",
+            "高",
+        )
     ma20 = float(closes.tail(20).mean())
     ma60 = float(closes.tail(min(60, len(closes))).mean())
     prev = float(closes.tail(6).iloc[0]) if len(closes) >= 6 else last
     change_5 = last / prev - 1 if prev > 0 else 0.0
     weight = holding.weight_pct or 0.0
     pnl_pct = holding.pnl_pct or 0.0
-    cost = holding.cost
-
     high_weight = weight >= 40
     profit_protect = pnl_pct >= 35
     below_ma20 = last < ma20
     above_ma20 = last >= ma20
     ma20_gap = abs(last / ma20 - 1) if ma20 > 0 else 0.0
-
-    if cost and last < cost * 0.92:
-        return HoldingSignal(
-            holding,
-            "减仓/退出复核",
-            f"收盘价 {last:.2f} 较成本 {cost:.2f} 回撤超过8%，已经触发亏损纪律。",
-            "",
-            "明日若不能快速收回成本回撤区间，先降1/3仓位；若继续放量下跌，复核退出。",
-            f"若重新站回成本 {cost:.2f} 上方且板块同步修复，再从退出复核降为观察。",
-            f"若跌破 {last * 0.97:.2f} 或低开后继续走弱，优先执行减仓。",
-            "震荡但不能收回成本区间时，不补仓。",
-            "高",
-        )
 
     if below_ma20 and ma20 < ma60:
         return HoldingSignal(
@@ -1468,7 +1484,7 @@ def _signal_for_holding(holding: Holding, frame: pd.DataFrame) -> HoldingSignal:
             "",
             "不加仓；若明日不能收回20日线，先降1/4到1/3仓位。",
             f"若放量站回20日线 {ma20:.2f} 上方，再改为持有观察。",
-            f"若跌破 {last * 0.97:.2f} 或板块同步转弱，执行降仓。",
+            f"若跌破20日线 {ma20:.2f} 且板块同步转弱，执行降仓。",
             "横盘但仍低于20日线时，只观察不补仓。",
             "高",
         )
@@ -1520,7 +1536,7 @@ def _signal_for_holding(holding: Holding, frame: pd.DataFrame) -> HoldingSignal:
             "",
             "不加仓；等重新站回20日线后再提高信心。",
             f"若放量站回20日线 {ma20:.2f} 上方，继续持有观察。",
-            f"若跌破 {last * 0.97:.2f} 或板块明显转弱，先降1/4仓位。",
+            f"若跌破前20日技术支撑或板块明显转弱，先降1/4仓位。",
             "若围绕20日线下方震荡，保持仓位不动，等待确认。",
             "中",
         )
@@ -1538,11 +1554,45 @@ def _signal_for_holding(holding: Holding, frame: pd.DataFrame) -> HoldingSignal:
     )
 
 
-def _signal_from_broker_snapshot(holding: Holding) -> HoldingSignal:  # type: ignore[no-redef]
+def _signal_for_holding(holding: Holding, frame: pd.DataFrame) -> HoldingSignal:  # type: ignore[no-redef]
+    decision = build_holding_decision(holding, frame)
+    return _decision_to_signal(holding, decision)
+
+
+def _decision_to_signal(
+    holding: Holding,
+    decision: HoldingDecision,
+) -> HoldingSignal:
+    repair = decision.branch("repair_observe")
+    risk = decision.branch("risk_reduce_review")
+    waiting = decision.branch("continue_waiting")
+    return HoldingSignal(
+        holding=holding,
+        action=decision.action,
+        reason=decision.reason,
+        data_gap=decision.data_gap,
+        position_action=decision.position_action,
+        upside_trigger=(
+            f"{repair.trigger} 持续条件：{repair.persistence} "
+            f"动作：{repair.action} 失效：{repair.invalidation}"
+        ),
+        downside_trigger=(
+            f"{risk.trigger} 持续条件：{risk.persistence} "
+            f"动作：{risk.action} 失效：{risk.invalidation}"
+        ),
+        flat_trigger=(
+            f"{waiting.trigger} 持续条件：{waiting.persistence} "
+            f"动作：{waiting.action} 失效：{waiting.invalidation}"
+        ),
+        priority=decision.priority,
+        decision_contract=decision.to_contract(),
+    )
+
+
+def _legacy_signal_from_broker_snapshot(holding: Holding) -> HoldingSignal:
     weight = holding.weight_pct or 0.0
     pnl_pct = holding.pnl_pct or 0.0
     day_pnl_pct = holding.day_pnl_pct or 0.0
-    price = holding.market_price
     reasons: list[str] = []
     if weight >= 40:
         reasons.append(f"仓位约 {weight:.1f}%，单票集中度偏高")
@@ -1569,23 +1619,31 @@ def _signal_from_broker_snapshot(holding: Holding) -> HoldingSignal:  # type: ig
         action = "持有观察"
         position_action = "维持仓位，等行情数据恢复后再判断趋势。"
         priority = "中"
-    price_text = f"{price:.2f}" if price is not None else "当前价"
     return HoldingSignal(
         holding=holding,
         action=action,
         reason=reason,
         data_gap="未接入实时行情和公告，当前仅基于券商复制持仓快照。",
         position_action=position_action,
-        upside_trigger=f"若放量走强并站稳 {price_text} 上方，继续持有。",
+        upside_trigger="日线行情与复权口径恢复后，再按技术结构形成修复条件。",
         downside_trigger="若跌破人工风控线或单日放量下跌，先降风险。",
         flat_trigger="震荡时不加仓，优先等数据恢复。",
         priority=priority,
     )
 
 
-def _payload_action_lines(markdown: str) -> list[dict[str, str]]:  # type: ignore[no-redef]
-    actions: list[dict[str, str]] = []
-    current: dict[str, str] | None = None
+def _signal_from_broker_snapshot(holding: Holding) -> HoldingSignal:  # type: ignore[no-redef]
+    """Fail closed when the provider is unavailable; broker P&L is not a level."""
+
+    return _decision_to_signal(
+        holding,
+        build_holding_decision(holding, pd.DataFrame()),
+    )
+
+
+def _payload_action_lines(markdown: str) -> list[dict[str, object]]:  # type: ignore[no-redef]
+    actions: list[dict[str, object]] = []
+    current: dict[str, object] | None = None
     field_map = {
         "建议动作": "action",
         "核心理由": "reason",
@@ -1609,6 +1667,14 @@ def _payload_action_lines(markdown: str) -> list[dict[str, str]]:  # type: ignor
         if current is None or not line.startswith("- "):
             continue
         text = line[2:].strip()
+        if text.startswith("决策契约："):
+            try:
+                contract = json.loads(text[len("决策契约：") :].strip())
+            except json.JSONDecodeError:
+                contract = None
+            if isinstance(contract, dict):
+                current["decision_contract"] = contract
+            continue
         for label, field in field_map.items():
             prefix = f"{label}："
             if text.startswith(prefix):

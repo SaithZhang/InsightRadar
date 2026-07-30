@@ -1314,3 +1314,33 @@ Completion update:
 - Audit-only Ruff and Mypy checks remain red with 301 and 377 findings respectively. Treat these as existing technical debt; do not perform a broad cleanup during the frozen pilot.
 - Keep all real holdings, account state, generated reports, runtime ledgers, cookies, tokens, raw screenshots, databases, and caches local. The fresh real artifact `reports/20260725-160125-after-close.*` is verification evidence only and must not be published.
 - The public repository must start from a fresh sanitized history. Retain the 98-commit legacy history locally; do not force-push, rewrite, or publish it.
+
+## 2026-07-30 Handoff - risk-card workbench branch ready for owner review
+
+- Branch: `codex/risk-card-workbench`. This is an owner-requested implementation of a private local prototype, not an implicit V3.0 baseline promotion.
+- Acceptance used a loopback-only service and a private local report triplet; neither runtime data nor raw captures belong in the public repository.
+- Today now follows the latest action-command hierarchy while retaining the production decision-workspace contract and version-scoped response API.
+- Review now follows the latest decision-value layout but blocks the curve and attribution until the required account, execution, point-in-time proxy, and no-action-baseline evidence exists. Current evidence strength is correctly based on matured T+20 decision episodes.
+- Portfolio and Lookup were intentionally preserved. The product still has exactly four first-level routes and no trade authority.
+- Visual comparison, responsive evidence, interaction coverage, and final diagnostics are recorded in `design-qa.md`; its latest section ends with `final result: passed`.
+- Pre-existing uncommitted unified-decision null-contract repair and CNInfo files were preserved and not folded into this implementation. Wait for owner visual acceptance before merging or changing the frozen-version documents.
+
+## 2026-07-30 Handoff - P0 repair ready for owner re-review
+
+- Branch: `codex/risk-card-workbench`. The latest verified artifact and local QA entry remain private and loopback-only.
+- Today now distinguishes pending responses from unresolved blocked attention. All four acknowledged blocked plans remain visible, the primary branch is `继续等待`, and Portfolio shows four items requiring attention instead of a false zero.
+- Blockers are attached per plan unless genuinely portfolio-wide. Authoritative source timestamps remain separate from report generation time. An incompatible historical price basis is visibly quarantined from Review and excluded from all outcome aggregates.
+- Review has no fake interaction: comparison and horizon buttons are disabled until the required series exists; decision value, drawdown, execution, and baseline fields remain `unknown` or `blocked`.
+- Verification is green: 42 focused tests, 260/260 full tests, compileall, project-memory validation, JSON validation, diff check, desktop/mobile browser QA, empty browser warning/error log, and final source/runtime comparisons in `design-qa.md`.
+- Independent product re-audit returned PASS after verifying that a quarantined record is retained only as quarantine evidence and no longer affects tracked, matured, hit-rate, average-effect, or ordinary latest rows.
+- Keep `feat-058` `in_progress` until owner re-review. P1/P2, public deployment, automatic execution, and frozen-scope expansion remain out of scope.
+- Raw CNInfo query artifacts remain private and ignored. The earlier unified-decision null-contract fix is part of the now-verified source/test files.
+
+## 2026-07-30 Handoff - decision service and restartable refresh ready for owner re-review
+
+- Branch: `codex/risk-card-workbench`. The implementation plan, technical-decision repair, and latest private artifact were verified locally.
+- The active holding state is no longer the repair branch. Synthetic regression fixtures prove that the current card can say `降低仓位复核`, with its next confirmation derived from prior completed-bar structure while cost remains explanation-only.
+- The Today conclusion now combines market risk, market levels, AI-capex transmission, and style rotation with explicit confidence and counter-evidence. Each holding has stable, plan-linked technical evidence with source time and gaps; source availability remains in a separate repair drawer.
+- Portfolio import saves atomically before returning HTTP 202. The SQLite-backed single-flight coordinator persists refresh runs/steps/source snapshots/evidence/plan versions/user responses and serially includes `ai-capex-watch` before the final `after-close`. It now requires a new parseable artifact per step plus a same-stem final triplet whose embedded `portfolio_version` matches the refresh-start snapshot.
+- Real browser QA verified non-blocking progress, duplicate-refresh prevention, one-time automatic reload, persistent failed/interrupted visibility, and a completed one-step stale refresh bound to the exact private artifact. An anomalous provider series is quarantined because it contains an undeclared large one-bar discontinuity. Keep `feat-058` in progress until owner acceptance; do not add automatic execution, a fifth route, hosted multi-user infrastructure, P1, or P2.
+- Keep raw CNInfo query artifacts private and ignored.

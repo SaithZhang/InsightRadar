@@ -18,7 +18,14 @@ from stock_assist.portfolio import BROKER_HEADER_ALIASES, load_portfolio, parse_
 DEFAULT_PORTFOLIO_PATH = DATA_DIR / "portfolio.json"
 DEFAULT_RISK_PROFILE_PATH = DATA_DIR / "risk_watch_profile.json"
 VALID_BETA_CLASSES = {"high_beta", "normal", "unknown"}
-REQUIRED_RERUN_WORKFLOWS = ("market-levels", "risk-watch", "market-pulse", "style-rotation", "after-close")
+REQUIRED_RERUN_WORKFLOWS = (
+    "market-levels",
+    "risk-watch",
+    "market-pulse",
+    "style-rotation",
+    "ai-capex-watch",
+    "after-close",
+)
 
 
 def preview_portfolio_import(

@@ -187,7 +187,7 @@ def render_unified_decision_markdown(decision: dict[str, object]) -> str:
                 f"- 锚点股票池：返回 {structure.get('returned_unique_count', 'NA')}，锚点后上市剔除 {structure.get('post_anchor_listing_count', 'NA')}，上市日期缺失 {structure.get('missing_listing_date_count', 'NA')}。",
                 f"- 等权等效上证：{_level_text(structure.get('equal_weight_equivalent_point'))}；中位数股票等效：{_level_text(structure.get('median_equivalent_point'))}；官方上证：{_level_text(structure.get('benchmark_current_close'))}。",
                 f"- 指数偏离：官方区间 {_pct_ratio(structure.get('benchmark_return'))}，固定股票池等权 {_pct_ratio(structure.get('equal_weight_return'))}，差 {_pct_ratio(structure.get('benchmark_equal_weight_gap'))}。",
-                f"- 3900只审计：{_claim_text(structure.get('claim_3900_status'))}；科技定义 {','.join(str(item) for item in structure.get('technology_definition', [])) or '待确认'}。",
+                f"- 3900只审计：{_claim_text(structure.get('claim_3900_status'))}；科技定义 {','.join(str(item) for item in (structure.get('technology_definition') or [])) or '待确认'}。",
             ]
         )
     style = decision.get("style_rotation") if isinstance(decision.get("style_rotation"), dict) else {}
@@ -309,14 +309,58 @@ def _load_monitor_sources(
         stale = age_days is None or age_days > 4
         if stale:
             gaps.append(f"{path.name} 已超过4天或缺少生成时间，只能作为旧证据。")
+        source_time = _source_time_for_payload(key, payload)
         sources[key] = {
             "path": path,
             "payload": payload,
             "generated_at": payload.get("generated_at"),
-            "as_of": payload.get("as_of"),
+            "as_of": payload.get("as_of") or source_time,
+            "source_time": source_time,
             "stale": stale,
         }
     return sources, gaps
+
+
+def _source_time_for_payload(key: str, payload: dict[str, object]) -> str | None:
+    """Resolve an evidence timestamp without treating report generation as market time."""
+
+    direct = payload.get("source_time") or payload.get("as_of")
+    if direct:
+        return str(direct)
+
+    candidates: list[str] = []
+    if key == "risk_watch":
+        latest = payload.get("latest")
+        if isinstance(latest, dict):
+            if latest.get("as_of"):
+                candidates.append(str(latest["as_of"]))
+            metrics = latest.get("metrics")
+            for item in metrics.values() if isinstance(metrics, dict) else []:
+                if isinstance(item, dict) and item.get("as_of"):
+                    candidates.append(str(item["as_of"]))
+    elif key == "market_pulse":
+        for item in payload.get("indexes", []) if isinstance(payload.get("indexes"), list) else []:
+            if isinstance(item, dict) and item.get("update_time"):
+                candidates.append(str(item["update_time"]))
+        for item in payload.get("futures_basis", []) if isinstance(payload.get("futures_basis"), list) else []:
+            if not isinstance(item, dict):
+                continue
+            value = item.get("current_time") or item.get("as_of_date")
+            if value:
+                candidates.append(str(value))
+        state_team = payload.get("state_team_etf_proxy")
+        if isinstance(state_team, dict) and state_team.get("as_of"):
+            candidates.append(str(state_team["as_of"]))
+    elif key == "market_levels":
+        for item in payload.get("timeframes", []) if isinstance(payload.get("timeframes"), list) else []:
+            if isinstance(item, dict) and item.get("as_of"):
+                candidates.append(str(item["as_of"]))
+    elif key == "style_rotation":
+        for item in payload.get("proxies", []) if isinstance(payload.get("proxies"), list) else []:
+            if isinstance(item, dict) and item.get("as_of"):
+                candidates.append(str(item["as_of"]))
+
+    return max(candidates) if candidates else None
 
 
 def _risk_context(payload: object) -> dict[str, object]:
@@ -916,12 +960,14 @@ def _source_summary(key: str, source: object) -> dict[str, object]:
     if not isinstance(source, dict):
         return {"workflow": key, "status": "missing"}
     path = source.get("path")
+    source_time = source.get("source_time") or source.get("as_of")
     return {
         "workflow": key,
         "status": "stale" if source.get("stale") else "current",
         "path": str(path) if isinstance(path, Path) else str(path or ""),
         "generated_at": source.get("generated_at"),
-        "as_of": source.get("as_of"),
+        "source_time": source_time,
+        "as_of": source.get("as_of") or source_time,
     }
 
 

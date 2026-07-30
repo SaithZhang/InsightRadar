@@ -114,8 +114,21 @@ class PortfolioImportTests(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0, stdout=f"{command[-1]} ok", stderr="")
 
         results = rerun_required_workflows(runner=runner)
-        self.assertEqual(calls, ["market-levels", "risk-watch", "market-pulse", "style-rotation", "after-close"])
-        self.assertEqual([item["returncode"] for item in results], [0, 0, 0, 0, 0])
+        self.assertEqual(
+            calls,
+            [
+                "market-levels",
+                "risk-watch",
+                "market-pulse",
+                "style-rotation",
+                "ai-capex-watch",
+                "after-close",
+            ],
+        )
+        self.assertEqual(
+            [item["returncode"] for item in results],
+            [0, 0, 0, 0, 0, 0],
+        )
 
     def test_board_lot_floor_never_overshoots_ratio_or_available_shares(self) -> None:
         too_small = calculate_executable_trim(100, 100, 0.25)

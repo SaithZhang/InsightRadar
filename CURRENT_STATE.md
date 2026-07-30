@@ -5,7 +5,7 @@ This is the bounded startup snapshot. Read it after `PROJECT_MEMORY.md`; load ch
 <!-- current-state-manifest
 {
   "schema_version": "insight-radar-current-state/v1",
-  "updated_at": "2026-07-25",
+  "updated_at": "2026-07-30",
   "next_feature_id": "feat-058",
   "product_charter": "docs/product-charter.md",
   "architecture_source": "configs/architecture.json",
@@ -51,11 +51,11 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 - `feat-037` passed: fresh post-migration Core workflows now run from `D:\work\InsightRadar`. After-close exposes structural versus strict decision-ready coverage; market-pulse degrades to a bounded explicit-gap report outside live session instead of hanging; market-level synthesis tolerates timeframes without a qualifying support zone.
 - `feat-057` passed: `risk-watch` now exposes independent energy, duration, and Korea macro-transmission states with no-lookahead calibration and `diagnostic_only` authority. The real 2026-07-23 run retained 5/7 macro series after Yahoo SP500/QQQ timeouts, so event count is 0 and calibration is insufficient; the causal thesis is not confirmed and no risk/trade output changes.
 - No factor champion exists. Current factor rankings are diagnostic only and cannot influence `after-close` actions.
-- Current holdings come from the approved 2026-07-22 three-holding snapshot; missing fields remain unknown. Its risk reconciliation is blocked, so strict readiness is 0/3.
+- Current holdings come from an owner-approved private broker snapshot. Position details and aggregate exposure remain local; beta classifications and incomplete context remain unknown, risk reconciliation is blocked, and strict readiness remains fail-closed.
 
 ## Next Feature
 
-- `feat-058` is the sole active experiment for the ten-run Pilot. P0 is accepted and scope-frozen; evidence is `reports/20260725-010125-after-close.*`, 250/250 tests, and zero browser runtime/console errors. Only data, plan-mapping, persistence, security, or core-flow defects may change during the trial. Ordinary feedback is logged; P1/P2 remain unstarted until the consolidated review.
+- `feat-058` is the sole active experiment for the ten-run Pilot. The decision-service repair now derives cost-invariant repair/risk/wait branches from completed daily bars, quarantines undeclared adjustment discontinuities, links evidence to plans, and saves imports before an idempotent SQLite-backed serial refresh. Completion requires new artifacts plus a same-stem triplet bound to `portfolio_version`. Private runtime evidence and loopback interaction QA passed; owner re-review is pending and P1/P2 remain unstarted.
 - `feat-056` remains pending and the sole queued Harness experiment; no pilot or benchmark run has started.
 - `feat-057` is complete but remains an unpromoted diagnostic layer until adequate independent events, held-out outcomes, stable thresholds, primary-source event evidence, and reliable source coverage exist.
 - `feat-044` and `feat-055` remain pending outside the Harness queue and are not authorized to jump ahead of the Harness program without explicit reprioritization.
@@ -68,16 +68,16 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 ## Known Gaps
 
 - Codex config and the weekday brief target `D:\work\InsightRadar`. The old `%USERPROFILE%\Documents\stock-assist` root remains empty but process-locked; do not force-delete it.
-- The project `.venv` and AmazingData connectivity are restored. `reports/20260724-171413-after-close.*` has 3/3 structural actions but 0/3 strict readiness; re-import a current broker snapshot with weights and explicit beta classes, then complete missing context.
+- The project `.venv` and AmazingData connectivity are restored. The latest private report has structural actions but no strictly ready holding; complete explicit beta/risk reconciliation and all stale or missing holding contexts before any blocked plan can gain authority. One provider series is separately quarantined until its adjustment basis is reconciled.
 - The weekend `market-pulse` now contains eight dated IF/IH/IC/IM 2608/2609 close-basis rows, while Eastmoney index/ETF snapshots still closed connections and realtime AmazingData remains session-gated. Derivative context is valid through 2026-07-17, but the report is still a partial after-close diagnostic, not live direction.
 - The four-ETF state-team proxy is current through 2026-07-17, but 2015-era CSF/Huijin direct stock holdings and ETF in-kind redemption destinations remain unverified; a full direct-holding check must wait for the 2026 interim-report disclosure set.
 - Galaxy/AmazingData is not a universal ARM macOS/Linux runtime. Iwencai is now a guarded local Core source for fixed-anchor breadth and completed-close futures basis under ADR-0008, but cross-platform execution, multi-day reconciliation, latency/quota measurement, and supply-chain gates remain open; do not describe it as cloud/universal production readiness.
 - Point-in-time industry/free-float exposure coverage and neutralization are incomplete.
-- Signal-outcome samples are still maturing; product-quality claims require visible sample counts and benchmark-relative results.
+- Signal-outcome samples are still maturing; product-quality claims require visible sample counts and benchmark-relative results. One historical plan is quarantined from Review because its 20-day threshold and the current broker price use incompatible bases.
 - Cloud deployment, production Docker work, WSL/macOS migration, and new clients are deferred by ADR-0006 until Core reliability and outcome-value gates pass. The canonical product continues locally on Windows; portability remains a later option rather than the active roadmap.
 - Portfolio attribution and event-to-position alerting remain roadmap work.
 - A-share turnover concentration currently has only as-of snapshots, not a mature daily percentile history. Futu community feeds provide timestamped text but no interaction fields; long-horizon narrative/FOMO ratios must accumulate point-in-time samples before they can influence Core risk scores.
-- The market-regime state machine is transparent and persisted but still `diagnostic_unbacktested`; rule thresholds are not calibrated against forward returns, drawdown, or regime persistence. Crowding has fewer than 20 archived daily observations and is not a historical percentile. Portfolio import remains blocked until the user approves a current file and explicitly classifies beta/risk weights; the service never infers these from ticker codes.
+- The market-regime state machine is transparent and persisted but still `diagnostic_unbacktested`; rule thresholds are not calibrated against forward returns, drawdown, or regime persistence. Crowding has fewer than 20 archived daily observations and is not a historical percentile. The current portfolio file is approved, but risk reconciliation remains blocked until beta classifications and missing holding context are explicitly completed; the service never infers these from ticker codes.
 - Style-rotation history currently comes from public ETF K-lines. Turnover is an explicit `close * volume` approximation, earnings confirmation is unavailable, and only three persistence sessions exist; the current financial lead/technology weakness remains a conflict diagnosis rather than a confirmed lasting switch.
 - The 9·24 anchor-width result is a single-provider, single-anchor diagnostic. It has full current query coverage and adjusted interval returns, but it is not a survivorship-free rolling history or an official-index contribution decomposition; arithmetic equal-weight output is skew-sensitive, so the median-stock equivalent remains visible beside it.
 - `ai-capex-watch` currently uses timestamped, manually curated official-IR evidence. It does not yet discover new earnings releases automatically; 800G/1.6T official demand and 中际毛利率、经营现金流、库存应收与1.6T收入 remain open transmission gaps. Direct `file://` browser QA is also blocked by the local browser URL policy.

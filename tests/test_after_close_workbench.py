@@ -308,7 +308,7 @@ class AfterCloseWorkbenchHTMLTests(unittest.TestCase):
             "data_gaps": [],
         }
 
-    def test_html_is_market_permission_first_and_has_file_safe_routes(self) -> None:
+    def test_html_is_action_first_and_has_file_safe_routes(self) -> None:
         html = render_after_close_workbench(
             self._payload(),
             "# 盘后持仓操作指引",
@@ -317,7 +317,9 @@ class AfterCloseWorkbenchHTMLTests(unittest.TestCase):
         self.assertIn('data-route="today"', html)
         self.assertIn('id="today"', html)
         self.assertIn('id="portfolio"', html)
-        self.assertLess(html.index("市场约束"), html.index("优先处理"))
+        self.assertLess(html.index("当前首要状态"), html.index("授权因果链"))
+        self.assertIn("今日环境", html)
+        self.assertIn("谨慎持有", html)
         self.assertIn("A股科技", html)
         self.assertIn("location.hash", html)
         self.assertNotIn("0 / 100", html)
@@ -351,7 +353,9 @@ class AfterCloseWorkbenchHTMLTests(unittest.TestCase):
         self.assertIn("确认已知悉阻断", html)
         self.assertNotIn("采纳为今日计划", html)
         self.assertIn("提出异议", html)
-        self.assertIn("后验统计成熟度", html)
+        self.assertIn("现有后验统计", html)
+        self.assertIn("系统净决策价值", html)
+        self.assertIn("unknown 不按 0 处理", html)
 
     def test_html_matches_v3_shell_without_copying_prototype_market_values(self) -> None:
         html = render_after_close_workbench(
@@ -359,17 +363,52 @@ class AfterCloseWorkbenchHTMLTests(unittest.TestCase):
             "# 盘后持仓操作指引",
         )
 
-        self.assertIn("grid-template-columns:228px minmax(0,1fr)", html)
+        self.assertIn("grid-template-columns:250px minmax(0,1fr)", html)
         self.assertIn("max-width:1340px", html)
-        self.assertIn('class="panel runtime-strip"', html)
-        self.assertIn('class="panel market-gate"', html)
-        self.assertIn('class="today-layout"', html)
-        self.assertIn('class="side-stack"', html)
+        self.assertIn('class="decision-stage-rail"', html)
+        self.assertIn('class="action-command risk"', html)
+        self.assertIn('class="authority-chain-new"', html)
+        self.assertIn('class="holding-impact-strip"', html)
+        self.assertIn('class="decision-support"', html)
+        self.assertIn('id="refresh-data"', html)
+        self.assertIn('id="refresh-all-data"', html)
+        self.assertIn('post("/api/refresh"', html)
+        self.assertIn('const failureDetail = String(job.error || "").slice(0, 140)', html)
+        self.assertIn('`刷新失败：${job.failed_step || "unknown"}${failureDetail', html)
+        self.assertIn('class="review-value-summary"', html)
+        self.assertIn('class="review-chart-blocked"', html)
         self.assertIn("Rule-first decision intelligence", html)
         self.assertIn('class="chart-empty"', html)
         self.assertIn("技术图表尚未接入此 P0 页面", html)
         self.assertNotIn("示意技术结构图", html)
         self.assertNotIn("33 / 100", html)
+        self.assertNotIn("+2.4%", html)
+
+    def test_review_evidence_strength_uses_mature_decisions_not_horizon_sum(self) -> None:
+        html = render_after_close_workbench(
+            {
+                "decision_workspace": {
+                    "schema_version": "decision-workspace/v1",
+                    "runtime_status": "awaiting_confirmation",
+                    "portfolio_summary": {"holding_count": 0},
+                    "portfolio_positions": [],
+                    "plan_changes": [],
+                    "data_health": [],
+                    "outcome_summary": {
+                        "tracked_signals": 43,
+                        "horizons": {
+                            "1d": {"matured": 40},
+                            "5d": {"matured": 25},
+                            "20d": {"matured": 0},
+                        },
+                    },
+                }
+            },
+            "# 盘后持仓操作指引",
+        )
+
+        self.assertIn("样本不足 0/20", html)
+        self.assertNotIn("稳定证据", html)
 
     def test_normal_ui_does_not_show_raw_provider_exception(self) -> None:
         payload = self._payload()

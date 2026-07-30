@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -77,6 +78,16 @@ class DecisionWorkspaceTests(unittest.TestCase):
             "reliability": {
                 "decision_ready_holdings": 0,
                 "holding_count": 1,
+                "risk_reconciliation_status": "ready",
+                "holdings": [
+                    {
+                        "code": "000001.SZ",
+                        "context_complete": True,
+                        "missing_snapshot_fields": [],
+                        "decision_ready": True,
+                        "risk_reconciliation_status": "ready",
+                    }
+                ],
             },
             "sections": [],
             "signal_outcomes": {},
@@ -93,6 +104,7 @@ class DecisionWorkspaceTests(unittest.TestCase):
             )
 
         self.assertEqual(workspace["schema_version"], "decision-workspace/v1")
+        self.assertTrue(str(workspace["portfolio_version"]).startswith("portfolio-"))
         self.assertEqual(workspace["run_stage"], "after_close")
         statuses = {item["status"] for item in workspace["data_health"]}
         self.assertTrue({"ready", "missing", "blocked"}.issubset(statuses))
@@ -111,6 +123,106 @@ class DecisionWorkspaceTests(unittest.TestCase):
         self.assertEqual(
             workspace["source_generated_at"],
             workspace["generated_at"],
+        )
+
+    def test_structured_branches_keep_if_then_semantics_aligned(self) -> None:
+        payload = self._payload()
+        payload["unified_decision"]["holding_plans"][0]["decision_contract"] = {
+            "action": "降低仓位复核",
+            "technical": {
+                "state": "weak",
+                "close": 9.5,
+                "ma20": 10.0,
+                "support_20d": 9.2,
+            },
+            "cost_reference": {
+                "authority": "reference_only",
+                "cost": 15.0,
+            },
+            "branches": [
+                {
+                    "branch_id": "repair_observe",
+                    "trigger": "收盘站上20日线10.00",
+                    "persistence": "连续2个交易日",
+                    "action": "降为持有观察，不自动加仓",
+                },
+                {
+                    "branch_id": "risk_reduce_review",
+                    "trigger": "当前收盘9.50已低于技术结构位10.00",
+                    "persistence": "下一交易日未收回",
+                    "action": "复核降低仓位",
+                },
+                {
+                    "branch_id": "continue_waiting",
+                    "trigger": "两侧条件均未满足",
+                    "persistence": "保持到下一有效收盘",
+                    "action": "保持仓位",
+                },
+            ],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = build_decision_workspace(
+                payload,
+                self._portfolio(),
+                response_ledger=root / "responses.jsonl",
+                plan_ledger=root / "plans.jsonl",
+            )
+
+        plan = workspace["active_plans"][0]
+        self.assertIn("收盘站上20日线10.00", plan["if_condition"])
+        self.assertEqual(plan["then_action"], "降为持有观察，不自动加仓")
+        self.assertEqual(plan["current_branch"], "risk_reduce_review")
+        self.assertEqual(plan["current_action"], "降低仓位复核")
+        self.assertEqual(plan["current_next_event"], "下一交易日未收回")
+        self.assertIn("当前收盘9.50已低于技术结构位10.00", plan["invalid_condition"])
+        self.assertNotIn("成本", plan["if_condition"])
+        self.assertEqual(plan["cost_reference"]["authority"], "reference_only")
+        self.assertEqual(len(plan["branches"]), 3)
+
+    def test_reduction_current_action_is_not_blocked_as_added_exposure(self) -> None:
+        payload = self._payload()
+        payload["unified_decision"]["risk_budget"] = {
+            "risk_level": "red",
+            "upgrade_blocked": True,
+            "upgrade_eligible": False,
+        }
+        payload["unified_decision"]["holding_plans"][0]["decision_contract"] = {
+            "action": "降低仓位复核",
+            "technical": {"state": "weak"},
+            "branches": [
+                {
+                    "branch_id": "repair_observe",
+                    "trigger": "站回结构位",
+                    "action": "从降低仓位复核降为观察；不自动加仓",
+                },
+                {
+                    "branch_id": "risk_reduce_review",
+                    "trigger": "当前收盘已低于结构位",
+                    "persistence": "下一收盘仍未收回",
+                    "action": "复核降低仓位",
+                },
+                {
+                    "branch_id": "continue_waiting",
+                    "trigger": "两侧未确认",
+                    "action": "保持仓位",
+                },
+            ],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = build_decision_workspace(
+                payload,
+                self._portfolio(),
+                response_ledger=root / "responses.jsonl",
+                plan_ledger=root / "plans.jsonl",
+            )
+
+        plan = workspace["active_plans"][0]
+        self.assertEqual(plan["current_action"], "降低仓位复核")
+        self.assertNotIn(
+            "当前风险预算禁止新增或提高风险仓位。",
+            plan["blocking_reasons"],
         )
 
     def test_plan_versions_form_a_quiet_change_chain(self) -> None:
@@ -183,6 +295,7 @@ class DecisionWorkspaceTests(unittest.TestCase):
                 {**base_plan, "code": f"00000{index}.SZ", "name": f"示例{index}"}
                 for index in range(1, 5)
             ]
+            crowded_payload["reliability"]["risk_reconciliation_status"] = "blocked"
             crowded = build_decision_workspace(
                 crowded_payload,
                 self._portfolio(),
@@ -215,10 +328,182 @@ class DecisionWorkspaceTests(unittest.TestCase):
             )
         )
         self.assertEqual(len(after_acknowledgement["plan_changes"]), 3)
+        self.assertEqual(len(after_acknowledgement["today_plans"]), 4)
         self.assertEqual(
             after_acknowledgement["active_plans"][-1]["user_response_status"],
             "blocked_acknowledged",
         )
+
+    def test_acknowledged_blocked_plan_stays_visible_until_repaired(self) -> None:
+        payload = self._payload()
+        payload["reliability"]["risk_reconciliation_status"] = "blocked"
+        payload["reliability"]["holdings"][0][
+            "risk_reconciliation_status"
+        ] = "blocked"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            responses = root / "responses.jsonl"
+            plans = root / "plans.jsonl"
+            original = build_decision_workspace(
+                payload,
+                self._portfolio(),
+                response_ledger=responses,
+                plan_ledger=plans,
+            )
+            plan = original["active_plans"][0]
+            append_plan_response(
+                plan_id=plan["plan_id"],
+                plan_version=plan["plan_version"],
+                response="blocked_acknowledged",
+                plan_status="blocked",
+                ledger_path=responses,
+            )
+            restored = build_decision_workspace(
+                payload,
+                self._portfolio(),
+                response_ledger=responses,
+                plan_ledger=plans,
+            )
+            payload["reliability"]["risk_reconciliation_status"] = "ready"
+            payload["reliability"]["holdings"][0][
+                "risk_reconciliation_status"
+            ] = "ready"
+            recovered = build_decision_workspace(
+                payload,
+                self._portfolio(),
+                response_ledger=responses,
+                plan_ledger=plans,
+            )
+            html = render_after_close_workbench(
+                {"decision_workspace": restored},
+                "",
+            )
+
+        self.assertEqual(restored["plan_changes"], [])
+        self.assertEqual(len(restored["today_plans"]), 1)
+        self.assertEqual(restored["runtime_status"], "blocked_waiting")
+        self.assertIn("继续等待", html)
+        self.assertIn("阻断未解除", html)
+        self.assertNotIn("今天没有新的待回应或未解除阻断", html)
+        self.assertNotEqual(recovered["active_plans"][0]["status"], "blocked")
+        self.assertEqual(
+            recovered["active_plans"][0]["user_response_status"],
+            "pending",
+        )
+        self.assertEqual(recovered["runtime_status"], "awaiting_confirmation")
+
+    def test_local_holding_gap_does_not_block_an_unrelated_plan(self) -> None:
+        payload = self._payload()
+        base_plan = payload["unified_decision"]["holding_plans"][0]
+        payload["unified_decision"]["holding_plans"] = [
+            {**base_plan, "code": "000001.SZ", "name": "缺口持仓", "priority": "中"},
+            {**base_plan, "code": "000002.SZ", "name": "就绪持仓", "priority": "高"},
+        ]
+        payload["reliability"]["holdings"] = [
+            {
+                "code": "000001.SZ",
+                "context_complete": False,
+                "missing_snapshot_fields": [],
+                "decision_ready": False,
+                "risk_reconciliation_status": "ready",
+            },
+            {
+                "code": "000002.SZ",
+                "context_complete": True,
+                "missing_snapshot_fields": [],
+                "decision_ready": True,
+                "risk_reconciliation_status": "ready",
+            },
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = build_decision_workspace(
+                payload,
+                self._portfolio(),
+                response_ledger=Path(temporary) / "responses.jsonl",
+                plan_ledger=Path(temporary) / "plans.jsonl",
+            )
+
+        plans = {item["symbol"]: item for item in workspace["active_plans"]}
+        self.assertEqual(plans["000001.SZ"]["status"], "blocked")
+        self.assertEqual(plans["000002.SZ"]["status"], "new")
+        self.assertEqual(workspace["today_plans"][0]["symbol"], "000002.SZ")
+
+    def test_source_time_field_prevents_false_missing_status(self) -> None:
+        payload = self._payload()
+        payload["unified_decision"]["source_reports"][1] = {
+            "workflow": "market_levels",
+            "status": "current",
+            "source_time": "2026-07-24 15:00",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = build_decision_workspace(
+                payload,
+                self._portfolio(),
+                generated_at=datetime(2026, 7, 24, 18, 30),
+                response_ledger=Path(temporary) / "responses.jsonl",
+                plan_ledger=Path(temporary) / "plans.jsonl",
+            )
+
+        market_levels = next(
+            item
+            for item in workspace["data_health"]
+            if item["id"] == "market_levels"
+        )
+        self.assertEqual(market_levels["status"], "ready")
+        self.assertEqual(market_levels["source_time"], "2026-07-24 15:00")
+
+    def test_historical_ma_basis_mismatch_is_quarantined_from_review(self) -> None:
+        portfolio = Portfolio(
+            cash=None,
+            holdings=[
+                Holding(
+                    code="900002.SH",
+                    name="合成标的乙",
+                    shares=1000,
+                    cost=12.0,
+                    market_price=10.0,
+                    pnl_pct=-16.7,
+                )
+            ],
+            source=Path("fixture-portfolio.json"),
+            as_of="2026-07-30",
+            risk_reconciliation_status="blocked",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            ledger = root / "plans.jsonl"
+            ledger.write_text(
+                json.dumps(
+                    {
+                        "plan_id": "holding:900002.SH",
+                        "symbol": "900002.SH",
+                        "plan_version": "v-old",
+                        "if_condition": "若放量站回20日线 30.00 上方",
+                        "then_action": "继续观察",
+                        "until_condition": "下一次复核",
+                        "invalid_condition": "跌破20日线 30.00",
+                        "created_at": "2026-07-28T15:55:57",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            workspace = build_decision_workspace(
+                self._payload(),
+                portfolio,
+                response_ledger=root / "responses.jsonl",
+                plan_ledger=ledger,
+            )
+            html = render_after_close_workbench(
+                {"decision_workspace": workspace},
+                "",
+            )
+
+        history = workspace["plan_version_history"]
+        self.assertEqual(workspace["quarantined_plan_version_count"], 1)
+        self.assertEqual(history[0]["evaluation_status"], "quarantined")
+        self.assertIn("口径异常，已隔离", html)
 
     def test_voided_plan_requires_an_explicit_pending_response(self) -> None:
         payload = self._payload()
@@ -267,6 +552,10 @@ class DecisionWorkspaceTests(unittest.TestCase):
     def test_blocked_plan_rejects_acceptance_and_renders_acknowledgement(self) -> None:
         payload = self._payload()
         payload["unified_decision"]["blocked_actions"] = ["核心数据缺口阻断执行"]
+        payload["reliability"]["risk_reconciliation_status"] = "blocked"
+        payload["reliability"]["holdings"][0][
+            "risk_reconciliation_status"
+        ] = "blocked"
         with tempfile.TemporaryDirectory() as temporary:
             workspace = build_decision_workspace(
                 payload,
