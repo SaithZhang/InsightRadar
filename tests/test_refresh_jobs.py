@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import subprocess
-import json
+import time
+import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Event
-import time
-import unittest
 
+from stock_assist.portfolio import load_portfolio, portfolio_version
 from stock_assist.refresh_jobs import (
     RefreshCoordinator,
     select_refresh_workflows,
@@ -70,6 +71,7 @@ class RefreshJobTests(unittest.TestCase):
         self.assertEqual(
             calls,
             [
+                "portfolio-beta",
                 "market-levels",
                 "risk-watch",
                 "market-pulse",
@@ -79,10 +81,10 @@ class RefreshJobTests(unittest.TestCase):
             ],
         )
         self.assertEqual(completed["status"], "completed")
-        self.assertEqual(completed["completed_steps"], 6)
+        self.assertEqual(completed["completed_steps"], 7)
         self.assertEqual(
             [step["status"] for step in completed["steps"]],
-            ["completed"] * 6,
+            ["completed"] * 7,
         )
 
     def test_duplicate_click_reuses_active_job(self) -> None:
@@ -150,6 +152,74 @@ class RefreshJobTests(unittest.TestCase):
         self.assertEqual(failed["steps"][-1]["workflow"], "after-close")
         self.assertEqual(failed["steps"][-1]["status"], "pending")
 
+    def test_windows_process_init_failure_retries_once_then_recovers(self) -> None:
+        calls: list[str] = []
+
+        def runner(command: list[str]) -> subprocess.CompletedProcess[str]:
+            calls.append(command[-1])
+            if len(calls) == 1:
+                return subprocess.CompletedProcess(
+                    command,
+                    0xC0000142,
+                    stdout="",
+                    stderr="",
+                )
+            return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
+
+        with TemporaryDirectory() as temporary:
+            coordinator = RefreshCoordinator(
+                db_path=Path(temporary) / "state.sqlite3",
+                report_dir=Path(temporary) / "reports",
+                runner=runner,
+                artifact_validator=_accept_artifacts,
+            )
+            started = coordinator.start(
+                mode="full",
+                idempotency_key="process-init:recovers",
+            )
+            completed = self._wait_terminal(
+                coordinator,
+                str(started["run_id"]),
+            )
+
+        self.assertEqual(completed["status"], "completed")
+        self.assertEqual(calls[:2], ["portfolio-beta", "portfolio-beta"])
+        self.assertEqual(len(calls), 8)
+
+    def test_persistent_windows_process_init_failure_requires_service_restart(self) -> None:
+        calls: list[str] = []
+
+        def runner(command: list[str]) -> subprocess.CompletedProcess[str]:
+            calls.append(command[-1])
+            return subprocess.CompletedProcess(
+                command,
+                0xC0000142,
+                stdout="",
+                stderr="",
+            )
+
+        with TemporaryDirectory() as temporary:
+            coordinator = RefreshCoordinator(
+                db_path=Path(temporary) / "state.sqlite3",
+                report_dir=Path(temporary) / "reports",
+                runner=runner,
+                artifact_validator=_accept_artifacts,
+            )
+            started = coordinator.start(
+                mode="full",
+                idempotency_key="process-init:persistent",
+            )
+            failed = self._wait_terminal(
+                coordinator,
+                str(started["run_id"]),
+            )
+
+        self.assertEqual(failed["status"], "failed")
+        self.assertEqual(calls, ["portfolio-beta", "portfolio-beta"])
+        self.assertIn("0xC0000142", failed["error"])
+        self.assertIn("重新启动 InsightRadar", failed["error"])
+        self.assertIn("不是数据校验失败", failed["error"])
+
     def test_stale_mode_runs_only_unhealthy_sources_then_after_close(self) -> None:
         selected = select_refresh_workflows(
             "stale",
@@ -165,10 +235,82 @@ class RefreshJobTests(unittest.TestCase):
             ("market-pulse", "ai-capex-watch", "after-close"),
         )
 
+    def test_stale_risk_refresh_calculates_beta_first(self) -> None:
+        selected = select_refresh_workflows(
+            "stale",
+            [{"source_name": "risk_watch", "status": "failed"}],
+        )
+
+        self.assertEqual(
+            selected,
+            ("portfolio-beta", "risk-watch", "after-close"),
+        )
+
+    def test_beta_step_rebinds_after_close_to_updated_portfolio_version(self) -> None:
+        seen_versions: dict[str, str] = {}
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            portfolio_path = root / "portfolio.json"
+            portfolio_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "insightradar-portfolio/v3",
+                        "as_of": "2026-07-31",
+                        "cash": None,
+                        "risk_reconciliation": {"status": "blocked"},
+                        "holdings": [
+                            {
+                                "code": "900001.SH",
+                                "name": "合成样本甲",
+                                "weight_pct": 20.0,
+                                "beta_classification": "unknown",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            def runner(command: list[str]) -> subprocess.CompletedProcess[str]:
+                if command[-1] == "portfolio-beta":
+                    payload = json.loads(portfolio_path.read_text(encoding="utf-8"))
+                    payload["holdings"][0]["beta_classification"] = "normal"
+                    portfolio_path.write_text(json.dumps(payload), encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
+
+            def validate(
+                workflow: str,
+                before: object,
+                version: str,
+            ) -> tuple[bool, str, Path | None]:
+                seen_versions[workflow] = version
+                return True, "", None
+
+            coordinator = RefreshCoordinator(
+                db_path=root / "state.sqlite3",
+                report_dir=root / "reports",
+                portfolio_path=portfolio_path,
+                runner=runner,
+                artifact_validator=validate,
+            )
+            started = coordinator.start(
+                mode="full",
+                idempotency_key="portfolio-version:beta",
+            )
+            self._wait_terminal(coordinator, str(started["run_id"]))
+
+            expected = portfolio_version(load_portfolio(portfolio_path))
+
+        self.assertEqual(seen_versions["after-close"], expected)
+        self.assertNotEqual(
+            seen_versions["portfolio-beta"],
+            seen_versions["after-close"],
+        )
+
     def test_service_restart_marks_abandoned_job_interrupted(self) -> None:
         with TemporaryDirectory() as temporary:
             path = Path(temporary) / "state.sqlite3"
-            coordinator = RefreshCoordinator(db_path=path)
+            RefreshCoordinator(db_path=path)
             connection = sqlite3.connect(path)
             try:
                 connection.execute(
@@ -274,8 +416,8 @@ class RefreshJobTests(unittest.TestCase):
                 connection.close()
 
         self.assertEqual(counts["refresh_runs"], 1)
-        self.assertEqual(counts["refresh_steps"], 6)
-        self.assertEqual(counts["source_snapshots"], 6)
+        self.assertEqual(counts["refresh_steps"], 7)
+        self.assertEqual(counts["source_snapshots"], 7)
         self.assertEqual(counts["evidence_items"], 1)
         self.assertEqual(counts["plan_versions"], 1)
         self.assertEqual(counts["user_responses"], 1)

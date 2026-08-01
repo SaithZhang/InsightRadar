@@ -1005,6 +1005,24 @@ def _ratio(value: object) -> str:
     return f"{float(value) * 100:.1f}%" if isinstance(value, (int, float)) else "unknown"
 
 
+def _beta_cell(item: Mapping[str, object]) -> str:
+    classification = escape(str(item.get("beta_classification") or "unknown"))
+    evidence = _mapping(item.get("beta_evidence"))
+    beta = evidence.get("beta")
+    if not isinstance(beta, (int, float)):
+        reason = escape(str(evidence.get("reason") or "等待自动计算证据"))
+        return f"<b>{classification}</b><small>{reason}</small>"
+    r_squared = evidence.get("r_squared")
+    detail = (
+        f"R² {float(r_squared):.2f} · fit {evidence.get('fit_quality') or 'unknown'} · "
+        f"{evidence.get('as_of') or 'unknown'} · {evidence.get('quality_status') or 'unknown'}"
+    )
+    return (
+        f"<b>{float(beta):.2f} · {classification}</b>"
+        f"<small>{escape(detail)}</small>"
+    )
+
+
 def _portfolio(workspace: Mapping[str, object]) -> str:
     summary = _mapping(workspace.get("portfolio_summary"))
     positions = _dict_rows(workspace.get("portfolio_positions"))
@@ -1023,7 +1041,7 @@ def _portfolio(workspace: Mapping[str, object]) -> str:
         f"<small>{escape(str(item.get('symbol') or ''))}</small></td>"
         f"<td>{_value(item.get('weight_pct'), suffix='%')}</td>"
         f"<td class=\"pnl {'up' if isinstance(item.get('pnl_pct'), (int, float)) and float(item.get('pnl_pct')) >= 0 else 'down'}\">{_value(item.get('pnl_pct'), suffix='%')}</td>"
-        f"<td>{escape(str(item.get('beta_classification') or 'unknown'))}</td>"
+        f"<td>{_beta_cell(item)}</td>"
         f"<td><span class='source {_status_class(item.get('data_completeness'))}'>{escape(str(item.get('data_completeness') or 'missing'))}</span></td>"
         f"<td><span class='source {_status_class(item.get('today_status'))}'>{escape(_plan_status(str(item.get('today_status') or 'blocked')))}</span></td>"
         f"<td><strong>{escape(str(item.get('current_plan_version') or '暂无'))}</strong>"
@@ -1051,7 +1069,7 @@ def _portfolio(workspace: Mapping[str, object]) -> str:
     <div class="metric"><small>持仓数量</small><strong>{len(positions)}</strong><em>真实 portfolio.json</em></div>
     <div class="metric"><small>已知仓位</small><strong>{_value(known_exposure, suffix='%')}</strong><em>未知不按 0 处理</em></div>
     <div class="metric"><small>未知权重</small><strong class="danger-text">{unknown_weight} 只</strong><em>阻塞完整风险计算</em></div>
-    <div class="metric"><small>Beta 未分类</small><strong>{unknown_beta} 只</strong><em>不按代码推断</em></div>
+    <div class="metric"><small>Beta 证据不足</small><strong>{unknown_beta} 只</strong><em>历史收益率自动计算</em></div>
     <div class="metric"><small>今日必须处理</small><strong>{len(changes)}</strong><em>逐项确认</em></div>
   </div>
   <div class="portfolio-layout">
@@ -1059,7 +1077,7 @@ def _portfolio(workspace: Mapping[str, object]) -> str:
       <div class="section-head"><div><h2>组合风险驾驶舱</h2><p>先回答风险和数据缺口，再展示盈亏。</p></div><a class="btn" href="/portfolio-import">导入/更新持仓</a></div>
       <div class="exposure-list">
         <div class="exposure-item"><span>已知仓位</span><div class="bar"><span style="width:{known_width}%"></span></div><b>{_value(known_exposure, suffix='%')}</b></div>
-        <div class="exposure-item"><span>Beta 已分类</span><div class="bar"><span style="width:{classified_width}%"></span></div><b>{classified}/{len(positions)}</b></div>
+        <div class="exposure-item"><span>Beta 自动分类</span><div class="bar"><span style="width:{classified_width}%"></span></div><b>{classified}/{len(positions)}</b></div>
         <div class="exposure-item"><span>数据完整</span><div class="bar"><span style="width:{complete_width}%"></span></div><b>{complete}/{len(positions)}</b></div>
         <div class="exposure-item"><span>严格就绪</span><div class="bar"><span style="width:{ready_width}%"></span></div><b>{escape(str(summary.get("decision_ready_holdings") or 0))}/{len(positions)}</b></div>
       </div>
@@ -1067,7 +1085,7 @@ def _portfolio(workspace: Mapping[str, object]) -> str:
     <section class="panel section">
       <div class="section-head"><div><h3>风险阻塞项</h3><p>unknown 不能按 0 或正常处理。</p></div></div>
       <div class="risk-list">
-        <div class="risk-row danger"><span>Beta 未知</span><strong>{unknown_beta} 只</strong></div>
+        <div class="risk-row danger"><span>Beta 证据不足</span><strong>{unknown_beta} 只</strong></div>
         <div class="risk-row danger"><span>组合现金</span><strong>{escape(cash_label)}</strong></div>
         <div class="risk-row warn"><span>风险对账</span><strong>{escape(str(summary.get("risk_reconciliation_status") or "unknown"))}</strong></div>
         <div class="risk-row"><span>持仓字段完整</span><strong>{complete}/{len(positions)}</strong></div>

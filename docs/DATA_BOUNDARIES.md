@@ -44,6 +44,7 @@ Status: **Public-repository safety contract**
 4. Logs and exceptions must not print credentials or raw authenticated headers.
 5. A public example must be sufficient to explain the schema but insufficient to reconstruct the user's positions or identity.
 6. Provider credentials stay in `.env`, process environment, OS keyring, or `%LOCALAPPDATA%\InsightRadar\secrets`.
+7. Derived beta is publishable only as code/config/synthetic tests. Real per-holding beta, R², classification, as-of, source evidence, and reconciled exposure remain private runtime data with the portfolio.
 
 ## Public-History Policy
 

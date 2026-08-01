@@ -5,39 +5,57 @@ from __future__ import annotations
 import argparse
 import getpass
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
-from stock_assist.branding import PRODUCT_NAME, PRODUCT_TAGLINE
 from stock_assist.after_close_workbench_html import render_after_close_workbench
+from stock_assist.branding import PRODUCT_NAME, PRODUCT_TAGLINE
 from stock_assist.collectors.twitter_cli import collect_user_posts
-from stock_assist.collectors.twitter_observations import sync_observations_from_twitter_raw
-from stock_assist.data_sources.nga import clear_cookie, default_cookie_path, load_cookie, save_cookie
+from stock_assist.collectors.twitter_observations import (
+    sync_observations_from_twitter_raw,
+)
+from stock_assist.data_sources.nga import (
+    clear_cookie,
+    default_cookie_path,
+    load_cookie,
+    save_cookie,
+)
 from stock_assist.decision_workspace import record_plan_versions
 from stock_assist.harness_eval.smoke import run_contract_smoke
 from stock_assist.intraday.polling import poll_intraday, poll_intraday_checkpoints
-from stock_assist.llm import clear_api_key, default_api_key_path, load_api_key, save_api_key
-from stock_assist.reports import write_payload_report_triplet, write_report
-from stock_assist.product import command_failure_advice, command_for, product_cli_epilog
-from stock_assist.portfolio_import import apply_portfolio_import, parse_classifications, preview_portfolio_import
+from stock_assist.llm import (
+    clear_api_key,
+    default_api_key_path,
+    load_api_key,
+    save_api_key,
+)
+from stock_assist.portfolio_import import (
+    apply_portfolio_import,
+    preview_portfolio_import,
+)
 from stock_assist.portfolio_import_server import serve_portfolio_import
+from stock_assist.product import command_failure_advice, command_for, product_cli_epilog
+from stock_assist.reports import write_payload_report_triplet, write_report
 from stock_assist.workflows.after_close import build_after_close_bundle
-from stock_assist.workflows.ai_capex_watch import build_ai_capex_watch_bundle
 from stock_assist.workflows.agent_roster import build_agent_roster_report
+from stock_assist.workflows.ai_capex_watch import build_ai_capex_watch_bundle
 from stock_assist.workflows.architecture_view import build_architecture_view
 from stock_assist.workflows.crypto_monitor import build_crypto_monitor_report
+from stock_assist.workflows.evolution import build_evolution_report
 from stock_assist.workflows.factor_lab import build_factor_lab_bundle
 from stock_assist.workflows.factor_pipeline import build_factor_pipeline_bundle
 from stock_assist.workflows.factor_universe import build_factor_universe_bundle
-from stock_assist.workflows.evolution import build_evolution_report
 from stock_assist.workflows.industry_research import build_industry_pool_report
-from stock_assist.workflows.intraday_replay import build_intraday_replay_bundle
-from stock_assist.workflows.influencer_sentiment import build_influencer_sentiment_report
+from stock_assist.workflows.influencer_sentiment import (
+    build_influencer_sentiment_report,
+)
 from stock_assist.workflows.influencer_skills import build_influencer_skills_report
-from stock_assist.workflows.market_pulse import build_market_pulse_bundle
+from stock_assist.workflows.intraday_replay import build_intraday_replay_bundle
 from stock_assist.workflows.market_levels import build_market_levels_bundle
-from stock_assist.workflows.nga_monitor import build_nga_monitor_report
+from stock_assist.workflows.market_pulse import build_market_pulse_bundle
 from stock_assist.workflows.nga_daily import build_nga_daily_bundle
+from stock_assist.workflows.nga_monitor import build_nga_monitor_report
+from stock_assist.workflows.portfolio_beta import build_portfolio_beta_bundle
 from stock_assist.workflows.product_map import build_product_map_report
 from stock_assist.workflows.research_monitor import build_research_monitor_report
 from stock_assist.workflows.risk_watch import build_risk_watch_bundle
@@ -68,7 +86,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     portfolio_import = subparsers.add_parser("portfolio-import", help=command_for("portfolio-import").help)
     portfolio_import.add_argument("--file", type=Path, default=None, help="local broker TSV path")
-    portfolio_import.add_argument("--classification", action="append", default=[], help="explicit CODE=high_beta|normal|unknown; repeatable")
+    portfolio_import.add_argument("--classification", action="append", default=[], help="deprecated and ignored; beta is calculated automatically")
     portfolio_import.add_argument("--approve", action="store_true", help="explicitly approve atomic save and risk-profile synchronization")
     portfolio_import.add_argument("--no-rerun", action="store_true", help="save only; do not rerun workflows")
     portfolio_import.add_argument("--no-open", action="store_true", help="do not open the latest report after a successful rerun")
@@ -114,6 +132,8 @@ def _build_parser() -> argparse.ArgumentParser:
     market.add_argument("--config", type=Path, default=None, help="optional A-share pulse json path")
     levels = subparsers.add_parser("market-levels", help=command_for("market-levels").help)
     levels.add_argument("--config", type=Path, default=None, help="optional market levels json path")
+    portfolio_beta = subparsers.add_parser("portfolio-beta", help=command_for("portfolio-beta").help)
+    portfolio_beta.add_argument("--config", type=Path, default=None, help="optional portfolio beta json path")
     style_rotation = subparsers.add_parser("style-rotation", help=command_for("style-rotation").help)
     style_rotation.add_argument("--config", type=Path, default=None, help="optional style rotation json path")
     style_rotation.add_argument("--as-of", default=None, help="optional analysis date YYYY-MM-DD")
@@ -181,7 +201,11 @@ def main(argv: list[str] | None = None) -> int:
                     raise ValueError("请提供 --file，或使用 --serve 启动本地导入UI。")
                 preview = preview_portfolio_import(
                     args.file.read_text(encoding="utf-8-sig"),
-                    classifications=parse_classifications(args.classification),
+                    classifications=(
+                        {"deprecated": "ignored"}
+                        if args.classification
+                        else None
+                    ),
                 )
                 if args.approve:
                     result = apply_portfolio_import(
@@ -265,6 +289,10 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "market-levels":
             payload, md_content, html_content = build_market_levels_bundle(args.config)
             json_path, md_path, html_path = write_payload_report_triplet("market-levels", payload, md_content, html_content)
+            path = f"{json_path}\n{md_path}\n{html_path}"
+        elif args.command == "portfolio-beta":
+            payload, md_content, html_content = build_portfolio_beta_bundle(args.config)
+            json_path, md_path, html_path = write_payload_report_triplet("portfolio-beta", payload, md_content, html_content)
             path = f"{json_path}\n{md_path}\n{html_path}"
         elif args.command == "style-rotation":
             payload, md_content, html_content = build_style_rotation_bundle(args.config, as_of=args.as_of)

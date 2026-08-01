@@ -31,9 +31,7 @@ def render_portfolio_import_page(token: str) -> str:
       <textarea id="text" placeholder="在这里粘贴包含证券代码、证券名称、当前持仓和仓位占比的券商表格"></textarea>
       <button id="preview" type="button">1. 解析并预览</button>
       <p class="warn" id="status">尚未预览</p>
-      <div id="beta-selectors" class="beta-grid">
-        <div class="summary">解析后逐只选择高 beta、普通或暂不确定。系统不会按代码猜测。</div>
-      </div>
+      <div id="beta-status" class="summary">Beta 无需手工导入：保存后自动用沪深300和历史日收益率计算；证据不合格时保持 unknown。</div>
       <label class="approval">
         <input id="approved" type="checkbox">
         2. 我已核对新旧差异并明确批准保存
@@ -46,6 +44,7 @@ def render_portfolio_import_page(token: str) -> str:
         </div>
         <p class="sub">页面重载只恢复任务状态；若本地服务进程重启，未完成任务会标记为中断，不会自动续跑。</p>
         <div id="refresh-steps" class="refresh-steps"></div>
+        <button class="secondary" id="retry-refresh" type="button" hidden>重试全量刷新</button>
       </div>
     </section>
     <section>
@@ -68,7 +67,6 @@ h1{margin:12px 0 6px}p{color:var(--muted)}textarea{width:100%;min-height:190px;m
 button,.button{display:inline-flex;align-items:center;justify-content:center;margin:8px 8px 0 0;padding:9px 13px;border:0;border-radius:7px;background:var(--good);color:#062014;font-weight:800;cursor:pointer;text-decoration:none}
 button.secondary,.button.secondary{background:#25353a;color:var(--text)}button.danger{background:#6b3030;color:#fff}button[disabled]{opacity:.45;cursor:not-allowed}.warn{color:var(--warn)}
 .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.approval{display:inline-block;margin:10px 8px 0 0;padding:9px 12px;border:1px solid var(--line);border-radius:7px}
-.beta-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin:12px 0}.beta-card{padding:10px;border:1px solid var(--line);border-radius:8px;background:#0a1216}.beta-card label{display:block}.beta-card select{width:100%;margin-top:7px;padding:8px;border:1px solid #456068;border-radius:6px;background:var(--bg);color:var(--text)}
 .summary{padding:10px;border-radius:8px;background:var(--bg);color:#b8cbc6}.output{overflow:auto}.output table{width:100%;min-width:660px;border-collapse:collapse}.output th,.output td{padding:9px;border-bottom:1px solid #26383d;text-align:left}.output th{color:var(--muted)}
 .refresh-panel{margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}.refresh-panel[hidden]{display:none}.refresh-head,.refresh-step{display:flex;justify-content:space-between;gap:12px}.refresh-steps{display:grid;gap:6px;margin-top:10px}.refresh-step{padding:7px 9px;background:var(--panel)}.refresh-step.failed,.refresh-step.interrupted{color:var(--bad)}.refresh-step.completed{color:var(--good)}
 @media(max-width:640px){main{width:min(100% - 18px,960px);margin:9px auto}section{padding:13px}}
@@ -80,7 +78,6 @@ def _script(token: str) -> str:
     return f"""
 const token={safe_token};
 let previewState=null;
-let betaValues={{}};
 let refreshTimer=null;
 const $=id=>document.getElementById(id);
 const requestId=()=>globalThis.crypto?.randomUUID?.()??`refresh-${{Date.now()}}-${{Math.random()}}`;
@@ -91,7 +88,6 @@ async function post(path, approved=false, extra={{}}) {{
     headers:{{"Content-Type":"application/json","X-InsightRadar-Token":token}},
     body:JSON.stringify({{
       text:$("text").value,
-      classifications:betaValues,
       approved,
       ...extra,
     }}),
@@ -109,39 +105,6 @@ async function getJson(path) {{
   const result=await response.json();
   if(!response.ok) throw new Error(result.error||"读取状态失败");
   return result;
-}}
-
-function renderBetaSelectors(data) {{
-  const box=$("beta-selectors");
-  box.replaceChildren();
-  for(const item of data.proposed_portfolio.holdings) {{
-    const card=document.createElement("div");
-    card.className="beta-card";
-    const label=document.createElement("label");
-    label.textContent=`${{item.name}} (${{item.code}})`;
-    const select=document.createElement("select");
-    for(const [value,text] of [
-      ["unknown","暂不确定"],
-      ["high_beta","高 beta"],
-      ["normal","普通"],
-    ]) {{
-      const option=document.createElement("option");
-      option.value=value;
-      option.textContent=text;
-      select.appendChild(option);
-    }}
-    select.value=betaValues[item.code]??item.beta_classification??"unknown";
-    betaValues[item.code]=select.value;
-    select.addEventListener("change",()=>{{
-      betaValues[item.code]=select.value;
-      previewState=null;
-      $("apply").disabled=true;
-      $("status").textContent="beta 分类已修改，请重新解析预览。";
-    }});
-    label.appendChild(select);
-    card.appendChild(label);
-    box.appendChild(card);
-  }}
 }}
 
 function renderPreview(data) {{
@@ -171,7 +134,7 @@ function renderPreview(data) {{
       diff.old?.shares??"—",
       diff.new?.shares??"—",
       diff.new?.weight_pct??"—",
-      diff.new?.beta_classification??"—",
+      diff.new?"后台自动计算":"—",
     ];
     for(const value of values) {{
       const td=document.createElement("td");
@@ -193,6 +156,9 @@ function renderPreview(data) {{
 function renderRefresh(job) {{
   if(!job||job.status==="none") return;
   $("refresh-panel").hidden=false;
+  const terminalFailure=["failed","interrupted"].includes(job.status);
+  const restartRequired=String(job.error??"").includes("重新启动 InsightRadar");
+  $("retry-refresh").hidden=!terminalFailure||restartRequired;
   const done=Number(job.completed_steps??0);
   const total=Number(job.total_steps??0);
   $("refresh-progress").textContent=`${{total?Math.round(done/total*100):0}}%`;
@@ -211,8 +177,10 @@ function renderRefresh(job) {{
     row.append(name,state);
     $("refresh-steps").appendChild(row);
   }}
-  if(["failed","interrupted"].includes(job.status)) {{
-    $("status").textContent=`刷新未完成：${{job.failed_step??job.current_step??"服务中断"}}。${{job.error??""}} 已保存的持仓不受影响，上一份报告仍保留为旧版本。`;
+  if(terminalFailure) {{
+    $("status").textContent=restartRequired
+      ?`${{job.error}} 请点击右上角“关闭本地应用”，再双击 InsightRadar.cmd。`
+      :`刷新未完成：${{job.failed_step??job.current_step??"服务中断"}}。${{job.error??""}} 已保存的持仓不受影响，上一份报告仍保留为旧版本。`;
   }} else if(job.status==="completed") {{
     $("status").textContent="后台刷新完成，可以返回行动简报。";
   }}
@@ -243,14 +211,26 @@ async function recoverRefresh() {{
   }}
 }}
 
+$("retry-refresh").addEventListener("click",async()=>{{
+  $("retry-refresh").hidden=true;
+  $("status").textContent="正在重新发起全量刷新…";
+  try {{
+    const job=await post("/api/refresh",false,{{mode:"full",request_id:requestId()}});
+    renderRefresh(job);
+    pollRefresh(job.run_id);
+  }} catch(error) {{
+    $("status").textContent="无法重新发起刷新："+error.message;
+    $("retry-refresh").hidden=false;
+  }}
+}});
+
 async function runPreview() {{
   try {{
     previewState=await post("/api/preview");
-    renderBetaSelectors(previewState);
     renderPreview(previewState);
     const risk=previewState.risk_reconciliation;
     $("status").textContent=previewState.validation.valid
-      ?`已识别 ${{previewState.proposed_portfolio.holdings.length}} 只；风险对账：${{risk.status}}。请核对差异和 beta 分类。`
+      ?`已识别 ${{previewState.proposed_portfolio.holdings.length}} 只；请核对差异。保存后先自动计算 beta，再进行风险对账。`
       :"校验失败；不得保存";
     $("apply").disabled=!previewState.validation.valid||!$("approved").checked;
   }} catch(error) {{

@@ -111,7 +111,7 @@ Done means:
 - JSON exposes separate structural-action and strict decision-ready coverage. Strict readiness requires a dated current holding snapshot, complete position fields, review context, evaluated market data, and all conditional action branches.
 - Placeholder text such as `暂无` is not counted as a real gap, while absent broker fields remain explicit and must render as `未提供` rather than numeric zero.
 - Manual broker holdings can be previewed through the loopback-only `portfolio-import` service. The parser must prefer `当前持仓` over `股票余额`, show validation plus old/new diffs, and require explicit approval before atomically replacing canonical `data/portfolio.json`; static reports must never silently overwrite holdings, write browser downloads, or transmit the table.
-- Portfolio import must preserve missing shares/cost/price/P&L/weight as null, never infer beta class from a ticker, and fail risk-budget reconciliation closed until weights and explicit `high_beta`/`normal` classifications are complete. A successful import atomically saves first, returns HTTP 202 with a durable local refresh id, and runs `market-levels`, `risk-watch`, `market-pulse`, `style-rotation`, `ai-capex-watch`, then `after-close` sequentially in one background task. Duplicate clicks reuse the active task, page reload restores its status, exact workflow failures remain visible, and the saved portfolio plus last-good report are preserved. A step is successful only after a new parseable artifact exists; final completion additionally requires a same-stem JSON/Markdown/HTML triplet whose embedded `portfolio_version` matches the saved snapshot. It never places an order.
+- Portfolio import must preserve missing shares/cost/price/P&L/weight as null and never infer beta class from a ticker, name, or industry. After the approved snapshot is atomically saved, `portfolio-beta` deterministically calculates simple daily-return beta against `000300.SH` over 120 sessions with at least 60 valid observations. It records beta, R², benchmark, window, observations, as-of, source, data quality, and fit quality; stale, insufficient, failed, or non-finite evidence stays `unknown` and keeps risk reconciliation blocked. A successful import returns HTTP 202 with a durable local refresh id, then runs `portfolio-beta`, `market-levels`, `risk-watch`, `market-pulse`, `style-rotation`, `ai-capex-watch`, and `after-close` sequentially in one background task. Duplicate clicks reuse the active task, page reload restores its status, exact workflow failures remain visible, and the saved portfolio plus last-good report are preserved. Because `portfolio-beta` updates the canonical evidence, the refresh coordinator rebinds final artifact validation to the new `portfolio_version`. A step is successful only after a new parseable artifact exists; final completion additionally requires a same-stem JSON/Markdown/HTML triplet whose embedded `portfolio_version` matches the saved snapshot. It never places an order.
 - Holdings actions are conditional, not deterministic orders.
 - Percentage trims are advisory targets until shares and availability are known. Executable quantities use 100-share board-lot flooring, never exceed the requested or available quantity, and show zero plus a manual-choice blocker when a small position cannot satisfy the percentage target in one board lot.
 - Holding guidance must be execution-oriented: include position action, upside trigger, downside trigger, flat-market handling, and next-day priority. Avoid vague internal wording such as "trend did not give a strong signal".
@@ -274,16 +274,18 @@ Minimum checks:
 
 Done means:
 
-- `portfolio-import --file <broker.tsv>` produces a read-only preview with parsing errors, null-preserving canonical holdings, explicit beta classifications, old/new diffs, and reconciliation blockers.
+- `portfolio-import --file <broker.tsv>` produces a read-only preview with parsing errors, null-preserving canonical holdings, old/new diffs, an explicit pending-beta state, and reconciliation blockers. The import UI has no manual beta selector.
 - `--approve` is required for state changes. Approved writes use temporary files, timestamped backups, and atomic replacement. A failed save restores the prior file; a later background-refresh failure preserves the newly approved portfolio and the last-good report while exposing the failed step.
 - The service binds only to `127.0.0.1`, uses an unguessable session token, never accepts a browser-selected destination path, and never executes a trade.
-- Imported risk exposure is not silently synchronized from guessed tickers or zero broker weights. Incomplete weights or beta classes leave reconciliation blocked and strict decision-ready coverage at zero.
+- Imported risk exposure is not silently synchronized from guessed tickers or zero broker weights. Incomplete weights or beta evidence with status other than `ready` leaves reconciliation blocked and strict decision-ready coverage at zero. Low R² remains visible as fit quality and is not presented as strong explanatory evidence.
 
 Minimum checks:
 
 - `.\.venv\Scripts\python -m unittest tests.test_portfolio_import -v`
+- `.\.venv\Scripts\python -m unittest tests.test_portfolio_beta -v`
+- `.\.venv\Scripts\python -m stock_assist.cli portfolio-beta`
 - `.\.venv\Scripts\python -m stock_assist.cli portfolio-import --file data\portfolio.manual.tsv`
-- Inspect preview validation, null fields, classifications, diff, reconciliation, and `requires_approval`; do not pass `--approve` without the user's explicit authorization.
+- Inspect preview validation, null fields, diff, pending beta, reconciliation, and `requires_approval`; inspect the newest `portfolio-beta` JSON/Markdown/HTML evidence and do not pass `--approve` without the user's explicit authorization.
 
 ### Style Rotation Monitor
 

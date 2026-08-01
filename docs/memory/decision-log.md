@@ -15,6 +15,8 @@ This file is the bounded decision index. Full context, alternatives, and consequ
 - [ADR-0009: Make Personal Investment Decision Intelligence the Product North Star](decisions/0009-personal-investment-decision-intelligence.md)
 - [ADR-0010: Freeze InsightRadar V3.0 Pilot for Ten Real Morning Trials](decisions/0010-v3-pilot-scope-frozen.md)
 - [ADR-0011: Publish a Sanitized V3 Baseline Without Legacy Private History](decisions/0011-public-v3-baseline.md)
+- [ADR-0012: Pivot the Core to Point-in-Time Intraday Risk and Opportunity](decisions/0012-intraday-risk-opportunity-pivot.md)
+- [ADR-0013: Derive Portfolio Beta from Deterministic Market Evidence](decisions/0013-deterministic-portfolio-beta.md)
 
 ## 2026-07-14 - Repository memory, not chat history
 
@@ -100,6 +102,12 @@ This file is the bounded decision index. Full context, alternatives, and consequ
 - Decision: shift the primary decision moments to 09:25, 09:35, and 10:00 while preserving the four-route shell and human trade authority.
 - Reason: IR-001 tests whether account profit protection, catalyst-failure detection, re-entry discipline, and cross-theme opportunity recognition improve the actual morning decision loop.
 - Consequence: immutable minute archives and typed point-time rules become the Core seam; after-close planning and audit remain secondary. See ADR-0012.
+
+## 2026-08-01 - Portfolio beta becomes deterministic evidence
+
+- Decision: replace manual beta classification in the import UI with a deterministic calculation against `000300.SH` using 120 simple daily returns, at least 60 observations, and a 1.20 high-beta threshold.
+- Reason: beta is a reproducible market statistic and should not be guessed from a ticker or manually re-entered when current daily history is available.
+- Consequence: beta value, R², window, observations, as-of, source, and quality are stored locally; any stale, insufficient, failed, or invalid input remains `unknown` and blocks reconciliation. See ADR-0013.
 
 ## Existing durable decisions
 

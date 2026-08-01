@@ -13,6 +13,7 @@ import os
 import tempfile
 from collections.abc import Mapping
 from copy import deepcopy
+from dataclasses import asdict
 from datetime import date, datetime
 from pathlib import Path
 from typing import Literal, TypedDict
@@ -902,6 +903,11 @@ def _portfolio_positions(
                 "weight_pct": holding.weight_pct,
                 "pnl_pct": holding.pnl_pct,
                 "beta_classification": holding.beta_classification or "unknown",
+                "beta_evidence": (
+                    asdict(holding.beta_evidence)
+                    if holding.beta_evidence is not None
+                    else None
+                ),
                 "review_status": holding.review_status or "unknown",
                 "data_completeness": (
                     "ready"
