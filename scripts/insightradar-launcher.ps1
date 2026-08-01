@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("Menu", "Generate", "Import", "OpenLatest")]
+    [ValidateSet("Menu", "Generate", "Import", "Intraday", "OpenLatest")]
     [string]$Mode = "Menu",
     [switch]$NoOpen
 )
@@ -100,6 +100,19 @@ function Start-PortfolioImporter {
     }
 }
 
+function Start-IntradayRadar {
+    $python = Resolve-InsightRadarPython
+    Write-Host "[1/2] Refreshing one bounded intraday snapshot..."
+    $output = & $python -m stock_assist.cli intraday-poll --iterations 1 2>&1
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        $output | ForEach-Object { Write-Host $_ }
+        throw "Intraday refresh failed with exit code $exitCode."
+    }
+    Write-Host "[2/2] Opening Today Radar. Refresh again at each decision checkpoint."
+    Start-PortfolioImporter
+}
+
 function Show-Menu {
     while ($true) {
         Clear-Host
@@ -107,6 +120,7 @@ function Show-Menu {
         Write-Host "1. Generate and open after-close report"
         Write-Host "2. Import or update portfolio"
         Write-Host "3. Open latest after-close report"
+        Write-Host "4. Refresh and open intraday radar"
         Write-Host "0. Exit"
         $selection = Read-Host "Select"
         try {
@@ -114,6 +128,7 @@ function Show-Menu {
                 "1" { Generate-AfterCloseReport; Read-Host "Press Enter to return to the menu" | Out-Null }
                 "2" { Start-PortfolioImporter; Read-Host "Press Enter to return to the menu" | Out-Null }
                 "3" { Open-LatestAfterCloseReport }
+                "4" { Start-IntradayRadar; Read-Host "Press Enter to return to the menu" | Out-Null }
                 "0" { return }
                 default { Write-Host "Unknown option."; Start-Sleep -Seconds 1 }
             }
@@ -131,6 +146,7 @@ try {
     switch ($Mode) {
         "Generate" { Generate-AfterCloseReport }
         "Import" { Start-PortfolioImporter }
+        "Intraday" { Start-IntradayRadar }
         "OpenLatest" { Open-LatestAfterCloseReport }
         "Menu" { Show-Menu }
     }

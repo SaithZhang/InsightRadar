@@ -70,6 +70,20 @@
       "next": ["继续保持私有且不入库", "不根据代码猜测高beta", "不连接实盘下单", "保持保存与刷新事务分离"]
     },
     {
+      "id": "intraday_radar",
+      "ring": "core",
+      "title": "盘前盘中风险与机会雷达",
+      "type": "workflow",
+      "lane": "decision",
+      "status": "ir001_verified_live_shadow_pending",
+      "commands": ["intraday-replay", "intraday-poll"],
+      "command": "python -m stock_assist.cli intraday-replay; python -m stock_assist.cli intraday-poll",
+      "summary": "从本地分钟归档构建无未来数据的账户、持仓与主题快照，运行账户风险、催化失效、机会雷达和接回约束；只给人工确认条件，不下单。",
+      "inputs": ["私有持仓快照", "20-30主题宇宙", "AmazingData分钟线/竞价快照", "东方财富逐标的fallback", "点时外部映射"],
+      "outputs": ["IntradaySnapshot/ThemeSnapshot/IntradayAlert", "本地JSONL分钟归档", "IR-001 JSON/Markdown/HTML", "盘中runtime.json"],
+      "next": ["实盘影子验证09:25/09:35/10:00", "接入可核验外部映射", "状态变化通知与阈值校准"]
+    },
+    {
       "id": "research_monitor",
       "ring": "core",
       "title": "研报与论点变化",
@@ -337,6 +351,10 @@
     }
   ],
   "edges": [
+    {"from": "amazingdata", "to": "intraday_radar", "label": "分钟线与竞价快照"},
+    {"from": "portfolio_memory", "to": "intraday_radar", "label": "持仓、可用数量与逻辑记忆"},
+    {"from": "intraday_radar", "to": "after_close", "label": "盘中状态与当日审计"},
+    {"from": "intraday_radar", "to": "signal_outcomes", "label": "触发与策略路径"},
     {"from": "amazingdata", "to": "research_monitor", "label": "结构化确认"},
     {"from": "iwencai_market", "to": "market_pulse", "label": "同日收盘基差"},
     {"from": "iwencai_market", "to": "risk_watch", "label": "宽度与拥挤度"},

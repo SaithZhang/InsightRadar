@@ -1,0 +1,27 @@
+{
+  "schema_version": "intraday-universe/v1",
+  "benchmark": "000300.SH",
+  "theme_count_policy": "20-30 high-liquidity themes; no full-A-share scan",
+  "themes": [
+    {"theme_id": "ai_hardware_semiconductor", "label": "AI硬件/半导体", "representative_etf": "588200.SH", "representative_symbols": ["300308.SZ", "300502.SZ", "688256.SH", "603986.SH"]},
+    {"theme_id": "communication_cpo", "label": "通信/CPO", "representative_etf": "515880.SH", "representative_symbols": ["300308.SZ", "300502.SZ", "002281.SZ", "603083.SH"]},
+    {"theme_id": "pcb", "label": "PCB", "representative_etf": "515260.SH", "representative_symbols": ["002463.SZ", "002916.SZ", "300476.SZ", "688183.SH"], "proxy_note": "第一版使用高流动性电子ETF作PCB近似代理，代表股承担板块广度。"},
+    {"theme_id": "ai_software_apps", "label": "AI软件/应用", "representative_etf": "159852.SZ", "representative_symbols": ["688111.SH", "600588.SH", "300033.SZ", "002230.SZ"]},
+    {"theme_id": "robot", "label": "机器人", "representative_etf": "159770.SZ", "representative_symbols": ["300024.SZ", "002747.SZ", "688017.SH", "603728.SH"]},
+    {"theme_id": "innovation_drug", "label": "创新药", "representative_etf": "159992.SZ", "representative_symbols": ["600276.SH", "688180.SH", "600196.SH", "688235.SH"]},
+    {"theme_id": "nonferrous", "label": "有色", "representative_etf": "159980.SZ", "representative_symbols": ["601899.SH", "603993.SH", "600362.SH", "000630.SZ"]},
+    {"theme_id": "power", "label": "电力", "representative_etf": "159611.SZ", "representative_symbols": ["600011.SH", "600900.SH", "600025.SH", "601985.SH"]},
+    {"theme_id": "dividend", "label": "红利", "representative_etf": "510880.SH", "representative_symbols": ["601088.SH", "600900.SH", "601398.SH", "600036.SH"]},
+    {"theme_id": "bank", "label": "银行", "representative_etf": "512800.SH", "representative_symbols": ["601398.SH", "600036.SH", "601288.SH", "600000.SH"]},
+    {"theme_id": "brokerage", "label": "券商", "representative_etf": "512880.SH", "representative_symbols": ["600030.SH", "601688.SH", "300059.SZ", "601211.SH"]},
+    {"theme_id": "defense", "label": "军工", "representative_etf": "512660.SH", "representative_symbols": ["600760.SH", "600893.SH", "000768.SZ", "002179.SZ"]},
+    {"theme_id": "consumer", "label": "消费", "representative_etf": "159928.SZ", "representative_symbols": ["600519.SH", "000858.SZ", "000333.SZ", "601888.SH"]},
+    {"theme_id": "new_energy", "label": "新能源", "representative_etf": "516160.SH", "representative_symbols": ["300750.SZ", "002594.SZ", "601012.SH", "300274.SZ"]},
+    {"theme_id": "solar", "label": "光伏", "representative_etf": "159857.SZ", "representative_symbols": ["601012.SH", "300274.SZ", "688599.SH", "002129.SZ"]},
+    {"theme_id": "medicine", "label": "医药", "representative_etf": "159929.SZ", "representative_symbols": ["600276.SH", "300760.SZ", "000538.SZ", "603259.SH"]},
+    {"theme_id": "media", "label": "传媒", "representative_etf": "512980.SH", "representative_symbols": ["300413.SZ", "002555.SZ", "300418.SZ", "600637.SH"]},
+    {"theme_id": "data_compute", "label": "数据/算力", "representative_etf": "516000.SH", "representative_symbols": ["000977.SZ", "603019.SH", "000938.SZ", "300308.SZ"]},
+    {"theme_id": "coal", "label": "煤炭", "representative_etf": "515220.SH", "representative_symbols": ["601088.SH", "601225.SH", "600188.SH", "601898.SH"]},
+    {"theme_id": "gold", "label": "黄金", "representative_etf": "518880.SH", "representative_symbols": ["601899.SH", "600547.SH", "000975.SZ", "600489.SH"]}
+  ]
+}

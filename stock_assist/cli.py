@@ -15,6 +15,7 @@ from stock_assist.collectors.twitter_observations import sync_observations_from_
 from stock_assist.data_sources.nga import clear_cookie, default_cookie_path, load_cookie, save_cookie
 from stock_assist.decision_workspace import record_plan_versions
 from stock_assist.harness_eval.smoke import run_contract_smoke
+from stock_assist.intraday.polling import poll_intraday
 from stock_assist.llm import clear_api_key, default_api_key_path, load_api_key, save_api_key
 from stock_assist.reports import write_payload_report_triplet, write_report
 from stock_assist.product import command_failure_advice, command_for, product_cli_epilog
@@ -30,6 +31,7 @@ from stock_assist.workflows.factor_pipeline import build_factor_pipeline_bundle
 from stock_assist.workflows.factor_universe import build_factor_universe_bundle
 from stock_assist.workflows.evolution import build_evolution_report
 from stock_assist.workflows.industry_research import build_industry_pool_report
+from stock_assist.workflows.intraday_replay import build_intraday_replay_bundle
 from stock_assist.workflows.influencer_sentiment import build_influencer_sentiment_report
 from stock_assist.workflows.influencer_skills import build_influencer_skills_report
 from stock_assist.workflows.market_pulse import build_market_pulse_bundle
@@ -51,6 +53,14 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("after-close", help=command_for("after-close").help)
+    intraday_replay = subparsers.add_parser("intraday-replay", help=command_for("intraday-replay").help)
+    intraday_replay.add_argument("--case", type=Path, default=None, help="private IR-001 case JSON; defaults to data/intraday/cases/IR-001.json")
+    intraday_replay.add_argument("--refresh-archive", action="store_true", help="refresh and archive point-in-time minute data before replay")
+    intraday_replay.add_argument("--no-fallback", action="store_true", help="do not use the per-symbol Eastmoney fallback")
+    intraday_poll = subparsers.add_parser("intraday-poll", help=command_for("intraday-poll").help)
+    intraday_poll.add_argument("--iterations", type=int, default=1, help="bounded poll count; default is one")
+    intraday_poll.add_argument("--interval", type=int, default=60, help="seconds between polls, 5-60")
+    intraday_poll.add_argument("--no-fallback", action="store_true", help="do not use the per-symbol Eastmoney fallback")
     portfolio_import = subparsers.add_parser("portfolio-import", help=command_for("portfolio-import").help)
     portfolio_import.add_argument("--file", type=Path, default=None, help="local broker TSV path")
     portfolio_import.add_argument("--classification", action="append", default=[], help="explicit CODE=high_beta|normal|unknown; repeatable")
@@ -129,6 +139,21 @@ def main(argv: list[str] | None = None) -> int:
                 html_content = render_after_close_workbench(payload, md_content)
             json_path, md_path, html_path = write_payload_report_triplet("after-close", payload, md_content, html_content)
             path = f"{json_path}\n{md_path}\n{html_path}"
+        elif args.command == "intraday-replay":
+            payload, md_content, html_content = build_intraday_replay_bundle(
+                args.case,
+                refresh_archive=args.refresh_archive,
+                allow_fallback=not args.no_fallback,
+            )
+            json_path, md_path, html_path = write_payload_report_triplet("intraday-replay", payload, md_content, html_content)
+            path = f"{json_path}\n{md_path}\n{html_path}"
+        elif args.command == "intraday-poll":
+            payload = poll_intraday(
+                iterations=args.iterations,
+                interval_seconds=args.interval,
+                allow_fallback=not args.no_fallback,
+            )
+            path = json.dumps(payload, ensure_ascii=False, indent=2)
         elif args.command == "portfolio-import":
             if args.serve:
                 serve_portfolio_import(port=args.port, open_browser=not args.no_open)

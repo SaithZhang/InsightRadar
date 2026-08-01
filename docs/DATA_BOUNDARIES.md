@@ -22,6 +22,7 @@ Status: **Public-repository safety contract**
 - Local databases and unredacted research cases.
 - NGA, X/Twitter, AI-gateway, or other authenticated session state.
 - Private market-data caches and raw provider responses that are not redistributable.
+- Real intraday cases, auction/minute archives, point-time account snapshots, strategy comparisons, and replay reports, even when they contain only aggregate account values.
 - `data/`, `reports/`, `tmp/`, `.venv/`, IDE state, logs, browser profiles, caches, and review archives.
 
 ## Repository File Classes

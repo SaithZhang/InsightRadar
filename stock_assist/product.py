@@ -39,7 +39,7 @@ MODULES: tuple[ProductModule, ...] = (
     ProductModule(
         key="portfolio",
         title="Portfolio Intelligence",
-        purpose="Turn holdings, broker snapshots, risk lines, and thesis memory into a repeatable after-close plan.",
+        purpose="Overlay holdings and thesis memory on premarket and intraday risk decisions, with after-close audit retained as a secondary capability.",
         primary_users=("personal trader", "risk reviewer"),
         outcomes=("conditional next-day actions", "position risk gaps", "thesis and falsification checks"),
     ),
@@ -68,6 +68,24 @@ MODULES: tuple[ProductModule, ...] = (
 
 
 COMMANDS: tuple[ProductCommand, ...] = (
+    ProductCommand(
+        name="intraday-replay",
+        module_key="portfolio",
+        help="replay the private IR-001 acceptance case without future-data leakage",
+        run_hint="Run offline from the local archive; add --refresh-archive only when AmazingData should refresh immutable minute evidence.",
+        inputs=("data/intraday/cases/IR-001.json", "configs/intraday_universe.json", "data/intraday/minute/*.jsonl"),
+        outputs=("reports/*-intraday-replay.json", "reports/*-intraday-replay.md", "reports/*-intraday-replay.html"),
+        retry="Refresh the archive serially, inspect per-symbol failures, and rerun without replacing unknown with zero.",
+    ),
+    ProductCommand(
+        name="intraday-poll",
+        module_key="market",
+        help="poll the bounded intraday universe into the local risk-and-opportunity runtime",
+        run_hint="Run once from the loopback app or use bounded --iterations during the A-share session; no trade action is emitted.",
+        inputs=("configs/intraday_universe.json", "data/portfolio.json", ".env with AmazingData credentials"),
+        outputs=("data/intraday/minute/*.jsonl", "data/intraday/quotes/*.jsonl", "data/intraday/runtime.json"),
+        retry="Inspect per-symbol gaps; public fallback is local and partial, while unavailable fields stay unknown.",
+    ),
     ProductCommand(
         name="after-close",
         module_key="portfolio",
@@ -349,6 +367,7 @@ FILES: tuple[ProductFile, ...] = (
     ProductFile("configs/event_calendar.json", "product_config", "market", "Upcoming event and filing-risk windows."),
     ProductFile("configs/crypto_watchlist.json", "product_config", "market", "Crypto/RWA watchlist, dex, addresses, and thresholds."),
     ProductFile("configs/a_share_pulse.json", "product_config", "market", "A-share live pulse watchlist for indexes, ETFs, futures basis, and state-team ETF proxies."),
+    ProductFile("configs/intraday_universe.json", "product_config", "market", "Bounded 20-30-theme intraday ETF and representative-stock universe."),
     ProductFile("configs/market_levels.json", "product_config", "market", "Multi-timeframe index target and level-analysis settings."),
     ProductFile("configs/decision_rules.json", "product_config", "portfolio", "Auditable bear-bull state-machine rules, thresholds, vetoes, hysteresis, and daily change cap."),
     ProductFile("configs/style_rotation.json", "product_config", "market", "Fixed technology, financial, dividend and benchmark ETF proxy definitions plus confirmation gates."),
@@ -367,6 +386,7 @@ FILES: tuple[ProductFile, ...] = (
     ProductFile("data/portfolio.galaxy.tsv", "private_runtime_data", "portfolio", "Broker-export holdings table; ignored by git."),
     ProductFile("data/portfolio.manual.example.tsv", "template", "portfolio", "Copyable template for manually pasted broker holdings."),
     ProductFile("data/portfolio_context.json", "private_runtime_data", "portfolio", "Local thesis, risk-line, and review memory; ignored by git."),
+    ProductFile("data/intraday/*", "private_runtime_data", "portfolio", "Private intraday cases, minute/quote archives, point-time runtime, and replay inputs; ignored by git."),
     ProductFile("data/risk_watch_profile.json", "private_runtime_data", "portfolio", "Current exposure, concentration, high-beta share, and optional behavior flags; ignored by git."),
     ProductFile("data/bear_bull_score_state.json", "private_runtime_data", "portfolio", "Persisted finalized score, per-market-day rule deduplication, and state transition memory; ignored by git."),
     ProductFile("data/research_deltas.jsonl", "private_runtime_data", "research", "Append-only research thesis changes; ignored by git."),

@@ -1344,3 +1344,13 @@ Completion update:
 - Portfolio import saves atomically before returning HTTP 202. The SQLite-backed single-flight coordinator persists refresh runs/steps/source snapshots/evidence/plan versions/user responses and serially includes `ai-capex-watch` before the final `after-close`. It now requires a new parseable artifact per step plus a same-stem final triplet whose embedded `portfolio_version` matches the refresh-start snapshot.
 - Real browser QA verified non-blocking progress, duplicate-refresh prevention, one-time automatic reload, persistent failed/interrupted visibility, and a completed one-step stale refresh bound to the exact private artifact. An anomalous provider series is quarantined because it contains an undeclared large one-bar discontinuity. Keep `feat-058` in progress until owner acceptance; do not add automatic execution, a fifth route, hosted multi-user infrastructure, P1, or P2.
 - Keep raw CNInfo query artifacts private and ignored.
+
+## 2026-08-01 Handoff - IR-001 passed; IR-002 live shadow is next
+
+- Product position is now “A股盘前/盘中风险与机会雷达，叠加持仓与候选逻辑记忆” under ADR-0012. Keep exactly four first-level route ids and no automatic trade execution.
+- Acceptance artifacts are an ignored local IR-001 JSON/Markdown/HTML triplet. The private case, account-linked values, report names, and all minute archives must not enter a public commit.
+- Replay facts: 255 point-time snapshots, zero no-lookahead violations, a 40-60% human-confirmed risk-reduction range near 09:25, catalyst yellow/orange/red escalation, software/robot confirmation only after structure gates, and price-only re-entry blocking.
+- Strategy facts: bounded opening reduction improved profit protection versus full hold, while unconditional re-entry failed. Exact account-linked values stay in the private report; `improvement_vs_actual` is null until real broker executions are supplied.
+- Restart commands: double-click `盘中雷达.cmd` for one live refresh plus the loopback four-page app, or use `.venv\Scripts\python -m stock_assist.cli intraday-replay` for the offline acceptance case and `.venv\Scripts\python -m stock_assist.cli intraday-poll --iterations 1` for the CLI live path. Do not enable notifications yet.
+- Verified gates: focused 7/7, full 290/290, compileall, report assertions, architecture regeneration, and project-memory validation. Rerun the narrow checks after any threshold or provider change.
+- Known next gaps: replace scenario external mapping with a verified point-time source; collect multiple 09:25/09:35/10:00 shadow sessions; measure alert timing/false escalation/missed protection; keep actual operations unknown until broker evidence exists.

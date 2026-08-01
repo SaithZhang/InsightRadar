@@ -408,3 +408,10 @@ Current state:
 Next:
 - <highest-value next sprint>
 ```
+# Intraday Radar Contract (IR-001)
+
+- `intraday-replay` must consume only locally archived observations whose `source_time` is no later than the evaluated timestamp.
+- `IntradaySnapshot`, `ThemeSnapshot`, and `IntradayAlert` keep missing fields as null and preserve both source and fetch lineage.
+- Account risk, catalyst failure, opportunity radar, and re-entry guard remain deterministic and cannot execute trades.
+- IR-001 must compare full hold, 30/50/70% open reductions, giveback/VWAP reductions, unconditional/structural re-entry, and no same-day re-entry.
+- Real account case data and minute archives remain ignored; tracked tests use synthetic fixtures.

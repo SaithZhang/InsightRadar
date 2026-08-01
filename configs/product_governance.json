@@ -6,24 +6,35 @@
   },
   "active_experiments": [
     {
-      "feature_id": "feat-058",
-      "problem": "The after-close HTML mixes decisions, market data, research, audit text, and raw failures into one long page, so the user cannot move quickly from market state to portfolio action.",
+      "feature_id": "IR-002",
+      "problem": "IR-001 passes one offline case, but the local poller and thresholds have no multi-session 09:25/09:35/10:00 shadow evidence and external mapping is still a scenario input.",
       "loop_stage": "decide",
-      "baseline": "The 2026-07-23 after-close HTML is 3616 pixels tall on desktop and 7786 pixels on mobile, exposes raw provider exceptions, conflicts on holdings and freshness, and does not surface the macro shadow.",
-      "outcome_metric": "At 1440x900 the first viewport shows market conclusion, matrix, portfolio translation, and the start of holding actions; all five routes work from file://; JSON/Markdown/HTML agree; raw exceptions are absent from the normal UI; mobile has no page overflow.",
-      "smallest_experiment": "Reuse existing risk-watch, macro, style, reliability, action, and outcome payloads to build one self-contained after-close HTML workbench with no new provider.",
+      "baseline": "IR-001 has 255 no-lookahead snapshots, 15 rule transitions, and favorable profit protection versus full hold, but only one private historical session.",
+      "outcome_metric": "Across multiple live shadows, record alert latency, false escalation, missed protection, provider gaps, re-entry blocks, opportunity promotions, and whether substantive state-change notifications would be useful.",
+      "smallest_experiment": "Run the existing local intraday-poll at 09:25/09:35/10:00 without notifications or trade actions; review one session at a time.",
       "safety_boundaries": [
-        "No uncalibrated 0-100 market-temperature score",
-        "No new Hong Kong technology or China government-bond provider",
-        "No diagnostic macro state may alter risk score, risk budget, or trade authority",
+        "No live notification until multi-session state-change evidence passes review",
+        "No full-A-share scan; keep 20-30 liquid themes",
+        "No scenario external mapping may be relabelled as verified market data",
         "Missing and stale values remain explicit and cannot authorize new exposure",
         "No automatic order placement or holdings overwrite"
       ],
-      "kill_criterion": "Reject or simplify the workbench if it changes trade authority, duplicates provider fetching in presentation code, cannot keep JSON/HTML consistent, or remains slower to scan than the existing action table.",
-      "review_date": "2026-08-07"
+      "kill_criterion": "Stop or recalibrate if alerts arrive after the decision window, false escalation dominates, provider gaps mask state, or opportunity confirmation encourages added risk after the account protection floor breaks.",
+      "review_date": "2026-08-14"
     }
   ],
   "queued_experiments": [
+    {
+      "feature_id": "feat-058",
+      "problem": "The ten-run after-close/morning remembered-plan pilot was superseded as the Core priority but its audit capability remains useful.",
+      "loop_stage": "verify",
+      "baseline": "P0 passed and owner re-review was pending before the intraday pivot.",
+      "outcome_metric": "Resume only if intraday evidence shows a specific audit or remembered-plan gap.",
+      "smallest_experiment": "Keep the current implementation parked without new scope.",
+      "safety_boundaries": ["Preserve four routes", "Keep human trade authority", "Do not compete with IR-002 live shadow"],
+      "kill_criterion": "Do not resume for visual polish alone.",
+      "review_date": "2026-09-01"
+    },
     {
       "feature_id": "feat-056",
       "problem": "InsightRadar has a structurally complete Harness but no behavioral baseline proving which controls improve real tasks.",

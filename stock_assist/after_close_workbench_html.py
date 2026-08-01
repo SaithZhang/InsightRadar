@@ -44,16 +44,16 @@ def _document(workspace: Mapping[str, object]) -> str:
     <aside class="sidebar">
       <div class="brand"><span class="brand-mark">IR</span><div>{escape(PRODUCT_NAME)}<small>Rule-first decision intelligence</small></div></div>
       <nav class="nav" aria-label="主要任务">
-        {_nav("today", "今日计划", str(len(plans)), True)}
-        {_nav("portfolio", "组合风险", f"{len(positions)} 持仓")}
-        {_nav("lookup", "标的研究", "按意图")}
-        {_nav("review", "复盘账本", "T+1/5/20")}
+        {_nav("today", "今日雷达", str(len(plans)), True)}
+        {_nav("portfolio", "持仓风险", f"{len(positions)} 持仓")}
+        {_nav("lookup", "机会发现", "结构确认")}
+        {_nav("review", "复盘验证", "IR-001")}
       </nav>
       <div class="sidebar-card"><strong>本地单用户工作台</strong>真实本地数据 · 无交易权<br>规则决定状态，AI只做解释。</div>
     </aside>
     <main class="content">
       <header class="topbar">
-        <div><div id="pageEyebrow" class="eyebrow">08:30 Decision Workspace</div><h1 id="pageTitle">今日计划</h1></div>
+        <div><div id="pageEyebrow" class="eyebrow">09:25 · 09:35 · 10:00</div><h1 id="pageTitle">今日雷达</h1></div>
         <div class="top-actions">
           <span class="chip">数据截至 {escape(source_time)}</span>
           <span class="chip" id="stage-label">{escape(_stage_label(workspace))}</span>
@@ -134,6 +134,7 @@ def _today(workspace: Mapping[str, object]) -> str:
     )
     return f"""
 <section class="view active" id="today" data-route-panel="today">
+  {_intraday_today_panel(workspace)}
   {_decision_stage_rail(workspace)}
   {_decision_conclusion(workspace)}
   {primary}
@@ -625,11 +626,13 @@ def _risk_card(workspace: Mapping[str, object]) -> str:
 def _handoff_card(workspace: Mapping[str, object]) -> str:
     handoffs = _dict_rows(workspace.get("monitor_handoffs"))
     item = handoffs[0] if handoffs else {}
+    runtime = _mapping(workspace.get("intraday_radar"))
+    runtime_status = str(runtime.get("status") or "missing")
     return f"""<section class="panel handoff">
       <div class="eyebrow">盘中监控交接</div>
-      <strong id="handoffState">尚未形成今日有效计划</strong>
-      <p id="handoffCopy">{escape(str(item.get("reason") or "P2 才接入真实 5 分钟盘中监控。"))}</p>
-      <div class="prototype-note">目标交互：状态变化、去重、冷却、人工确认。当前真实 5 分钟轮询与通知尚未实现。</div>
+      <strong id="handoffState">点时雷达：{escape(runtime_status)}</strong>
+      <p id="handoffCopy">{escape(str(item.get("reason") or "分钟轮询已接入本地归档；没有有效计划时仍可保持等待。"))}</p>
+      <div class="prototype-note">已实现状态变化去重与人工确认边界；跨多日阈值校准和状态变化通知仍属于 IR-002。</div>
     </section>"""
 
 
@@ -649,6 +652,143 @@ def _data_health_card(workspace: Mapping[str, object]) -> str:
       <div class="risk-list">{items}</div>
       <button class="btn small" type="button" data-open-data>查看数据状态</button>
     </section>"""
+
+
+def _intraday_today_panel(workspace: Mapping[str, object]) -> str:
+    runtime = _mapping(workspace.get("intraday_radar"))
+    snapshot = _mapping(runtime.get("latest_snapshot"))
+    if not snapshot:
+        return """<section class="panel section">
+          <div class="section-head"><div><div class="eyebrow">盘前 / 盘中 P0</div><h2>今日雷达尚无点时快照</h2>
+          <p>运行 intraday-poll 后显示账户利润保护、催化失效与机会结构；盘后计划保留在下方二级区域。</p></div>
+          <span class="status blocked">missing</span></div></section>"""
+    exposures = _mapping(snapshot.get("exposure_by_theme"))
+    technology = sum(
+        float(exposures.get(theme_id) or 0)
+        for theme_id in (
+            "ai_hardware_semiconductor", "communication_cpo", "pcb",
+            "ai_software_apps", "robot", "data_compute",
+        )
+    )
+    alerts = _dict_rows(runtime.get("timeline"))[-6:]
+    alert_rows = "".join(
+        '<div class="risk-row">'
+        f'<span>{escape(str(item.get("timestamp") or "unknown"))[11:16]} · '
+        f'{escape(str(item.get("title") or item.get("type") or "盘中状态"))}</span>'
+        f'<strong class="{_severity_class(item.get("severity"))}">'
+        f'{escape(str(item.get("severity") or "info"))}</strong></div>'
+        for item in alerts
+    ) or '<div class="risk-row"><span>当前没有规则升级</span><strong>继续等待</strong></div>'
+    return f"""<section class="panel section intraday-primary">
+      <div class="section-head"><div><div class="eyebrow">盘前 / 盘中主工作台</div><h2>账户风险与主题结构</h2>
+      <p>数据截至 {escape(str(snapshot.get("timestamp") or runtime.get("generated_at") or "unknown"))}；状态变化不等于自动交易授权。</p></div>
+      <span class="status {_status_class(runtime.get('status'))}">{escape(str(runtime.get('status') or 'unknown'))}</span></div>
+      <div class="metrics">
+        <div class="metric"><small>账户当日盈亏</small><strong>{_value(snapshot.get('account_daily_pnl'))}</strong><em>unknown 不按 0</em></div>
+        <div class="metric"><small>早盘利润峰值</small><strong>{_value(snapshot.get('account_peak_daily_pnl'))}</strong><em>点时累计</em></div>
+        <div class="metric"><small>利润回吐</small><strong>{_ratio(snapshot.get('pnl_giveback_ratio'))}</strong><em>保护预算输入</em></div>
+        <div class="metric"><small>科技主题集中</small><strong>{technology:.1f}%</strong><em>已知点时市值</em></div>
+      </div>
+      <div class="risk-list">{alert_rows}</div>
+      <p class="prototype-note">盘后计划、数据健康、证据链与版本账本继续保留在本页下方，作为解释和审计能力。</p>
+    </section>"""
+
+
+def _intraday_portfolio_panel(workspace: Mapping[str, object]) -> str:
+    runtime = _mapping(workspace.get("intraday_radar"))
+    snapshot = _mapping(runtime.get("latest_snapshot"))
+    if not snapshot:
+        return ""
+    exposures = _mapping(snapshot.get("exposure_by_theme"))
+    exposure_rows = "".join(
+        f'<div class="risk-row"><span>{escape(str(theme_id))}</span><strong>{_value(value, suffix="%")}</strong></div>'
+        for theme_id, value in sorted(exposures.items(), key=lambda item: float(item[1] or 0), reverse=True)[:8]
+    )
+    holdings = _dict_rows(snapshot.get("holding_snapshots"))
+    stale = sum(
+        str(item.get("status")) != "fresh"
+        for item in _dict_rows(snapshot.get("quote_freshness"))
+    )
+    return f"""<section class="panel section intraday-primary">
+      <div class="section-head"><div><div class="eyebrow">点时持仓风险</div><h2>主题集中、利润回吐与行情新鲜度</h2></div>
+      <span class="status {'blocked' if stale else 'ready'}">{stale} 项不新鲜</span></div>
+      <div class="metrics">
+        <div class="metric"><small>点时组合市值</small><strong>{_value(snapshot.get('portfolio_value'))}</strong></div>
+        <div class="metric"><small>持仓快照</small><strong>{len(holdings)}</strong></div>
+        <div class="metric"><small>利润回吐</small><strong>{_ratio(snapshot.get('pnl_giveback_ratio'))}</strong></div>
+      </div><div class="risk-list">{exposure_rows}</div>
+    </section>"""
+
+
+def _intraday_opportunity_panel(workspace: Mapping[str, object]) -> str:
+    runtime = _mapping(workspace.get("intraday_radar"))
+    states = _mapping(runtime.get("opportunity_states"))
+    snapshot = _mapping(runtime.get("latest_snapshot"))
+    themes = {
+        str(item.get("theme_id")): item
+        for item in _dict_rows(snapshot.get("theme_snapshots"))
+    }
+    candidates = [
+        (theme_id, state)
+        for theme_id, state in states.items()
+        if str(state) in {"观察", "正在形成", "确认", "过热", "失效"}
+    ]
+    if not candidates:
+        return """<section class="panel section"><div class="section-head"><div><div class="eyebrow">机会雷达</div>
+        <h2>未出现已确认结构</h2><p>只有 VWAP、广度、同时间成交和龙头跟随同步满足后才升级；继续等待是合规分支。</p></div>
+        <span class="status pending">未出现</span></div></section>"""
+    cards = "".join(
+        '<div class="source-card">'
+        f'<small>{escape(str(theme_id))}</small><strong>{escape(str(state))}</strong>'
+        f'<em>VWAP {_value(_mapping(themes.get(str(theme_id))).get("vwap_distance"), suffix="%")} · '
+        f'量比 {_value(_mapping(themes.get(str(theme_id))).get("volume_ratio_same_time"))} · '
+        f'广度 {_ratio(_mapping(themes.get(str(theme_id))).get("breadth_above_vwap"))}</em></div>'
+        for theme_id, state in candidates
+    )
+    return f"""<section class="panel section intraday-primary"><div class="section-head"><div><div class="eyebrow">机会发现</div>
+      <h2>相对强势候选</h2><p>确认表示结构满足，不强制推荐买入；账户利润保护线仍可否决新增风险。</p></div>
+      <span class="status pending">{len(candidates)} 个候选</span></div><div class="source-grid">{cards}</div></section>"""
+
+
+def _intraday_replay_panel(workspace: Mapping[str, object]) -> str:
+    replay = _mapping(workspace.get("intraday_replay"))
+    case = _mapping(replay.get("case"))
+    backtest = _mapping(replay.get("backtest"))
+    strategies = _dict_rows(backtest.get("strategies"))
+    if not strategies:
+        return """<section class="panel section"><div class="section-head"><div><div class="eyebrow">IR-001</div>
+        <h2>离线回放尚未生成</h2><p>先完成逐分钟点时回放，再评价策略，不用样例曲线填空。</p></div>
+        <span class="status blocked">missing</span></div></section>"""
+    rows = "".join(
+        f'<tr><td>{escape(str(item.get("label") or item.get("strategy_id")))}</td>'
+        f'<td>{_value(item.get("final_return_pct"), suffix="%")}</td>'
+        f'<td>{_value(item.get("max_profit_giveback"))}</td>'
+        f'<td>{_value(item.get("max_drawdown_pct"), suffix="%")}</td>'
+        f'<td>{escape(str(item.get("trade_count") or 0))}</td>'
+        f'<td>{_value(item.get("reentry_success_rate_pct"), suffix="%")}</td>'
+        f'<td>{_value(item.get("improvement_vs_full_hold"))}</td></tr>'
+        for item in strategies
+    )
+    audit = _mapping(replay.get("no_lookahead"))
+    return f"""<section class="panel section intraday-primary">
+      <div class="section-head"><div><div class="eyebrow">{escape(str(case.get('case_id') or 'IR-001'))} · 逐分钟</div>
+      <h2>{escape(str(case.get('title') or '盘中决策验证'))}</h2><p>实际操作改善保持 unknown，直到逐笔成交可核验。</p></div>
+      <span class="status ready">点时审计 {escape(str(audit.get('status') or 'unknown'))}</span></div>
+      <div class="table-wrap"><table><thead><tr><th>策略</th><th>最终收益</th><th>最大利润回吐</th><th>最大回撤</th><th>交易</th><th>接回成功率</th><th>相对持有改善</th></tr></thead><tbody>{rows}</tbody></table></div>
+    </section>"""
+
+
+def _severity_class(value: object) -> str:
+    return {
+        "red": "danger-text",
+        "orange": "amber-text",
+        "yellow": "amber-text",
+        "info": "good-text",
+    }.get(str(value), "unknown-text")
+
+
+def _ratio(value: object) -> str:
+    return f"{float(value) * 100:.1f}%" if isinstance(value, (int, float)) else "unknown"
 
 
 def _portfolio(workspace: Mapping[str, object]) -> str:
@@ -692,6 +832,7 @@ def _portfolio(workspace: Mapping[str, object]) -> str:
     cash_label = _value(summary.get("cash"))
     return f"""
 <section class="view" id="portfolio" data-route-panel="portfolio">
+  {_intraday_portfolio_panel(workspace)}
   <div class="metrics">
     <div class="metric"><small>持仓数量</small><strong>{len(positions)}</strong><em>真实 portfolio.json</em></div>
     <div class="metric"><small>已知仓位</small><strong>{_value(known_exposure, suffix='%')}</strong><em>未知不按 0 处理</em></div>
@@ -750,6 +891,7 @@ def _research(workspace: Mapping[str, object]) -> str:
     )
     return f"""
 <section class="view" id="lookup" data-route-panel="lookup">
+  {_intraday_opportunity_panel(workspace)}
   <section class="panel section">
     <div class="section-head"><div><h2>先明确研究问题，再调用数据和 AI</h2><p>规则负责可判定状态；AI只在非结构化证据变化时归纳和解释。</p></div><span class="status blocked">P1 尚未接入研究编排</span></div>
     <form id="lookupForm" class="form-grid">
@@ -838,6 +980,7 @@ def _review(workspace: Mapping[str, object]) -> str:
     data_state = "blocked"
     return f"""
 <section class="view" id="review" data-route-panel="review">
+  {_intraday_replay_panel(workspace)}
   <div class="review-inline-meta">
     <span>更新于 {escape(str(outcome.get("as_of_trade_date") or workspace.get("generated_at") or "unknown"))}</span>
     <span>跟踪 {tracked}</span><span>计划版本 {len(versions)}</span><span>口径隔离 {len(quarantined_versions)}</span><span>用户异议 {disputed}</span>
@@ -1272,10 +1415,10 @@ window.addEventListener("unhandledrejection", event => {
 });
 const routes = new Set(["today", "portfolio", "lookup", "review"]);
 const titles = {
-  today:["08:30 Decision Workspace","今日决策"],
-  portfolio:["Portfolio Risk Cockpit","组合风险"],
-  lookup:["Research by Intent","标的研究"],
-  review:["Review · Strategy ≠ Execution","决策价值复盘"],
+  today:["09:25 · 09:35 · 10:00","今日雷达"],
+  portfolio:["Portfolio Intraday Risk","持仓风险"],
+  lookup:["Opportunity · Structure First","机会发现"],
+  review:["IR-001 · Strategy ≠ Execution","复盘验证"],
 };
 const token = document.querySelector('meta[name="insightradar-session-token"]').content;
 const toast = document.getElementById("toast");

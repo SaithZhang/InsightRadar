@@ -5,8 +5,8 @@ This is the bounded startup snapshot. Read it after `PROJECT_MEMORY.md`; load ch
 <!-- current-state-manifest
 {
   "schema_version": "insight-radar-current-state/v1",
-  "updated_at": "2026-07-30",
-  "next_feature_id": "feat-058",
+  "updated_at": "2026-08-01",
+  "next_feature_id": "IR-002",
   "product_charter": "docs/product-charter.md",
   "architecture_source": "configs/architecture.json",
   "decision_index": "docs/memory/decision-log.md"
@@ -15,13 +15,14 @@ This is the bounded startup snapshot. Read it after `PROJECT_MEMORY.md`; load ch
 
 ## North Star
 
-InsightRadar is an independent AI risk officer for personal A-share decisions. It identifies the few facts that may justify changing a position, separates fact/inference/rumor/sentiment/unknown, preserves counter-evidence and freshness, and never executes a trade.
+InsightRadar is an A-share premarket/intraday risk-and-opportunity radar over holdings and candidate-thesis memory. It protects account-level profit, detects catalyst failure, gates re-entry, confirms relative strength, separates fact/inference/rumor/sentiment/unknown, and never executes a trade.
 
 The proof goal remains local Core value through real trials, controlled replay, benchmark-relative outcomes, drawdown/payoff, and regime stability. Immature results do not establish an edge.
 
 ## Current Product Shape
 
-- Product version: **InsightRadar V3.0 Pilot — Scope Frozen**. P0 is owner-accepted; the active phase is ten consecutive real morning decision trials under ADR-0010.
+- Product direction: **Intraday Core pivot under ADR-0012**. ADR-0010 still freezes the four route ids and authority boundary, but its monitoring deferral is superseded by the owner's 2026-08-01 reprioritization.
+- First-level routes remain exactly four: `today` 今日雷达, `portfolio` 持仓风险, `lookup` 机会发现, and `review` 复盘验证.
 - Canonical workspace: `D:\work\InsightRadar`. All new code, local data, reports, harness state, and Codex project context belong here.
 - Public release: prepare a fresh sanitized GitHub baseline under ADR-0011; legacy history and private runtime data remain local.
 - Core: portfolio decisions, A-share market radar, research/filing evidence, and the outcome-calibration loop.
@@ -34,17 +35,16 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Verified Baseline
 
+- `IR-001` passed: the private replay archived 36,060 minute bars plus 25 auction snapshots, produced 255 no-lookahead snapshots and 15 deduplicated transitions, triggered the 40-60% profit-protection range near 09:25, confirmed software/robot only after structure gates, and blocked price-only re-entry. Private strategy results improve profit protection versus full hold; exact account-linked values stay outside Git and actual-operation improvement remains unknown. Focused 7/7 and full 290/290 tests, compileall, report assertions, architecture regeneration, and project-memory validation pass.
+
 - `feat-054` passed after ultimate independent read-only review at `d115e2e` returned PASS with no findings. The bootstrap now provides bounded governance, exact read-only agent contracts, executable manifests, PUBLIC-only traces, goal-bound checkpoints, fail-closed public privacy, and deterministic smoke evidence. This proves structural contracts only, not model-performance benefit or trade authority.
 - `feat-053` passed: the guarded Iwencai completed-close IF/IH/IC/IM adapter aligns spot/contract dates, selects active positive-open-interest contracts, exposes basis and positioning, and falls back serially. It never invents a four-minute change or grants decision authority.
 - `feat-036` passed and ownership transferred: the Windows reminder is independently built and running from `D:\work\reminder`; Task Scheduler points there, the main-repo source/export artifacts were retired, and historical logs were migrated.
 - `feat-041` passed: `risk-watch` produces a read-only cross-market/portfolio budget with no-lookahead replay, multi-family confirmation, red re-entry lock, Korea circuit-breaker gating, and 16:20 workday automation. The verified replay first confirmed yellow on 05-19, orange on 06-03, and red on 06-09.
 - `feat-042` passed: `risk-watch` now exposes an Iwencai A-share turnover-concentration snapshot and generalized volatility-normalized shock gates for S&P 500, QQQ, SOX, Nikkei, and cross-region US/Asia concurrence. Concentration remains diagnostic until at least 20 archived daily samples support percentile calibration; community narrative telemetry remains observation-only.
 - `feat-043` passed: `ai-capex-watch` separates hyperscaler CapEx, optical-network transmission, and supplier realization; sparse or missing evidence stays explicit and cannot override `risk-watch` or authorize trades.
-- `feat-045` passed: four CSI 300 ETF share histories are compared with dated Huijin disclosures. The 2026-07-17 lower bound is 1606.59亿 units exited from the disclosed ETFs, without claiming cash selling, redemption destinations, or full rescue-book coverage.
-- `feat-046` passed: the proxy adds 1/5/20-observation changes and preserves the current +17.88% five-observation rebound inside a -33.38% twenty-observation contraction; it cannot identify the seller or authorize a style trade.
 - `feat-047` passed: `after-close` consumes risk, state-team ETF, and AI-capex evidence into one fail-closed next-session plan; missing or stale gates cannot authorize added exposure.
 - `feat-048` passed: the same guide now consumes `market-levels`, shows diagnostic bear-bull/fear-greed/crowding gauges, exposes the current support/confirmation/resistance ladder and a four-stage intraday watchlist, and provides a local-only broker TSV importer that converts to canonical `portfolio.json` only after a user-approved save. The 2026-07-17 snapshot reads 2.0/10 bear-bull, 28/100 fear-greed, and 52/100 crowding; all remain unbacktested diagnostics rather than trade signals. The active 16:20 automation now runs `market-levels` before `after-close` and reports these fields first.
-- `feat-049` passed: `risk-watch` now queries the complete 同花顺问财 A-share cross-section against a fixed 2024-09-24 anchor, requires listing-date eligibility plus provider-adjusted interval returns and visible coverage, and sends below-anchor breadth, equal-weight/median-stock equivalent points, and a 3900-stock claim audit into the unified after-close cockpit. The verified 2026-07-17 snapshot covers 5299/5299 eligible stocks: 925 (17.46%) are below the anchor, so the same-mouth claim that 3900 are lower is not supported; median-stock equivalent Shanghai is 3845.54 and the arithmetic equal-weight equivalent is 5060.68 versus the official 3764.15. The 78/100 anchor-width gauge describes cumulative position since 9·24 and is explicitly separated from the current red short-cycle risk state.
 - `feat-050` passed: the 2.0/10 bear-bull gauge is now a persisted close-finalized state machine with separate formal/candidate scores, auditable rule/veto ledger, same-day deduplication, daily ±1 cap, hysteresis, two-bar support-failure confirmation, and exact pre-open/intraday/midday/close authority. Market-level states now constrain stance and risk budget instead of remaining decorative; the 2026-07-17 close stays at 2.0 with a red-risk budget-upgrade veto.
 - `feat-051` passed: the token-protected loopback importer supports preview/approval, null-preserving diff, explicit beta, fail-closed reconciliation, backup, atomic save, rollback, and serial refresh. The approved 2026-07-22 three-holding snapshot remains blocked until weights, beta classes, and context are complete.
 - `feat-052` passed: `style-rotation` now compares fixed technology-growth, large-financial, and high-dividend ETF proxies with CSI 300 across 5/20/60 sessions, breadth, moving-average participation, approximate turnover, persistence, conflicts, and source coverage. The 2026-07-17 result is `信号冲突`: large financials lead, technology weakens, but confirmation persists only three sessions and turnover/earnings evidence is insufficient, so no style switch or budget change is authorized.
@@ -55,7 +55,8 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Next Feature
 
-- `feat-058` is the sole active experiment for the ten-run Pilot. The decision-service repair now derives cost-invariant repair/risk/wait branches from completed daily bars, quarantines undeclared adjustment discontinuities, links evidence to plans, and saves imports before an idempotent SQLite-backed serial refresh. Completion requires new artifacts plus a same-stem triplet bound to `portfolio_version`. Private runtime evidence and loopback interaction QA passed; owner re-review is pending and P1/P2 remain unstarted.
+- `IR-002` is the sole active experiment: multiple live 09:25/09:35/10:00 shadow sessions, verified external point-time mapping, alert timing/false-escalation measurement, and state-change notification admission. The implemented poller remains local and uncalibrated; no notifications are authorized yet.
+- `feat-058` is parked by explicit owner reprioritization; its after-close plan, data health, evidence chain, and version ledger remain secondary capabilities rather than deleted work.
 - `feat-056` remains pending and the sole queued Harness experiment; no pilot or benchmark run has started.
 - `feat-057` is complete but remains an unpromoted diagnostic layer until adequate independent events, held-out outcomes, stable thresholds, primary-source event evidence, and reliable source coverage exist.
 - `feat-044` and `feat-055` remain pending outside the Harness queue and are not authorized to jump ahead of the Harness program without explicit reprioritization.
@@ -66,6 +67,11 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 - `feat-040` now also carries an evidence-bound strategy-contract layer for the tracked technology-mainline thread: user-provided thresholds stay labelled and cannot override current market data, filings, financial evidence, or user-specific risk settings. Acceptance is still pending.
 
 ## Known Gaps
+
+- IR-001 external-mapping returns are explicit acceptance-case inputs, not verified external price observations. Live `catalyst_failure` remains unavailable until a point-in-time external mapping source is wired.
+- Actual 2026-07-31 broker executions are unavailable, so `improvement_vs_actual` remains `unknown`; no proxy strategy is labelled as actual behavior.
+- The live poller is implemented but not calibrated across open-session samples; an offline case pass does not establish general profitability or authorize notifications.
+- The live re-entry rule can consume an optional private user-confirmed state ledger, but the workbench does not yet record sell/re-entry confirmations into it; absence remains unknown rather than “no sale”.
 
 - Codex config and the weekday brief target `D:\work\InsightRadar`. The old `%USERPROFILE%\Documents\stock-assist` root remains empty but process-locked; do not force-delete it.
 - The project `.venv` and AmazingData connectivity are restored. The latest private report has structural actions but no strictly ready holding; complete explicit beta/risk reconciliation and all stale or missing holding contexts before any blocked plan can gain authority. One provider series is separately quarantined until its adjustment basis is reconciled.
@@ -85,7 +91,7 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Expansion Freeze
 
-- InsightRadar V3.0 Pilot: freeze the four-page information architecture, core loop, and responsibility boundary for ten real morning trials; see ADR-0010.
+- Freeze the four-route information architecture, modular monolith, local-only runtime, and human authority boundary. ADR-0012 authorizes intraday Core behavior inside those routes; it does not authorize a fifth page, cloud deployment, or automatic execution.
 - Windows reminder: extraction and external cutover complete; it is no longer an InsightRadar repository component.
 - Factor Lab: keep available but park new development.
 - Crypto/RWA and X/Twitter collectors remain frozen as optional Extensions. The completed NGA monitor and daily digest remain isolated and cannot become Core dependencies.

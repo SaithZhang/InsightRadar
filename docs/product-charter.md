@@ -2,17 +2,17 @@
 
 ## Product Mission
 
-InsightRadar is an independent AI risk officer for individual investors and capital providers. It filters fragmented portfolio and market evidence, distinguishes facts, inferences, rumors, sentiment, and unknowns, and turns the small number of position-relevant changes into auditable, conditional guidance through a repeatable decision loop:
+InsightRadar is an **A股盘前/盘中风险与机会雷达，叠加持仓与候选逻辑记忆**. It filters fragmented portfolio and market evidence, distinguishes facts, inferences, rumors, sentiment, and unknowns, and turns the small number of position-relevant changes into auditable, conditional guidance through a repeatable decision loop:
 
 `Observe -> Explain -> Decide -> Verify`
 
 The product promise is not “more signals.” It is to identify the small number of facts that may justify changing a position, while keeping counter-evidence, freshness, gaps, human confirmation, and later outcomes reviewable.
 
-The frozen V3 user-facing architecture has exactly four first-level tasks: `今日计划`, `组合风险`, `标的研究`, and `复盘账本`. Market evidence remains an upstream constraint and detail drawer, not a fifth task. V3.1 may only make an explicitly approved incremental change after the ten-run pilot.
+The user-facing architecture still has exactly four first-level route ids, now labelled `今日雷达` (`today`), `持仓风险` (`portfolio`), `机会发现` (`lookup`), and `复盘验证` (`review`). Market evidence remains an upstream constraint and detail drawer, not a fifth task. The owner-authorized intraday pivot in ADR-0012 supersedes ADR-0010 only where the earlier pilot deferred point-in-time intraday monitoring; the four-route and human-trade-authority freeze remains intact.
 
 ## Primary User and Wedge
 
-The primary user is a self-directed A-share investor. The initial wedge remains an approved current portfolio, not a generic stock-discovery feed:
+The primary user is a self-directed A-share investor. The initial wedge remains an approved current portfolio plus a bounded 20-30-theme opportunity universe, not a generic full-market stock-discovery feed:
 
 - What changed that matters to my holdings?
 - Which evidence is fresh, trustworthy, or missing?
@@ -25,10 +25,10 @@ When holdings are absent or sparse, the same evidence and risk contracts may pro
 
 | Stage | Product responsibility | Current surfaces |
 |---|---|---|
-| Observe | Collect holdings, A-share structure, filings, research, events, and public viewpoints | `market-pulse`, `market-levels`, `research-monitor`, CNInfo/AmazingData adapters |
+| Observe | Archive point-in-time holdings, auction/minute structure, theme breadth, filings, research, events, and public viewpoints | `intraday-poll`, `market-pulse`, `market-levels`, `research-monitor`, CNInfo/AmazingData adapters |
 | Explain | Rank relevance, preserve source links, expose conflicts and data gaps | Insight payloads and JSON/Markdown/HTML reports |
-| Decide | Produce conditional portfolio actions, triggers, invalidation, and priority | `after-close` |
-| Verify | Mature outcomes, compare with benchmarks, and calibrate future priorities | `signal_outcomes` and `evolve` |
+| Decide | At 09:25/09:35/10:00 protect account profit, detect catalyst failure, gate re-entry, and surface confirmed opportunity structure | `intraday-poll`; `after-close` remains remembered-plan preparation and audit |
+| Verify | Replay minute-visible evidence and compare counterfactual risk paths before calibration | `intraday-replay`, `signal_outcomes`, and `evolve` |
 
 ## Decision Modes and Delivery
 
@@ -110,12 +110,11 @@ The approved product and multi-agent operating design is `docs/superpowers/specs
 
 ## Roadmap Order
 
-1. Core reliability freeze: verify the existing portfolio decision loop on real inputs, measure decision-ready holding coverage, and remove accidental Lab/Extension dependencies.
-2. Core value validation: mature the outcome ledger and run controlled replay/backtests with sample size, benchmark-relative expectancy, transaction costs, drawdown, payoff ratio, MFE/MAE, regime stability, and out-of-sample controls.
-3. Attribution and relevance: add portfolio/benchmark contribution and connect fresh filings, research deltas, events, and market structure directly to affected holdings.
-4. Calibration: prioritize alerts and actions using visible historical outcomes and source reliability.
-5. Research restart: resume PIT neutralization and factor work only after the core baseline passes and the research payload boundary is stable.
-6. Delivery: revisit WSL/Docker/cloud and mobile/web/native clients only after ADR-0006's local Core value gates pass and an explicit cost/rollback decision approves the work.
+1. Prove IR-001 offline with immutable minute archives, no-lookahead snapshots, four deterministic rule modules, and explicit counterfactuals.
+2. Shadow the same contract at 09:25/09:35/10:00 on live sessions; measure alert timing, provider gaps, false escalation, missed profit protection, and re-entry discipline.
+3. Replace scenario external mapping with a verified point-in-time external feed and add notification only for substantive state changes.
+4. Mature outcome samples and calibrate thresholds without granting automatic trade authority.
+5. Resume parked research/Lab or delivery expansion only after the intraday Core proves value.
 
 The active freeze and extraction queue are maintained in `docs/extractions/README.md`.
 

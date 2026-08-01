@@ -95,6 +95,12 @@ This file is the bounded decision index. Full context, alternatives, and consequ
 - Reason: public source and synthetic review assets are suitable for open source, while legacy commit metadata and chronological logs include personal paths and portfolio-linked context.
 - Consequence: no force-push or destructive history rewrite; public traceability begins with the sanitized baseline, verification record, and Draft PR. See ADR-0011.
 
+## 2026-08-01 - Point-in-time intraday risk and opportunity becomes Core
+
+- Decision: shift the primary decision moments to 09:25, 09:35, and 10:00 while preserving the four-route shell and human trade authority.
+- Reason: IR-001 tests whether account profit protection, catalyst-failure detection, re-entry discipline, and cross-theme opportunity recognition improve the actual morning decision loop.
+- Consequence: immutable minute archives and typed point-time rules become the Core seam; after-close planning and audit remain secondary. See ADR-0012.
+
 ## Existing durable decisions
 
 - User-facing product, canonical checkout, Codex project, and automation context use InsightRadar; `stock_assist` and legacy CLI aliases remain compatible implementation identifiers.

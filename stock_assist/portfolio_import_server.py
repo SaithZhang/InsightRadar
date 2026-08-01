@@ -20,6 +20,7 @@ from stock_assist.decision_workspace import (
     restage_workspace,
     write_runtime_state,
 )
+from stock_assist.intraday.polling import load_intraday_runtime
 from stock_assist.paths import REPORT_DIR
 from stock_assist.portfolio_import import apply_portfolio_import, preview_portfolio_import
 from stock_assist.portfolio_import_web import (
@@ -55,6 +56,13 @@ def serve_portfolio_import(
                     self._send_json({"error": "尚未生成 after-close workspace"}, status=404)
                     return
                 self._send_json(overlay_plan_responses(workspace))
+                return
+            if self.path == "/api/intraday":
+                payload = load_intraday_runtime()
+                if payload is None:
+                    self._send_json({"error": "尚未生成 intraday runtime"}, status=404)
+                    return
+                self._send_json(payload)
                 return
             if self.path == "/api/refresh/active":
                 snapshot = coordinator.active() or coordinator.latest()
@@ -250,8 +258,31 @@ def _latest_workspace() -> dict[str, object] | None:
         and runtime.get("effective_market_date") == workspace.get("effective_market_date")
         and runtime.get("source_generated_at") == workspace.get("source_generated_at")
     ):
-        return runtime
-    return workspace
+        selected = dict(runtime)
+    else:
+        selected = dict(workspace)
+    intraday = load_intraday_runtime()
+    if intraday is not None:
+        selected["intraday_radar"] = intraday
+    replay = _latest_intraday_replay()
+    if replay is not None:
+        selected["intraday_replay"] = replay
+    return selected
+
+
+def _latest_intraday_replay() -> dict[str, object] | None:
+    reports = sorted(
+        REPORT_DIR.glob("*-intraday-replay.json"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    if not reports:
+        return None
+    try:
+        payload = json.loads(reports[0].read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _latest_workspace_html(token: str) -> str | None:
