@@ -1,6 +1,6 @@
 # InsightRadar
 
-Current product version: **InsightRadar V3.0 Pilot — Scope Frozen**. P0 is accepted; the project is running ten real morning decision trials. See [PRODUCT_VERSION.md](PRODUCT_VERSION.md) and [ADR-0010](docs/memory/decisions/0010-v3-pilot-scope-frozen.md).
+Current product line: **InsightRadar V3.1 — Incremental Development**. V3.0 remains the historical implemented baseline; its scope freeze ended by owner decision on 2026-08-01 without claiming completion of the planned ten-run trial. See [PRODUCT_VERSION.md](PRODUCT_VERSION.md) and [ADR-0015](docs/memory/decisions/0015-open-sequential-v3-1-iteration.md).
 
 InsightRadar 是面向个人投资者和资产出资人的独立 AI 风险官。它持续过滤市场信息，区分事实、推断、传闻、情绪与 unknown，结合真实持仓、账户风险、产业基本面、市场状态和可验证行动证据，给出可追溯、可复核、必须由用户人工确认的风险等级与条件计划。
 
@@ -8,7 +8,7 @@ InsightRadar 是面向个人投资者和资产出资人的独立 AI 风险官。
 
 Canonical workspace: `D:\work\InsightRadar`. New code, local data, generated reports, and Codex automation context belong in this directory.
 
-## 冻结基线文档
+## 版本基线文档
 
 - [产品基线](docs/PRODUCT_BASELINE.md)
 - [V3.0 已实现冻结面](docs/V3.0_FROZEN.md)
@@ -17,7 +17,7 @@ Canonical workspace: `D:\work\InsightRadar`. New code, local data, generated rep
 - [数据与公开边界](docs/DATA_BOUNDARIES.md)
 - [本轮决策日志](docs/DECISION_LOG.md)
 
-V3.1 尚未获准开发。不得新增第五个一级菜单、用原型数据冒充真实能力、自动交易，或让 AI/实名观点来源覆盖规则和人工确认。
+V3.1 已获准按增量逐项开发；一次只推进一个已准入增量，未验证能力不得写成已实现。不得新增第五个一级菜单、用原型数据冒充真实能力、自动交易，或让 AI/实名观点来源覆盖规则和人工确认。
 
 ## Windows 一键使用
 

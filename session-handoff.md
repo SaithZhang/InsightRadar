@@ -1405,3 +1405,11 @@ Completion update:
 - The newly unblocked current plan remains `pending` and visible even when its content/version is unchanged. The Today decision column renders every blocked/pending requirement before any observation-only card, so a fourth actionable rule cannot disappear.
 - The fresh private runtime has one strictly ready holding, three holdings with independent current-context blockers, and incomplete historical entry context for all four. The affected current plan has no blocker, is `awaiting_confirmation`, and has not been accepted or made monitor-eligible automatically.
 - Final gates: 355/355 tests, compileall, focused Ruff F/I, clean `today_workbench.py` Mypy, isolated wheel build, project-memory validation, fresh triplet, live API checks, desktop browser QA, and a restarted `127.0.0.1:8765` service. Legacy renderer/workflow audits still show 27 Mypy and two Ruff F/I findings that predate this repair. No commit or push was performed; `docs/product-prototypes/` remains untouched.
+
+## 2026-08-01 Handoff - V3.1 incremental development is active
+
+- ADR-0015 ends the V3.0 defect-only scope freeze. Keep V3.0 as the historical implemented and rollback baseline; do not claim that its planned ten-run trial completed.
+- The active product line is **InsightRadar V3.1 — Incremental Development**. Advance one admitted increment at a time; `IR-002` remains the sole active experiment and `feat-058` remains parked.
+- Do not open V3.2 or a parallel redesign without a later owner acceptance decision. Do not add a fifth first-level route.
+- Permanent guardrails are unchanged: truthful real/synthetic/unknown states, provenance/freshness/gaps, local private runtime data, rule-first authority, explicit human confirmation, and no automatic trading.
+- The version transition is documentation/governance only; no runtime capability, notification, order path, or trade authority was added. Preserve the user's untracked `docs/product-prototypes/` directory.

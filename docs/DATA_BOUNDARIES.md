@@ -2,6 +2,8 @@
 
 Status: **Public-repository safety contract**
 
+Applicability: **V3.0 historical baseline, active V3.1 development, and later versions until explicitly replaced by a stricter contract. Ending the V3.0 scope freeze does not relax these boundaries.**
+
 ## May Be Published
 
 - Source code and tests.

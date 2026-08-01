@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>InsightRadar｜2026-07-31 盘后复盘原型</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- 单页原型：验证用户能否在 10 秒内完成盘后复盘定向；不接入正式路由。 -->
+  <main class="page-shell">
+    <header class="masthead">
+      <div class="brand-block">
+        <span class="brand-mark" aria-hidden="true">IR</span>
+        <div>
+          <p class="brand-name">InsightRadar</p>
+          <p class="brand-subtitle">复盘验证 · 本地静态原型</p>
+        </div>
+      </div>
+      <div class="date-block">
+        <span class="mode-chip">周末复盘</span>
+        <time datetime="2026-07-31">2026-07-31 收盘</time>
+      </div>
+    </header>
+
+    <section class="mode-notice" aria-label="当前页面模式">
+      <span class="notice-dot" aria-hidden="true"></span>
+      <strong>今天休市，当前回看2026-07-31收盘。</strong>
+      <span>仅用于复盘，不产生实时交易动作。</span>
+    </section>
+
+    <section class="card-grid" aria-label="盘后复盘三项核心信息">
+      <article class="primary-card account-card">
+        <div class="card-heading">
+          <div>
+            <p class="eyebrow">01 · 昨天发生了什么</p>
+            <h1>账户仍赚钱，但早盘利润回吐过半。</h1>
+          </div>
+          <span class="status-chip attention">需要复盘</span>
+        </div>
+
+        <div class="hero-metric">
+          <span>收盘当日盈亏</span>
+          <strong>+16,361<small>元</small></strong>
+        </div>
+
+        <div class="metric-pair" aria-label="利润峰值与回吐">
+          <div>
+            <span>09:57 利润峰值</span>
+            <strong>35,433元</strong>
+          </div>
+          <div>
+            <span>从峰值回吐</span>
+            <strong class="amber-text">53.8%</strong>
+          </div>
+        </div>
+
+        <ul class="key-points">
+          <li>从峰值到收盘减少 <strong>19,072元</strong>。盘前没有设置利润回吐保护线，因此本次只能记录回吐，不能据此判断当时是否应该卖出。</li>
+          <li>从 09:57 到收盘，科创芯片ETF和中际旭创对应的账户盈利分别减少 8,700元和 7,600元，是主要回吐来源。</li>
+          <li>当前证据不足以确认反转或趋势结束。</li>
+        </ul>
+
+        <details class="why-details">
+          <summary>为什么</summary>
+          <div class="evidence-panel">
+            <p><b>支持证据 1</b>　本地收盘快照记录：当日盈亏 16,361元，峰值 35,433元，回吐 53.8%。</p>
+            <p><b>支持证据 2</b>　按 09:57 与收盘持仓价格计算，科创芯片ETF、中际旭创分别贡献 -8,700元、-7,600元的峰值后盈亏变化。</p>
+            <p class="counter"><b>可能推翻</b>　四项持仓收盘仍全部高于前收；高开回落本身不能证明趋势结束。</p>
+            <p class="source-line">日期与来源：2026-07-31 09:57—15:00，本地账户与持仓收盘记录。</p>
+          </div>
+        </details>
+      </article>
+
+      <article class="primary-card holdings-card">
+        <div class="card-heading compact-heading">
+          <div>
+            <p class="eyebrow">02 · 最需要关注的持仓</p>
+            <h2>一个判断阻断、一个主要回吐、一个主要盈利。</h2>
+          </div>
+          <span class="count-chip">3项</span>
+        </div>
+
+        <div class="holding-list">
+          <section class="holding-item critical-item">
+            <div class="holding-title">
+              <div><strong>科创芯片ETF</strong><span class="selection-reason">阻断判断</span></div>
+              <span class="state-pill waiting">等待数据</span>
+            </div>
+            <p><b>发生了什么：</b>收盘比前收上涨 3.53%；1.115元相对开盘价 1.184元下跌 5.83%，收在日内低点。技术数据异常。</p>
+            <p><b>计划情况：</b>技术信号暂停；数据问题排除前，不使用技术位做T。</p>
+          </section>
+
+          <section class="holding-item">
+            <div class="holding-title">
+              <div><strong>中际旭创</strong><span class="selection-reason">主要回吐来源</span></div>
+              <span class="state-pill pending-plan">计划待确认</span>
+            </div>
+            <p><b>发生了什么：</b>从 09:57 到收盘，对应账户盈利减少 7,600元；收盘比前收上涨 4.40%，902.01元相对开盘价 960.00元下跌 6.04%。</p>
+            <p><b>计划情况：</b>减仓线和接回线尚未确认，不是“已确认计划未触发”；因此标记为“计划待确认”。</p>
+          </section>
+
+          <section class="holding-item">
+            <div class="holding-title">
+              <div><strong>沪电股份</strong><span class="selection-reason">主要盈利来源 · 金额待核对</span></div>
+              <span class="state-pill pending-plan">计划待确认</span>
+            </div>
+            <p><b>发生了什么：</b>收盘持仓表显示剩余 800股、当日盈亏 5,760元；收盘比前收上涨 7.46%，103.75元相对开盘价 105.30元下跌 1.47%。</p>
+            <p><b>金额口径：</b>8,640元只是按盘前 1,200股和前收至收盘价差计算的理论值。缺少卖出 400股的成交价和时间，完整交易贡献待核对，不能直接采用 5,760元或 8,640元。</p>
+            <p><b>计划情况：</b>减仓线和接回线尚未确认，不是“已确认计划未触发”；因此标记为“计划待确认”。</p>
+          </section>
+        </div>
+
+        <p class="quiet-line">其余持仓：华能国际当日贡献 120元，计划同样尚未确认；7.61 只在右栏作为华能国际观察指标说明。</p>
+
+        <details class="why-details">
+          <summary>为什么</summary>
+          <div class="evidence-panel">
+            <p><b>支持证据 1</b>　科创芯片ETF的技术数据异常，技术位不能使用；这是“阻断判断”的原因。</p>
+            <p><b>支持证据 2</b>　从 09:57 到收盘，中际旭创对应 -7,600元盈亏变化；沪电收盘持仓表记录剩余 800股、当日盈亏 5,760元。盘前 1,200股对应的 8,640元仅为理论值，完整交易贡献待核对。</p>
+            <p class="counter"><b>可能推翻</b>　如果用户另有已确认的减仓线或接回线，重点顺序和计划状态都应以那份规则为准。</p>
+            <p class="source-line">日期与来源：2026-07-31 09:57—15:00，本地持仓记录与现有计划记录。</p>
+          </div>
+        </details>
+      </article>
+
+      <article class="primary-card prep-card">
+        <div class="card-heading compact-heading">
+          <div>
+            <p class="eyebrow">03 · 下一个交易日准备</p>
+            <h2>两项待确认，一项仅观察。</h2>
+          </div>
+          <span class="status-chip pending">2项待确认</span>
+        </div>
+
+        <div class="prep-list">
+          <section class="prep-item">
+            <div class="prep-index">1</div>
+            <div>
+              <h3 id="etf-rule-title">科创芯片ETF｜技术信号停用规则</h3>
+              <p>数据恢复前，不使用技术位做T。</p>
+              <p id="etf-rule-question" class="decision-question"><b>正在确认：</b>数据恢复并核对完成前，技术信号始终停用；核对完成后，再单独决定是否重新启用。当前选择不能绕过数据阻断。</p>
+              <div class="rule-actions" role="group" aria-labelledby="etf-rule-title" aria-describedby="etf-rule-question" data-rule-actions data-rule-name="科创芯片ETF技术信号停用规则">
+                <button type="button" class="action-option primary" data-rule-action="确认" aria-pressed="false">确认</button>
+                <button type="button" class="action-option" data-rule-action="修改" aria-pressed="false">修改</button>
+                <button type="button" class="action-option off" data-rule-action="暂不启用" aria-pressed="false">暂不启用</button>
+              </div>
+              <p class="interaction-feedback" data-rule-feedback aria-live="polite">尚未选择；本页操作刷新后清除。</p>
+            </div>
+          </section>
+
+          <section class="prep-item observation-item">
+            <div class="prep-index">2</div>
+            <div>
+              <h3>华能国际｜7.61 观察指标</h3>
+              <p><b>站上、未站上或重新跌破：</b>当前都只观察，不产生加仓、减仓或其他动作。</p>
+              <p class="observation-note">暂无动作，当前不进入待确认规则。</p>
+            </div>
+          </section>
+
+          <section class="prep-item">
+            <div class="prep-index">3</div>
+            <div>
+              <h3 id="stock-rule-title">中际旭创、沪电股份｜盘中只观察规则</h3>
+              <p id="stock-rule-question" class="decision-question"><b>正在确认：</b>尚未设置可执行的减仓线和接回线；完成设置前，盘中只观察，不产生T操作提醒。</p>
+              <div class="rule-actions" role="group" aria-labelledby="stock-rule-title" aria-describedby="stock-rule-question" data-rule-actions data-rule-name="中际旭创与沪电股份盘中只观察规则">
+                <button type="button" class="action-option primary" data-rule-action="确认" aria-pressed="false">确认</button>
+                <button type="button" class="action-option" data-rule-action="修改" aria-pressed="false">修改</button>
+                <button type="button" class="action-option off" data-rule-action="暂不启用" aria-pressed="false">暂不启用</button>
+              </div>
+              <p class="interaction-feedback" data-rule-feedback aria-live="polite">尚未选择；本页操作刷新后清除。</p>
+            </div>
+          </section>
+        </div>
+
+        <details class="why-details">
+          <summary>为什么</summary>
+          <div class="evidence-panel">
+            <p><b>支持证据 1</b>　科创芯片ETF当前技术位不可信；数据恢复并核对完成前，用户选择也不能解除停用。</p>
+            <p><b>支持证据 2</b>　7.61 只属于华能国际，但站上、未站上或重新跌破后的动作相同，因此只作观察指标，不进入待确认规则。</p>
+            <p class="counter"><b>可能推翻</b>　如果用户已有另一份已确认规则，本页应以那份规则为准。</p>
+            <p class="source-line">日期与来源：2026-07-30 计划记录，结合 2026-07-31 收盘记录复核。</p>
+          </div>
+        </details>
+      </article>
+    </section>
+
+    <details class="data-details">
+      <summary>数据详情</summary>
+      <div class="data-detail-grid">
+        <p><span>更新至</span><strong>2026-07-31 15:00</strong></p>
+        <p><span>关键异常</span><strong>1项</strong></p>
+        <p><span>暂停能力</span><strong>科创芯片ETF技术判断</strong></p>
+      </div>
+    </details>
+
+    <footer class="page-footer">
+      <span>本地静态原型 · 含真实账户汇总数据 · 不可发布</span>
+      <span>不连接行情，不执行交易</span>
+    </footer>
+  </main>
+  <script>
+    document.querySelectorAll("[data-rule-actions]").forEach((group) => {
+      const feedback = group.parentElement.querySelector("[data-rule-feedback]");
+      const buttons = group.querySelectorAll("button[data-rule-action]");
+
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => {
+          buttons.forEach((item) => item.setAttribute("aria-pressed", "false"));
+          button.setAttribute("aria-pressed", "true");
+          feedback.textContent = `本页已为“${group.dataset.ruleName}”选择“${button.dataset.ruleAction}”；刷新后清除，不写入任何记录。`;
+        });
+      });
+    });
+  </script>
+</body>
+</html>

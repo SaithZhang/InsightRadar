@@ -1791,3 +1791,11 @@ Read `AGENTS.md`, `feature_list.json`, and this file first. `feat-004`, `feat-00
 - Found and repaired the adjacent state-flow defect exposed by the unblock: an `unchanged + pending` plan was excluded from Today and then hidden behind the three-card cap. Pending unchanged plans now remain actionable, and all blocked/pending requirements render before optional observation cards.
 - A fresh private after-close triplet reports one strictly ready current plan, keeps the remaining current-context blockers intact, and preserves all historical entry gaps as Review `unknown`. The loopback service was restarted with the new code; no AI, notification, order, or trade authority was added.
 - Verification passes: 355/355 tests, compileall, focused Ruff F/I for the repaired workspace/renderer/tests, clean Mypy for `today_workbench.py`, isolated wheel build, project-memory validation, JSON/diff checks, live loopback API assertions, and browser checks of the Today pending card and Review boundary. The touched legacy workflow/renderer audit still reports 27 existing Mypy errors; `after_close.py` retains two existing Ruff F/I findings outside this change.
+
+## 2026-08-01 - V3.0 scope freeze concluded and V3.1 iteration opened
+
+- The owner explicitly ended the frozen-baseline phase and authorized version-by-version iteration. ADR-0015 preserves V3.0 as an immutable historical implementation and opens **InsightRadar V3.1 — Incremental Development**.
+- The planned ten consecutive real morning trials did not complete and are not reported as passed. ADR-0010 remains the historical freeze decision but no longer blocks admitted V3.1 product work.
+- Updated the active product/version documents, startup instructions, architecture wording, public decision log, project memory, product governance, and `feat-058` pilot metadata. The historical V3.0 document and public review package remain evidence of the earlier baseline rather than being rewritten as current capability.
+- V3.1 remains sequential: `IR-002` is the sole active experiment; `feat-058` remains parked until explicitly selected. V3.2 and parallel redesign are not authorized.
+- The four first-level routes, real/synthetic/unknown truth boundary, local/private data contract, rules over AI, human confirmation, and no automatic trading remain unchanged guardrails.

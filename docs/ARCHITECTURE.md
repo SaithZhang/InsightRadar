@@ -1,6 +1,6 @@
 # InsightRadar Architecture
 
-Status: **V3.0 frozen runtime architecture**
+Status: **V3.1 active local runtime architecture**
 
 ## Technology Stack
 
@@ -56,9 +56,9 @@ Loopback service
 
 ## User Routes
 
-The V3 HTML renderer owns four hash routes:
+The V3.1 HTML renderer retains four stable hash routes:
 
-- `#today` — plan-generation chain, market gate, changed plans, human responses.
+- `#today` — after-close/weekend conclusion workbench plus point-in-time radar state.
 - `#portfolio` — exposure, completeness, reconciliation, holdings and risk blockers.
 - `#lookup` — research intent and current evidence boundary.
 - `#review` — plan versions, user responses, and matured signal outcomes.
@@ -76,7 +76,7 @@ Desktop sidebar and mobile bottom navigation use the same route set. Market deta
 
 `configs/architecture.json` currently has 22 nodes and 28 edges across data, research, market, decision, and operations lanes. Lifecycle rings are Core, Lab, Extension, and Governance. No Satellite remains in this repository.
 
-The module registry and lifecycle rings are internal architecture classifications. They do not replace the four frozen user tasks.
+The module registry and lifecycle rings are internal architecture classifications. They do not replace the four stable user tasks.
 
 ## Decision and Persistence Flow
 
@@ -125,7 +125,7 @@ Schemas, examples, source code, and reproducible configs are version controlled.
 .\.venv\Scripts\python -m build
 ```
 
-No repository lint or static type-check configuration existed at the freeze point. Baseline audit results must record that absence separately from actual lint/type-check findings.
+No repository lint or static type-check configuration existed at the V3.0 freeze point. Historical baseline audit results record that absence separately from actual lint/type-check findings; V3.1 increments report the checks they actually run.
 
 ## Generated and Reference Assets
 

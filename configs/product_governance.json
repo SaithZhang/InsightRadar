@@ -27,11 +27,11 @@
   "queued_experiments": [
     {
       "feature_id": "feat-058",
-      "problem": "The ten-run after-close/morning remembered-plan pilot was superseded as the Core priority but its audit capability remains useful.",
+      "problem": "The V3.0 ten-run after-close/morning pilot ended before completion when the owner opened V3.1 iteration; its audit capability remains useful but is not the active increment.",
       "loop_stage": "verify",
       "baseline": "P0 passed and owner re-review was pending before the intraday pivot.",
       "outcome_metric": "Resume only if intraday evidence shows a specific audit or remembered-plan gap.",
-      "smallest_experiment": "Keep the current implementation parked without new scope.",
+      "smallest_experiment": "Keep the current implementation parked until it is explicitly selected as a V3.1 increment.",
       "safety_boundaries": ["Preserve four routes", "Keep human trade authority", "Do not compete with IR-002 live shadow"],
       "kill_criterion": "Do not resume for visual polish alone.",
       "review_date": "2026-09-01"

@@ -21,8 +21,9 @@ The proof goal remains local Core value through real trials, controlled replay, 
 
 ## Current Product Shape
 
-- Product direction: **Intraday Core pivot under ADR-0012**. ADR-0010 still freezes the four route ids and authority boundary, but its monitoring deferral is superseded by the owner's 2026-08-01 reprioritization.
-- First-level routes remain exactly four: `today` 今日工作台, `portfolio` 组合风险, `lookup` 标的研究, and `review` 复盘账本. The bounded 2026-08-01 Today replacement is an after-close/weekend conclusion layer, not a fifth risk-command route.
+- Version: **InsightRadar V3.1 — Incremental Development** under ADR-0015. V3.0 is historical; its incomplete ten-run pilot is not reported as passed.
+- Direction: **Intraday Core pivot under ADR-0012**. Four routes and the rule/user/AI/trade boundary remain V3.1 guardrails.
+- Routes: `today` 今日工作台, `portfolio` 组合风险, `lookup` 标的研究, and `review` 复盘账本. Today is a conclusion layer, not a fifth route.
 - Canonical workspace: `D:\work\InsightRadar`. All new code, local data, reports, harness state, and Codex project context belong here.
 - Public release: prepare a fresh sanitized GitHub baseline under ADR-0011; legacy history and private runtime data remain local.
 - Core: portfolio decisions, A-share market radar, research/filing evidence, and the outcome-calibration loop.
@@ -89,9 +90,10 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 - `ai-capex-watch` currently uses timestamped, manually curated official-IR evidence. It does not yet discover new earnings releases automatically; 800G/1.6T official demand and 中际毛利率、经营现金流、库存应收与1.6T收入 remain open transmission gaps. Direct `file://` browser QA is also blocked by the local browser URL policy.
 - `progress.md` and `session-handoff.md` are append-only history and already large; query their tail or matching feature section instead of reading them in full.
 
-## Expansion Freeze
+## Version Discipline and Parked Expansion
 
-- Freeze the four-route information architecture, modular monolith, local-only runtime, and human authority boundary. ADR-0012 authorizes intraday Core behavior inside those routes; it does not authorize a fifth page, cloud deployment, or automatic execution.
+- V3.1 advances one admitted increment at a time; `IR-002` is active. V3.2 and parallel redesign remain unauthorized.
+- Preserve the four-route information architecture, modular monolith, local-only runtime, and human authority boundary. ADR-0012 authorizes intraday Core behavior inside those routes; it does not authorize a fifth page, cloud deployment, or automatic execution.
 - Windows reminder: extraction and external cutover complete; it is no longer an InsightRadar repository component.
 - Factor Lab: keep available but park new development.
 - Crypto/RWA and X/Twitter collectors remain frozen as optional Extensions. The completed NGA monitor and daily digest remain isolated and cannot become Core dependencies.

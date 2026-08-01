@@ -1,10 +1,12 @@
 # InsightRadar Product Baseline
 
-Status: **Frozen baseline**
+Status: **Active versioned baseline**
 
-Baseline date: **2026-07-25**
+Baseline transition date: **2026-08-01**
 
-Runtime version: **InsightRadar V3.0 Pilot — Scope Frozen**
+Active development line: **InsightRadar V3.1 — Incremental Development**
+
+Historical implemented baseline: **InsightRadar V3.0 Pilot — Scope Frozen** (2026-07-25)
 
 ## Product Definition
 
@@ -24,10 +26,10 @@ The current implementation is local-first, single-user, A-share focused, and hum
 
 ## Non-Negotiable Principles
 
-1. V3 is the working baseline and must not be redesigned from scratch.
-2. V3.1 may only make incremental changes after the frozen pilot review.
-3. Preserve the four first-level tasks: `今日计划`, `组合风险`, `标的研究`, and `复盘账本`.
-4. Do not add a fifth first-level menu. `今日计划` may later be renamed or widened to `风险与计划` only as an approved V3.1 delta.
+1. V3.0 remains the immutable implemented comparison and rollback baseline; ending its scope freeze does not rewrite its historical claims.
+2. V3.1 is authorized for incremental development from 2026-08-01. Advance one admitted increment at a time and do not describe the active line as a stable release before acceptance.
+3. Preserve the four first-level tasks: `今日工作台`, `组合风险`, `标的研究`, and `复盘账本`.
+4. Do not add a fifth first-level menu. A label or responsibility change still requires an admitted V3.1 delta and must preserve the four-route contract.
 5. Portfolio risk is the product center. Security research is an evidence and explanation layer.
 6. Risk views prioritize peak drawdown, risk actions, underlying factor exposure, and re-entry conditions.
 7. Every material claim must be classified as `fact`, `inference`, `rumor`, `sentiment`, or `unknown`.
@@ -70,10 +72,11 @@ The four task routes are the user-facing expression of this loop. The older inte
 
 ## Sources of Truth
 
-- Frozen runtime and routes: `stock_assist/after_close_workbench_html.py`
+- Runtime and stable routes: `stock_assist/after_close_workbench_html.py`
 - Workspace and immutable version semantics: `stock_assist/decision_workspace.py`
 - Loopback service: `stock_assist/portfolio_import_server.py`
 - Canonical after-close payload: `stock_assist/workflows/after_close.py`
 - Upstream plan synthesis: `stock_assist/unified_decision.py`
 - Product rings and commands: `stock_assist/product.py`
-- Durable freeze decision: `docs/memory/decisions/0010-v3-pilot-scope-frozen.md`
+- Historical freeze decision: `docs/memory/decisions/0010-v3-pilot-scope-frozen.md`
+- Active version transition: `docs/memory/decisions/0015-open-sequential-v3-1-iteration.md`

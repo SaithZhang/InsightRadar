@@ -2,11 +2,12 @@
 
 The canonical checkout and all active project context use `InsightRadar`. The internal Python package remains `stock_assist`, and legacy CLI aliases remain compatible.
 
-## Frozen Product Baseline
+## Versioned Product Baseline
 
 - Read `docs/PRODUCT_BASELINE.md`, `docs/V3.0_FROZEN.md`, `docs/V3.1_DELTA.md`, and `docs/DATA_BOUNDARIES.md` before any product, navigation, data-contract, or publishing change.
-- V3.0 is the current baseline. Do not redesign it from scratch or treat V3.1 planning as implemented behavior.
-- Preserve the four first-level tasks: `今日计划`, `组合风险`, `标的研究`, and `复盘账本`. Do not add a fifth first-level menu.
+- V3.0 is the historical frozen baseline. V3.1 is the active, owner-authorized incremental development line from 2026-08-01; do not describe a planned V3.1 delta as implemented behavior.
+- Advance one admitted V3.1 increment at a time. Do not start V3.2 or a parallel product redesign until V3.1 has an explicit acceptance decision.
+- Preserve the four first-level tasks and route ids: `今日工作台` (`today`), `组合风险` (`portfolio`), `标的研究` (`lookup`), and `复盘账本` (`review`). Do not add a fifth first-level menu.
 - Keep portfolio risk at the product center; security research is an evidence/explanation layer.
 - Distinguish fact, inference, rumor, sentiment, and unknown. Show counter-evidence, provenance, as-of time, freshness, and gaps.
 - Never disguise synthetic or prototype data as runtime capability.
@@ -19,7 +20,7 @@ Before writing code:
 
 1. Confirm the working directory is `D:\work\InsightRadar`.
 2. Read this file completely.
-3. Read the frozen product documents named above when the task touches product behavior, navigation, data, or release boundaries.
+3. Read the versioned product documents named above when the task touches product behavior, navigation, data, or release boundaries.
 4. Read `PROJECT_MEMORY.md` and `CURRENT_STATE.md` for non-trivial work, then load only the matching topic under `docs/memory/`.
 5. Query only the exact feature entry and matching recent `progress.md` / `session-handoff.md` section; load the relevant contract from `docs/harness.md`. Do not read append-only history in full unless the task is historical.
 6. Review recent commits with `git log --oneline -10`.

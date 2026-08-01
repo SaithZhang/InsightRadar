@@ -17,6 +17,8 @@ This file is the bounded decision index. Full context, alternatives, and consequ
 - [ADR-0011: Publish a Sanitized V3 Baseline Without Legacy Private History](decisions/0011-public-v3-baseline.md)
 - [ADR-0012: Pivot the Core to Point-in-Time Intraday Risk and Opportunity](decisions/0012-intraday-risk-opportunity-pivot.md)
 - [ADR-0013: Derive Portfolio Beta from Deterministic Market Evidence](decisions/0013-deterministic-portfolio-beta.md)
+- [ADR-0014: Separate Current Risk Context from Historical Entry Context](decisions/0014-separate-current-and-historical-position-context.md)
+- [ADR-0015: Conclude the V3.0 Scope Freeze and Open Sequential V3.1 Iteration](decisions/0015-open-sequential-v3-1-iteration.md)
 
 ## 2026-07-14 - Repository memory, not chat history
 
@@ -114,6 +116,12 @@ This file is the bounded decision index. Full context, alternatives, and consequ
 - Decision: require the current risk rule and usable review state for present decision readiness, while treating an unknown original thesis or entry-time invalidation as a visible Review limitation rather than a current-plan blocker.
 - Reason: entry history that was never recorded must remain unknown, but its absence should not prevent a user from reviewing a current evidence-backed risk rule.
 - Consequence: JSON preserves `context_complete` as a compatibility alias and adds explicit current/historical context states plus missing fields; AI cannot backfill history or grant authority. See ADR-0014.
+
+## 2026-08-01 - V3.0 scope freeze concluded; V3.1 iteration opened
+
+- Decision: retain V3.0 as the immutable historical baseline and authorize V3.1 as the active incremental development line.
+- Reason: the owner explicitly ended the frozen-baseline phase and chose version-by-version iteration; bounded product work had already moved beyond the original defect-only pilot gate.
+- Consequence: `IR-002` remains the single active increment, the incomplete ten-run trial is not reported as passed, and V3.2 or a parallel redesign remains unauthorized. Four routes, truthful data states, privacy, human confirmation, and no automatic trading remain guardrails. See ADR-0015.
 
 ## Existing durable decisions
 

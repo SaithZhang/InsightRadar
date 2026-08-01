@@ -8,7 +8,7 @@ InsightRadar is an **A股盘前/盘中风险与机会雷达，叠加持仓与候
 
 The product promise is not “more signals.” It is to identify the small number of facts that may justify changing a position, while keeping counter-evidence, freshness, gaps, human confirmation, and later outcomes reviewable.
 
-The user-facing architecture still has exactly four first-level route ids, now labelled `今日雷达` (`today`), `持仓风险` (`portfolio`), `机会发现` (`lookup`), and `复盘验证` (`review`). Market evidence remains an upstream constraint and detail drawer, not a fifth task. The owner-authorized intraday pivot in ADR-0012 supersedes ADR-0010 only where the earlier pilot deferred point-in-time intraday monitoring; the four-route and human-trade-authority freeze remains intact.
+The user-facing architecture still has exactly four first-level route ids, labelled `今日工作台` (`today`), `组合风险` (`portfolio`), `标的研究` (`lookup`), and `复盘账本` (`review`). Market evidence remains an upstream constraint and detail drawer, not a fifth task. ADR-0015 ends the V3.0 defect-only scope freeze and opens sequential V3.1 development; the four-route structure and human-trade-authority boundary remain stable product guardrails.
 
 ## Primary User and Wedge
 
