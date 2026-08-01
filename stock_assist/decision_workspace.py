@@ -54,7 +54,7 @@ ALLOWED_RESPONSES = {
 
 def _requires_user_action(plan: Mapping[str, object]) -> bool:
     return (
-        plan.get("status") in {"new", "revised", "voided", "blocked"}
+        plan.get("status") in {"new", "revised", "unchanged", "voided", "blocked"}
         and plan.get("user_response_status") == "pending"
     )
 
@@ -145,7 +145,7 @@ def build_decision_workspace(
     )
     link_evidence_to_plans(plans, decision_evidence)
     market_gate = _market_gate(decision, data_health)
-    positions = _portfolio_positions(portfolio, plans)
+    positions = _portfolio_positions(portfolio, plans, reliability)
     actionable = [plan for plan in plans if _requires_user_action(plan)]
     today_plans = [plan for plan in plans if _requires_today_attention(plan)]
     unresolved_blocked = [plan for plan in plans if plan["status"] == "blocked"]
@@ -745,8 +745,20 @@ def _plan_blockers(
             blockers.append(
                 "持仓快照缺少字段：" + "、".join(missing_fields[:4]) + "。"
             )
-        if matching.get("context_complete") is False:
-            blockers.append("该持仓上下文未补全，需先恢复持仓级证据。")
+        current_context_complete = matching.get("current_context_complete")
+        if current_context_complete is None:
+            current_context_complete = matching.get("context_complete")
+        if current_context_complete is False:
+            missing_context = _string_list(
+                matching.get("missing_current_context_fields")
+            )
+            blockers.append(
+                "当前风险上下文缺少："
+                + "、".join(missing_context[:4])
+                + "。"
+                if missing_context
+                else "当前风险上下文未补全，需先恢复当前风险规则。"
+            )
         holding_reconciliation = str(
             matching.get("risk_reconciliation_status") or ""
         )
@@ -886,11 +898,28 @@ def _market_gate(
 def _portfolio_positions(
     portfolio: Portfolio,
     plans: list[DecisionPlan],
+    reliability: Mapping[str, object],
 ) -> list[dict[str, object]]:
     by_symbol = {item["symbol"]: item for item in plans}
+    reliability_rows = reliability.get("holdings")
+    context_by_symbol: dict[str, Mapping[str, object]] = {}
+    for item in reliability_rows if isinstance(reliability_rows, list) else []:
+        if isinstance(item, Mapping) and item.get("code"):
+            context_by_symbol[str(item.get("code"))] = item
     result: list[dict[str, object]] = []
     for holding in portfolio.holdings:
         plan = by_symbol.get(holding.code)
+        context = context_by_symbol.get(holding.code, {})
+        current_context_complete = context.get("current_context_complete")
+        if current_context_complete is None:
+            current_context_complete = context.get("context_complete")
+        historical_context_complete = context.get("historical_context_complete")
+        missing_current_context_fields = _string_list(
+            context.get("missing_current_context_fields")
+        )
+        missing_historical_context_fields = _string_list(
+            context.get("missing_historical_context_fields")
+        )
         result.append(
             {
                 "symbol": holding.code,
@@ -909,6 +938,14 @@ def _portfolio_positions(
                     else None
                 ),
                 "review_status": holding.review_status or "unknown",
+                "current_context_status": (
+                    "ready" if current_context_complete is True else "missing"
+                ),
+                "historical_context_status": (
+                    "ready" if historical_context_complete is True else "unknown"
+                ),
+                "missing_current_context_fields": missing_current_context_fields,
+                "missing_historical_context_fields": missing_historical_context_fields,
                 "data_completeness": (
                     "ready"
                     if all(
@@ -945,6 +982,12 @@ def _portfolio_summary(
         "risk_reconciliation_status": portfolio.risk_reconciliation_status,
         "known_exposure_pct": sum(weights) if weights else None,
         "decision_ready_holdings": reliability.get("decision_ready_holdings", 0),
+        "current_context_ready_holdings": reliability.get(
+            "current_context_ready_holdings", 0
+        ),
+        "historical_context_ready_holdings": reliability.get(
+            "historical_context_ready_holdings", 0
+        ),
         "unknown_fields_remain_unknown": True,
     }
 

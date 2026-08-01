@@ -109,6 +109,12 @@ This file is the bounded decision index. Full context, alternatives, and consequ
 - Reason: beta is a reproducible market statistic and should not be guessed from a ticker or manually re-entered when current daily history is available.
 - Consequence: beta value, R², window, observations, as-of, source, and quality are stored locally; any stale, insufficient, failed, or invalid input remains `unknown` and blocks reconciliation. See ADR-0013.
 
+## 2026-08-01 - Current risk context is separate from historical entry context
+
+- Decision: require the current risk rule and usable review state for present decision readiness, while treating an unknown original thesis or entry-time invalidation as a visible Review limitation rather than a current-plan blocker.
+- Reason: entry history that was never recorded must remain unknown, but its absence should not prevent a user from reviewing a current evidence-backed risk rule.
+- Consequence: JSON preserves `context_complete` as a compatibility alias and adds explicit current/historical context states plus missing fields; AI cannot backfill history or grant authority. See ADR-0014.
+
 ## Existing durable decisions
 
 - User-facing product, canonical checkout, Codex project, and automation context use InsightRadar; `stock_assist` and legacy CLI aliases remain compatible implementation identifiers.

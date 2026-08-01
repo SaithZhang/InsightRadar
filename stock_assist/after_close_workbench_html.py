@@ -217,8 +217,14 @@ def _today_decision_column(today: Mapping[str, object]) -> str:
     requirements = _dict_rows(today.get("decision_requirements"))
     rank = {"blocked": 0, "pending_confirmation": 1, "confirmed": 2, "observation_only": 3, "disabled": 4}
     requirements.sort(key=lambda item: rank.get(str(item.get("status")), 9))
-    visible = requirements[:3]
-    pending = sum(item.get("status") in {"blocked", "pending_confirmation"} for item in visible)
+    actionable = [
+        item
+        for item in requirements
+        if item.get("status") in {"blocked", "pending_confirmation"}
+    ]
+    secondary = [item for item in requirements if item not in actionable]
+    visible = [*actionable, *secondary[: max(0, 3 - len(actionable))]]
+    pending = len(actionable)
     cards = "".join(_decision_card(item, index + 1) for index, item in enumerate(visible))
     if not cards:
         cards = '<div class="today-empty">当前没有待确认规则；继续等待新计划版本。</div>'
@@ -1160,6 +1166,18 @@ def _research(workspace: Mapping[str, object]) -> str:
 
 def _review(workspace: Mapping[str, object]) -> str:
     outcome = _mapping(workspace.get("outcome_summary"))
+    positions = _dict_rows(workspace.get("portfolio_positions"))
+    historical_unknown = [
+        item
+        for item in positions
+        if str(item.get("historical_context_status") or "unknown") != "ready"
+    ]
+    historical_ready = len(positions) - len(historical_unknown)
+    historical_gap_detail = "；".join(
+        f"{item.get('name') or item.get('symbol') or '未命名持仓'}："
+        + "、".join(_string_rows(item.get("missing_historical_context_fields")))
+        for item in historical_unknown
+    ) or "无"
     horizons = _mapping(outcome.get("horizons"))
     versions = _dict_rows(workspace.get("plan_version_history"))
     visible_versions = versions[-8:]
@@ -1284,9 +1302,11 @@ def _review(workspace: Mapping[str, object]) -> str:
       <div class="risk-list">
         <div class="risk-row"><span>规则事前声明</span><strong>{len(versions)} 条</strong></div>
         <div class="risk-row"><span>用户确认/异议留痕</span><strong>{len(responses)} 条</strong></div>
+        <div class="risk-row"><span>历史买入上下文</span><strong class="{'amber-text' if historical_unknown else ''}">{historical_ready}/{len(positions)} 完整</strong></div>
         <div class="risk-row"><span>真实成交执行流水</span><strong class="danger-text">未接入</strong></div>
         <div class="risk-row"><span>决策价值路径</span><strong class="danger-text">未实现</strong></div>
       </div>
+      <p class="prototype-note">历史买入逻辑或初始失效条件缺失只影响策略与执行复盘，不阻断当前风险计划。缺口：{escape(historical_gap_detail)}</p>
     </section>
   </div>
 </section>"""

@@ -27,6 +27,7 @@
 - Private runtime data stays ignored; examples, schemas, and reproducible configuration stay version controlled.
 - The newest explicit user-confirmed `data/portfolio.json` snapshot takes precedence over an older manual broker TSV. Missing broker fields stay null and render as `未提供`; they must never be converted to zero to improve apparent coverage.
 - Core reliability reports distinguish structural action coverage from strict decision-ready coverage. A baseline may pass by measuring and exposing a real gap, but the product must not call that holding decision-ready until the gap is closed.
+- Current decision context and historical entry context are separate. A usable current risk rule and review state participate in strict readiness; an unknown original thesis or entry-time invalidation stays visible as a Review-quality gap and cannot be reconstructed with hindsight or AI.
 - Failed research validation remains diagnostic and cannot silently become a production signal.
 - State-team monitoring may prove an ETF-unit exit lower bound from dated holdings and current total units, but must not relabel that lower bound as cash net selling, underlying-stock liquidation, or complete 2015 rescue-book coverage.
 - Short-cycle ETF total-share changes may tighten or loosen that lower bound, but they cannot identify the current seller; mixed 5/20-observation structures must remain visible instead of being flattened into a single liquidation narrative.

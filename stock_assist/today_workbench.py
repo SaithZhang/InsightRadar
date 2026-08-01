@@ -479,7 +479,7 @@ def _rule_status(plan: Mapping[str, object]) -> RuleStatus:
         return "confirmed"
     if response == "disputed":
         return "modification_requested"
-    if response == "deferred" or plan.get("status") == "unchanged":
+    if response == "deferred":
         return "observation_only"
     return "pending_confirmation"
 

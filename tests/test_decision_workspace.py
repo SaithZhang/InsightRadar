@@ -428,6 +428,65 @@ class DecisionWorkspaceTests(unittest.TestCase):
         self.assertEqual(plans["000002.SZ"]["status"], "new")
         self.assertEqual(workspace["today_plans"][0]["symbol"], "000002.SZ")
 
+    def test_historical_entry_gap_is_visible_but_does_not_block_current_plan(self) -> None:
+        payload = self._payload()
+        payload["reliability"]["holdings"][0].update(
+            {
+                "context_complete": True,
+                "current_context_complete": True,
+                "historical_context_complete": False,
+                "missing_current_context_fields": [],
+                "missing_historical_context_fields": ["原始买入失效条件"],
+                "decision_ready": True,
+            }
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            responses = Path(temporary) / "responses.jsonl"
+            plans = Path(temporary) / "plans.jsonl"
+            workspace = build_decision_workspace(
+                payload,
+                self._portfolio(),
+                response_ledger=responses,
+                plan_ledger=plans,
+            )
+            record_plan_versions(workspace, plans)
+            unchanged = build_decision_workspace(
+                payload,
+                self._portfolio(),
+                response_ledger=responses,
+                plan_ledger=plans,
+            )
+            unchanged_html = render_after_close_workbench(
+                {"decision_workspace": unchanged},
+                "",
+            )
+
+        plan = workspace["active_plans"][0]
+        position = workspace["portfolio_positions"][0]
+        html = render_after_close_workbench(
+            {"decision_workspace": workspace},
+            "",
+        )
+        self.assertEqual(plan["status"], "new")
+        self.assertEqual(plan["blocking_reasons"], [])
+        self.assertEqual(position["current_context_status"], "ready")
+        self.assertEqual(position["historical_context_status"], "unknown")
+        self.assertEqual(
+            position["missing_historical_context_fields"],
+            ["原始买入失效条件"],
+        )
+        self.assertIn("历史买入上下文", html)
+        self.assertIn("只影响策略与执行复盘，不阻断当前风险计划", html)
+        self.assertIn("原始买入失效条件", html)
+        self.assertEqual(unchanged["active_plans"][0]["status"], "unchanged")
+        self.assertEqual(
+            unchanged["active_plans"][0]["user_response_status"],
+            "pending",
+        )
+        self.assertEqual(len(unchanged["today_plans"]), 1)
+        self.assertIn("请确认当前条件规则；未确认前不会生成操作提醒", unchanged_html)
+        self.assertIn("1 项待处理", unchanged_html)
+
     def test_source_time_field_prevents_false_missing_status(self) -> None:
         payload = self._payload()
         payload["unified_decision"]["source_reports"][1] = {

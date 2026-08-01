@@ -16,7 +16,8 @@ from stock_assist.portfolio import (
 )
 from stock_assist.workflows.after_close import (
     _broker_snapshot_lines,
-    _holding_context_complete,
+    _current_decision_context_complete,
+    _historical_context_complete,
     _signal_for_holding,
     _signal_from_broker_snapshot,
     build_after_close_bundle,
@@ -120,7 +121,7 @@ class AfterCloseReliabilityTests(unittest.TestCase):
         self.assertEqual(portfolio.as_of, "2026-07-18")
         self.assertEqual(portfolio.source_note, "user-confirmed snapshot")
 
-    def test_stale_context_uses_the_same_incomplete_rule_as_reliability(self) -> None:
+    def test_stale_context_blocks_current_decision_context(self) -> None:
         holding = Holding(
             code="900001.SH",
             name="合成标的甲",
@@ -130,7 +131,62 @@ class AfterCloseReliabilityTests(unittest.TestCase):
             review_status="stale_context",
         )
 
-        self.assertFalse(_holding_context_complete(holding))
+        self.assertFalse(_current_decision_context_complete(holding))
+
+    def test_unknown_entry_history_does_not_block_current_decision_context(self) -> None:
+        holding = Holding(
+            code="900001.SH",
+            name="合成标的甲",
+            thesis="合成订单兑现待验证",
+            initial_risk_line="用户未提供原始买入时的失效条件；不得事后伪造。",
+            risk_line="价格破位并出现基本面反证时复核",
+            review_status="risk_review",
+        )
+
+        self.assertTrue(_current_decision_context_complete(holding))
+        self.assertFalse(_historical_context_complete(holding))
+
+    @patch("stock_assist.workflows.after_close.load_outcome_snapshot", side_effect=_outcome_snapshot)
+    def test_unknown_entry_history_is_a_review_gap_not_a_decision_blocker(self, _mock) -> None:
+        portfolio = Portfolio(
+            cash=400000,
+            holdings=[
+                Holding(
+                    code="300308.SZ",
+                    name="合成标的甲",
+                    shares=100,
+                    cost=900,
+                    market_price=950,
+                    pnl_pct=5.5,
+                    market_value=95000,
+                    weight_pct=19,
+                    thesis="合成需求假设待持续验证",
+                    initial_risk_line="用户未提供原始买入时的失效条件；不得事后伪造。",
+                    risk_line="价格破位并出现基本面反证时复核",
+                    review_status="risk_review",
+                )
+            ],
+            source=Path("fixture-portfolio.json"),
+            as_of="2026-07-31",
+            risk_reconciliation_status="reconciled",
+        )
+
+        payload = build_after_close_payload(ACTION_MARKDOWN, portfolio=portfolio)
+
+        reliability = payload["reliability"]
+        holding = reliability["holdings"][0]
+        self.assertEqual(reliability["decision_ready_holdings"], 1)
+        self.assertTrue(holding["current_context_complete"])
+        self.assertTrue(holding["context_complete"])
+        self.assertFalse(holding["historical_context_complete"])
+        self.assertEqual(
+            holding["missing_historical_context_fields"],
+            ["原始买入失效条件"],
+        )
+        self.assertNotIn("持仓上下文未补全", "；".join(payload["data_gaps"]))
+        self.assertTrue(
+            any("仅影响复盘" in item for item in reliability["optional_extension_gaps"])
+        )
 
     @patch("stock_assist.workflows.after_close.load_outcome_snapshot", side_effect=_outcome_snapshot)
     def test_placeholder_gap_is_not_counted_and_missing_snapshot_blocks_strict_readiness(self, _mock) -> None:
@@ -156,7 +212,13 @@ class AfterCloseReliabilityTests(unittest.TestCase):
 
         self.assertEqual(payload["data_gaps"], [])
         reliability = payload["reliability"]
-        self.assertEqual(reliability["optional_extension_gaps"], ["未采集大V观点流水"])
+        self.assertIn("未采集大V观点流水", reliability["optional_extension_gaps"])
+        self.assertTrue(
+            any(
+                "历史买入上下文未知" in item
+                for item in reliability["optional_extension_gaps"]
+            )
+        )
         self.assertEqual(reliability["structural_action_holdings"], 1)
         self.assertEqual(reliability["decision_ready_holdings"], 0)
         self.assertIn("成本", reliability["holdings"][0]["missing_snapshot_fields"])
