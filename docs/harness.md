@@ -415,3 +415,22 @@ Next:
 - Account risk, catalyst failure, opportunity radar, and re-entry guard remain deterministic and cannot execute trades.
 - IR-001 must compare full hold, 30/50/70% open reductions, giveback/VWAP reductions, unconditional/structural re-entry, and no same-day re-entry.
 - Real account case data and minute archives remain ignored; tracked tests use synthetic fixtures.
+
+## Live Intraday Shadow Contract (IR-002 P0)
+
+- Minute and quote archives are append-only, content-addressed observations. Every row keeps `trade_date`, `source_time`, `fetched_at`, provider, and a stable `observation_id`; a provider correction creates another observation and never replaces the first bytes.
+- Live account peaks advance only with a declared `source_time`. A later peak or correction cannot rewrite an earlier snapshot or alert; non-advancing supplier observations stay archived with a visible gap.
+- `intraday-runtime/v2` separates `trade_date`, `data_status`, `freshness_status`, and `decision_authority`. Only a same-trade-date runtime inside the freshness window overlays the active workspace; older/stale state is historical/expired.
+- IR-002 is fixed at `shadow_only` until real-session calibration passes. Shadow output contains no reduction/addition sizing or position-action copy even when data is available.
+- User-confirmed executions append to the private execution ledger and retain symbol, side, quantity, available quantity, `sold_at`, `sale_price`, and source. Missing quantities remain missing rather than zero.
+- A second-reentry override is a separate append-only confirmation event that must reference a real first `buy` execution and a later new-low observation. It never creates a synthetic fill or grants automatic execution authority.
+- Re-entry is blocked immediately after a confirmed reduction until at least five minutes without a new low, a higher low, VWAP or rebound-high recovery, and breadth recovery. A failed first re-entry followed by another low locks the second attempt until explicit user confirmation.
+- The double-click entry performs one serial refresh, then schedules the remaining 09:25/09:35/10:00 checks with a single-flight lock. Runtime/UI expose source time, fetch time, next check, missed checks, data/freshness, authority, and explicit activated/escalated/resolved/invalidation events.
+
+Minimum checks:
+
+- `.venv\Scripts\python -m unittest tests.test_intraday_radar tests.test_one_click_launcher -v`
+- `.venv\Scripts\python -m unittest discover -s tests -v`
+- `.venv\Scripts\python -m compileall stock_assist`
+- `.venv\Scripts\python -m stock_assist.cli architecture-view`
+- `.venv\Scripts\python scripts\validate_project_memory.py`

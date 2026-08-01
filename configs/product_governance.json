@@ -9,15 +9,16 @@
       "feature_id": "IR-002",
       "problem": "IR-001 passes one offline case, but the local poller and thresholds have no multi-session 09:25/09:35/10:00 shadow evidence and external mapping is still a scenario input.",
       "loop_stage": "decide",
-      "baseline": "IR-001 has 255 no-lookahead snapshots, 15 rule transitions, and favorable profit protection versus full hold, but only one private historical session.",
+      "baseline": "IR-001 has 255 no-lookahead snapshots and 15 rule transitions; IR-002 P0 now has immutable observations, monotonic live peaks, explicit freshness/authority, execution-ledger re-entry guards, and checkpoint scheduling, but still no open-session calibration sample.",
       "outcome_metric": "Across multiple live shadows, record alert latency, false escalation, missed protection, provider gaps, re-entry blocks, opportunity promotions, and whether substantive state-change notifications would be useful.",
-      "smallest_experiment": "Run the existing local intraday-poll at 09:25/09:35/10:00 without notifications or trade actions; review one session at a time.",
+      "smallest_experiment": "Use the hardened double-click scheduler for 09:25/09:35/10:00 shadow_only captures without notifications; review one session at a time.",
       "safety_boundaries": [
         "No live notification until multi-session state-change evidence passes review",
         "No full-A-share scan; keep 20-30 liquid themes",
         "No scenario external mapping may be relabelled as verified market data",
         "Missing and stale values remain explicit and cannot authorize new exposure",
-        "No automatic order placement or holdings overwrite"
+        "No automatic order placement or holdings overwrite",
+        "IR-002 shadow output cannot contain position-action sizing or trade authority"
       ],
       "kill_criterion": "Stop or recalibrate if alerts arrive after the decision window, false escalation dominates, provider gaps mask state, or opportunity confirmation encourages added risk after the account protection floor breaks.",
       "review_date": "2026-08-14"

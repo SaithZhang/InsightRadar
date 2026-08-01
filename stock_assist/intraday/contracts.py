@@ -8,7 +8,7 @@ the provider's source time and the local fetch time.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, is_dataclass
-from datetime import datetime
+from datetime import date, datetime
 import math
 from typing import Literal, Mapping
 
@@ -31,6 +31,9 @@ class MinuteBar:
     source_time: datetime
     fetched_at: datetime
     source: str
+    observation_id: str = ""
+    trade_date: str = ""
+    provider: str = ""
 
     @property
     def vwap(self) -> float | None:
@@ -54,6 +57,9 @@ class PointQuote:
     fetched_at: datetime
     source: str
     phase: str = ""
+    observation_id: str = ""
+    trade_date: str = ""
+    provider: str = ""
 
 
 @dataclass(frozen=True)
@@ -115,6 +121,8 @@ class ThemeSnapshot:
     reclaimed_rebound_high: bool | None = None
     source_times: tuple[datetime, ...] = ()
     fetched_at: tuple[datetime, ...] = ()
+    price: float | None = None
+    minutes_without_new_low: int | None = None
 
 
 @dataclass(frozen=True)
@@ -152,6 +160,7 @@ class IntradayAlert:
     source_times: tuple[datetime, ...]
     rule_version: str
     fetched_at: tuple[datetime, ...] = ()
+    event_state: str = "activated"
 
 
 @dataclass(frozen=True)
@@ -168,6 +177,8 @@ def contract_dict(value: object) -> object:
         return contract_dict(asdict(value))
     if isinstance(value, datetime):
         return value.isoformat(timespec="seconds")
+    if isinstance(value, date):
+        return value.isoformat()
     if isinstance(value, Mapping):
         return {str(key): contract_dict(item) for key, item in value.items()}
     if isinstance(value, (tuple, list)):

@@ -6,6 +6,9 @@ state-changing requests.  It never accepts or emits trade orders.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import asdict
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hashlib
 import json
@@ -20,7 +23,13 @@ from stock_assist.decision_workspace import (
     restage_workspace,
     write_runtime_state,
 )
-from stock_assist.intraday.polling import load_intraday_runtime
+from stock_assist.intraday.polling import _shadow_event_mapping, load_intraday_runtime
+from stock_assist.intraday.execution import (
+    append_execution,
+    append_reentry_confirmation,
+    load_executions,
+    load_reentry_confirmations,
+)
 from stock_assist.paths import REPORT_DIR
 from stock_assist.portfolio_import import apply_portfolio_import, preview_portfolio_import
 from stock_assist.portfolio_import_web import (
@@ -58,11 +67,28 @@ def serve_portfolio_import(
                 self._send_json(overlay_plan_responses(workspace))
                 return
             if self.path == "/api/intraday":
-                payload = load_intraday_runtime()
+                raw_runtime = load_intraday_runtime()
+                workspace = _latest_workspace()
+                payload = workspace.get("intraday_radar") if isinstance(workspace, dict) else None
+                if payload is None and isinstance(raw_runtime, dict):
+                    payload, _historical = _normalize_intraday_overlay(
+                        raw_runtime,
+                        expected_trade_date=datetime.now().date().isoformat(),
+                    )
                 if payload is None:
                     self._send_json({"error": "尚未生成 intraday runtime"}, status=404)
                     return
                 self._send_json(payload)
+                return
+            if self.path == "/api/executions":
+                self._send_json(
+                    {
+                        "executions": [asdict(item) for item in load_executions()],
+                        "reentry_confirmations": [
+                            asdict(item) for item in load_reentry_confirmations()
+                        ],
+                    }
+                )
                 return
             if self.path == "/api/refresh/active":
                 snapshot = coordinator.active() or coordinator.latest()
@@ -151,6 +177,14 @@ def serve_portfolio_import(
                         ),
                     )
                     self._send_json(job, status=202)
+                    return
+                if self.path == "/api/execution":
+                    record = append_execution(body)
+                    self._send_json(asdict(record), status=201)
+                    return
+                if self.path == "/api/reentry-confirmation":
+                    record = append_reentry_confirmation(body)
+                    self._send_json(asdict(record), status=201)
                     return
                 text = str(body.get("text") or "")
                 classifications = body.get("classifications") if isinstance(body.get("classifications"), dict) else {}
@@ -263,11 +297,73 @@ def _latest_workspace() -> dict[str, object] | None:
         selected = dict(workspace)
     intraday = load_intraday_runtime()
     if intraday is not None:
-        selected["intraday_radar"] = intraday
+        normalized, historical = _normalize_intraday_overlay(
+            intraday,
+            expected_trade_date=str(selected.get("effective_market_date") or ""),
+        )
+        selected["intraday_radar"] = normalized
+        if historical:
+            selected["intraday_history"] = [dict(normalized)]
     replay = _latest_intraday_replay()
     if replay is not None:
         selected["intraday_replay"] = replay
     return selected
+
+
+def _normalize_intraday_overlay(
+    runtime: dict[str, object],
+    *,
+    expected_trade_date: str,
+    now: datetime | None = None,
+    max_age_seconds: int = 180,
+) -> tuple[dict[str, object], bool]:
+    """Fail closed when a runtime belongs to another day or is outside freshness."""
+
+    result = dict(runtime)
+    for field in ("timeline", "active_alerts"):
+        rows = result.get(field)
+        if isinstance(rows, list):
+            result[field] = [
+                _shadow_event_mapping(item)
+                for item in rows
+                if isinstance(item, Mapping)
+            ]
+    trade_date = str(result.get("trade_date") or "")
+    source_time = _parse_datetime(result.get("source_time"))
+    current = now or datetime.now()
+    cross_day = (
+        not trade_date
+        or trade_date != expected_trade_date
+        or trade_date != current.date().isoformat()
+    )
+    expired = cross_day
+    if source_time is None:
+        expired = True
+    elif source_time.date() == current.date():
+        age_seconds = (current - source_time).total_seconds()
+        expired = expired or age_seconds < 0 or age_seconds > max_age_seconds
+    elif current.date().isoformat() == expected_trade_date:
+        expired = True
+    if result.get("freshness_status") != "fresh":
+        expired = True
+    if expired:
+        result["status"] = "expired"
+        result["freshness_status"] = "expired"
+        result["decision_authority"] = "none"
+        result["data_status"] = "historical" if cross_day else result.get("data_status", "stale")
+        result["next_check_time"] = None
+    else:
+        if result.get("status") == "ready":
+            result["status"] = "shadow"
+        result["decision_authority"] = "shadow_only"
+    return result, cross_day or expired
+
+
+def _parse_datetime(value: object) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(value)) if value is not None else None
+    except ValueError:
+        return None
 
 
 def _latest_intraday_replay() -> dict[str, object] | None:

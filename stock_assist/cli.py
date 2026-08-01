@@ -15,7 +15,7 @@ from stock_assist.collectors.twitter_observations import sync_observations_from_
 from stock_assist.data_sources.nga import clear_cookie, default_cookie_path, load_cookie, save_cookie
 from stock_assist.decision_workspace import record_plan_versions
 from stock_assist.harness_eval.smoke import run_contract_smoke
-from stock_assist.intraday.polling import poll_intraday
+from stock_assist.intraday.polling import poll_intraday, poll_intraday_checkpoints
 from stock_assist.llm import clear_api_key, default_api_key_path, load_api_key, save_api_key
 from stock_assist.reports import write_payload_report_triplet, write_report
 from stock_assist.product import command_failure_advice, command_for, product_cli_epilog
@@ -61,6 +61,11 @@ def _build_parser() -> argparse.ArgumentParser:
     intraday_poll.add_argument("--iterations", type=int, default=1, help="bounded poll count; default is one")
     intraday_poll.add_argument("--interval", type=int, default=60, help="seconds between polls, 5-60")
     intraday_poll.add_argument("--no-fallback", action="store_true", help="do not use the per-symbol Eastmoney fallback")
+    intraday_poll.add_argument(
+        "--schedule-checkpoints",
+        action="store_true",
+        help="keep running and poll the remaining 09:25/09:35/10:00 checkpoints once",
+    )
     portfolio_import = subparsers.add_parser("portfolio-import", help=command_for("portfolio-import").help)
     portfolio_import.add_argument("--file", type=Path, default=None, help="local broker TSV path")
     portfolio_import.add_argument("--classification", action="append", default=[], help="explicit CODE=high_beta|normal|unknown; repeatable")
@@ -148,10 +153,14 @@ def main(argv: list[str] | None = None) -> int:
             json_path, md_path, html_path = write_payload_report_triplet("intraday-replay", payload, md_content, html_content)
             path = f"{json_path}\n{md_path}\n{html_path}"
         elif args.command == "intraday-poll":
-            payload = poll_intraday(
-                iterations=args.iterations,
-                interval_seconds=args.interval,
-                allow_fallback=not args.no_fallback,
+            payload = (
+                poll_intraday_checkpoints(allow_fallback=not args.no_fallback)
+                if args.schedule_checkpoints
+                else poll_intraday(
+                    iterations=args.iterations,
+                    interval_seconds=args.interval,
+                    allow_fallback=not args.no_fallback,
+                )
             )
             path = json.dumps(payload, ensure_ascii=False, indent=2)
         elif args.command == "portfolio-import":

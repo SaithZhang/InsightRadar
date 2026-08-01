@@ -81,9 +81,9 @@ COMMANDS: tuple[ProductCommand, ...] = (
         name="intraday-poll",
         module_key="market",
         help="poll the bounded intraday universe into the local risk-and-opportunity runtime",
-        run_hint="Run once from the loopback app or use bounded --iterations during the A-share session; no trade action is emitted.",
-        inputs=("configs/intraday_universe.json", "data/portfolio.json", ".env with AmazingData credentials"),
-        outputs=("data/intraday/minute/*.jsonl", "data/intraday/quotes/*.jsonl", "data/intraday/runtime.json"),
+        run_hint="Double-click 盘中雷达.cmd for one serial refresh plus reliable 09:25/09:35/10:00 scheduling; IR-002 stays shadow_only.",
+        inputs=("configs/intraday_universe.json", "data/portfolio.json", "data/intraday/execution_ledger.jsonl", "data/intraday/reentry_confirmation_ledger.jsonl", ".env with AmazingData credentials"),
+        outputs=("data/intraday/minute/**/*.jsonl", "data/intraday/quotes/**/*.jsonl", "data/intraday/alerts/*.jsonl", "data/intraday/runtime.json"),
         retry="Inspect per-symbol gaps; public fallback is local and partial, while unavailable fields stay unknown.",
     ),
     ProductCommand(

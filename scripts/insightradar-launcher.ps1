@@ -102,14 +102,17 @@ function Start-PortfolioImporter {
 
 function Start-IntradayRadar {
     $python = Resolve-InsightRadarPython
-    Write-Host "[1/2] Refreshing one bounded intraday snapshot..."
+    Write-Host "[1/3] Refreshing one bounded intraday snapshot..."
     $output = & $python -m stock_assist.cli intraday-poll --iterations 1 2>&1
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
         $output | ForEach-Object { Write-Host $_ }
         throw "Intraday refresh failed with exit code $exitCode."
     }
-    Write-Host "[2/2] Opening Today Radar. Refresh again at each decision checkpoint."
+    Write-Host "[2/3] Starting the 09:25 / 09:35 / 10:00 checkpoint scheduler..."
+    $schedulerArgs = @("-m", "stock_assist.cli", "intraday-poll", "--schedule-checkpoints")
+    Start-Process -FilePath $python -ArgumentList $schedulerArgs -WorkingDirectory $projectRoot -WindowStyle Hidden
+    Write-Host "[3/3] Opening Today Radar. The scheduler will refresh the remaining checkpoints."
     Start-PortfolioImporter
 }
 

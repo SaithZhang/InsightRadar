@@ -497,7 +497,6 @@ def _plan_card(
     status = str(plan.get("status") or "blocked")
     response = str(plan.get("user_response_status") or "pending")
     reasons = _string_rows(plan.get("change_reasons"))
-    risks = _string_rows(plan.get("risk_constraints"))
     why = "；".join(reasons) or "没有记录变化原因。"
     change_display = _plan_change_display(workspace, plan)
     name = str(plan.get("name") or plan.get("symbol") or "未命名持仓")
@@ -628,11 +627,19 @@ def _handoff_card(workspace: Mapping[str, object]) -> str:
     item = handoffs[0] if handoffs else {}
     runtime = _mapping(workspace.get("intraday_radar"))
     runtime_status = str(runtime.get("status") or "missing")
+    authority = str(runtime.get("decision_authority") or "none")
+    next_check = _intraday_next_check_label(runtime)
     return f"""<section class="panel handoff">
       <div class="eyebrow">盘中监控交接</div>
       <strong id="handoffState">点时雷达：{escape(runtime_status)}</strong>
       <p id="handoffCopy">{escape(str(item.get("reason") or "分钟轮询已接入本地归档；没有有效计划时仍可保持等待。"))}</p>
-      <div class="prototype-note">已实现状态变化去重与人工确认边界；跨多日阈值校准和状态变化通知仍属于 IR-002。</div>
+      <div class="risk-list">
+        <div class="risk-row"><span>最后 source_time</span><strong>{escape(str(runtime.get('source_time') or 'unknown'))}</strong></div>
+        <div class="risk-row"><span>最后 fetch_time</span><strong>{escape(str(runtime.get('fetch_time') or 'unknown'))}</strong></div>
+        <div class="risk-row"><span>下一次检查</span><strong>{escape(next_check)}</strong></div>
+        <div class="risk-row"><span>当前权限</span><strong>{escape(authority)}</strong></div>
+      </div>
+      <div class="prototype-note">IR-002 固定 shadow_only；状态机记录 activated / escalated / resolved / invalidation，不授予交易建议权限。</div>
     </section>"""
 
 
@@ -658,36 +665,53 @@ def _intraday_today_panel(workspace: Mapping[str, object]) -> str:
     runtime = _mapping(workspace.get("intraday_radar"))
     snapshot = _mapping(runtime.get("latest_snapshot"))
     if not snapshot:
-        return """<section class="panel section">
+        next_check = _intraday_next_check_label(runtime)
+        return f"""<section class="panel section">
           <div class="section-head"><div><div class="eyebrow">盘前 / 盘中 P0</div><h2>今日雷达尚无点时快照</h2>
-          <p>运行 intraday-poll 后显示账户利润保护、催化失效与机会结构；盘后计划保留在下方二级区域。</p></div>
-          <span class="status blocked">missing</span></div></section>"""
+          <p>source_time {escape(str(runtime.get('source_time') or 'unknown'))} · fetch_time {escape(str(runtime.get('fetch_time') or 'unknown'))} · next {escape(next_check)}</p></div>
+          <span class="status blocked">{escape(str(runtime.get('freshness_status') or 'missing'))}</span></div>
+          <div class="risk-list">
+            <div class="risk-row"><span>data_status</span><strong>{escape(str(runtime.get('data_status') or 'missing'))}</strong></div>
+            <div class="risk-row"><span>decision_authority</span><strong>{escape(str(runtime.get('decision_authority') or 'none'))}</strong></div>
+            <div class="risk-row"><span>状态事件</span><strong>activated / escalated / resolved / invalidation</strong></div>
+          </div>
+          <p class="prototype-note">没有新鲜点时数据时只显示缺口或历史状态，不输出 live ready。</p>
+        </section>"""
     exposures = _mapping(snapshot.get("exposure_by_theme"))
-    technology = sum(
-        float(exposures.get(theme_id) or 0)
-        for theme_id in (
-            "ai_hardware_semiconductor", "communication_cpo", "pcb",
-            "ai_software_apps", "robot", "data_compute",
+    technology_theme_ids = (
+        "ai_hardware_semiconductor", "communication_cpo", "pcb",
+        "ai_software_apps", "robot", "data_compute",
+    )
+    technology = (
+        sum(float(exposures.get(theme_id) or 0) for theme_id in technology_theme_ids)
+        if snapshot.get("portfolio_value") is not None
+        and all(
+            exposures.get(theme_id) is not None
+            for theme_id in technology_theme_ids
+            if theme_id in exposures
         )
+        else None
     )
     alerts = _dict_rows(runtime.get("timeline"))[-6:]
+    next_check = _intraday_next_check_label(runtime)
     alert_rows = "".join(
         '<div class="risk-row">'
         f'<span>{escape(str(item.get("timestamp") or "unknown"))[11:16]} · '
         f'{escape(str(item.get("title") or item.get("type") or "盘中状态"))}</span>'
         f'<strong class="{_severity_class(item.get("severity"))}">'
-        f'{escape(str(item.get("severity") or "info"))}</strong></div>'
+        f'{escape(str(item.get("event_state") or "activated"))} / {escape(str(item.get("severity") or "info"))}</strong></div>'
         for item in alerts
     ) or '<div class="risk-row"><span>当前没有规则升级</span><strong>继续等待</strong></div>'
     return f"""<section class="panel section intraday-primary">
       <div class="section-head"><div><div class="eyebrow">盘前 / 盘中主工作台</div><h2>账户风险与主题结构</h2>
-      <p>数据截至 {escape(str(snapshot.get("timestamp") or runtime.get("generated_at") or "unknown"))}；状态变化不等于自动交易授权。</p></div>
+      <p>source_time {escape(str(runtime.get('source_time') or snapshot.get('timestamp') or 'unknown'))} · fetch_time {escape(str(runtime.get('fetch_time') or 'unknown'))} · next {escape(next_check)}</p></div>
       <span class="status {_status_class(runtime.get('status'))}">{escape(str(runtime.get('status') or 'unknown'))}</span></div>
       <div class="metrics">
         <div class="metric"><small>账户当日盈亏</small><strong>{_value(snapshot.get('account_daily_pnl'))}</strong><em>unknown 不按 0</em></div>
         <div class="metric"><small>早盘利润峰值</small><strong>{_value(snapshot.get('account_peak_daily_pnl'))}</strong><em>点时累计</em></div>
         <div class="metric"><small>利润回吐</small><strong>{_ratio(snapshot.get('pnl_giveback_ratio'))}</strong><em>保护预算输入</em></div>
-        <div class="metric"><small>科技主题集中</small><strong>{technology:.1f}%</strong><em>已知点时市值</em></div>
+        <div class="metric"><small>科技主题集中</small><strong>{_value(technology, suffix='%')}</strong><em>已知点时市值；缺失不按 0</em></div>
+        <div class="metric"><small>数据 / 新鲜度 / 权限</small><strong>{escape(str(runtime.get('data_status') or 'unknown'))} / {escape(str(runtime.get('freshness_status') or 'unknown'))}</strong><em>{escape(str(runtime.get('decision_authority') or 'none'))}</em></div>
       </div>
       <div class="risk-list">{alert_rows}</div>
       <p class="prototype-note">盘后计划、数据健康、证据链与版本账本继续保留在本页下方，作为解释和审计能力。</p>
@@ -705,18 +729,50 @@ def _intraday_portfolio_panel(workspace: Mapping[str, object]) -> str:
         for theme_id, value in sorted(exposures.items(), key=lambda item: float(item[1] or 0), reverse=True)[:8]
     )
     holdings = _dict_rows(snapshot.get("holding_snapshots"))
+    holding_options = "".join(
+        f'<option value="{escape(str(item.get("symbol") or ""))}" data-theme="{escape(str(item.get("primary_theme_id") or "unknown"))}">'
+        f'{escape(str(item.get("symbol") or "unknown"))} · {escape(str(item.get("name") or ""))}</option>'
+        for item in holdings
+    )
     stale = sum(
         str(item.get("status")) != "fresh"
         for item in _dict_rows(snapshot.get("quote_freshness"))
     )
+    freshness = str(runtime.get("freshness_status") or "unknown")
+    authority = str(runtime.get("decision_authority") or "none")
     return f"""<section class="panel section intraday-primary">
       <div class="section-head"><div><div class="eyebrow">点时持仓风险</div><h2>主题集中、利润回吐与行情新鲜度</h2></div>
-      <span class="status {'blocked' if stale else 'ready'}">{stale} 项不新鲜</span></div>
+      <span class="status {_status_class(freshness)}">{escape(freshness)} · {escape(authority)} · {stale} 项不新鲜</span></div>
       <div class="metrics">
         <div class="metric"><small>点时组合市值</small><strong>{_value(snapshot.get('portfolio_value'))}</strong></div>
         <div class="metric"><small>持仓快照</small><strong>{len(holdings)}</strong></div>
         <div class="metric"><small>利润回吐</small><strong>{_ratio(snapshot.get('pnl_giveback_ratio'))}</strong></div>
       </div><div class="risk-list">{exposure_rows}</div>
+      <details class="response-box execution-ledger"><summary>记录已由用户确认的成交</summary>
+        <form id="executionForm" class="form-grid">
+          <label>标的<select class="select" id="executionSymbol" required>{holding_options}</select></label>
+          <label>主题<input class="input" id="executionTarget" required placeholder="theme_id"></label>
+          <label>方向<select class="select" id="executionSide"><option value="sell">sell</option><option value="buy">buy / 接回</option></select></label>
+          <label>成交数量<input class="input" id="executionQuantity" type="number" min="0.01" step="0.01" required></label>
+          <label>成交前可用数量<input class="input" id="executionAvailable" type="number" min="0" step="0.01" required></label>
+          <label>原减仓时间<input class="input" id="executionSoldAt" type="datetime-local" required></label>
+          <label>原减仓价格<input class="input" id="executionSalePrice" type="number" min="0.0001" step="0.0001" required></label>
+          <label>本次成交时间（接回必填）<input class="input" id="executionExecutedAt" type="datetime-local"></label>
+          <label>本次成交价格（接回必填）<input class="input" id="executionPrice" type="number" min="0.0001" step="0.0001"></label>
+          <label>证据来源<input class="input" id="executionSource" value="user_confirmed_broker_execution" required></label>
+          <label><input id="executionConfirmed" type="checkbox" required> 我确认这是已发生的真实成交，不是计划或模拟</label>
+          <button class="btn primary" type="submit">追加到 execution ledger</button>
+        </form>
+        <p id="executionStatus" class="prototype-note">只追加用户确认事实；不下单，不把缺失数量改成 0。</p>
+        <form id="reentryConfirmationForm" class="form-grid">
+          <label>失败的第一次接回<select class="select" id="failedReentryExecution" required><option value="">先加载已确认 buy 成交</option></select></label>
+          <label>再创新低观察时间<input class="input" id="reentryNewLowAt" type="datetime-local" required></label>
+          <label>确认来源<input class="input" id="reentryConfirmationSource" value="user_confirmed_reentry_override" required></label>
+          <label><input id="reentryOverrideConfirmed" type="checkbox" required> 第一次接回已失败并再创新低；我显式确认解除第二次接回复核锁</label>
+          <button class="btn" type="submit">追加第二次接回复核确认</button>
+        </form>
+        <p id="reentryConfirmationStatus" class="prototype-note">确认事件必须引用已发生的第一次 buy，且晚于再创新低；它只解除人工复核锁，不自动买入。</p>
+      </details>
     </section>"""
 
 
@@ -1161,6 +1217,16 @@ def _runtime_label(workspace: Mapping[str, object]) -> str:
     return "已完成回应"
 
 
+def _intraday_next_check_label(runtime: Mapping[str, object]) -> str:
+    next_check = runtime.get("next_check_time")
+    if next_check:
+        return str(next_check)
+    missed = runtime.get("missed_checkpoints")
+    if isinstance(missed, list) and missed:
+        return "已遗漏：" + "、".join(str(item) for item in missed)
+    return "今日关键时点已完成"
+
+
 def _plan_status(value: str) -> str:
     return {
         "new": "新计划",
@@ -1203,9 +1269,9 @@ def _rate(value: object) -> str:
 
 def _status_class(value: object) -> str:
     clean = str(value or "pending").lower()
-    if clean in {"ready", "accepted", "unchanged", "reviewed"}:
+    if clean in {"ready", "fresh", "accepted", "unchanged", "reviewed"}:
         return "ready"
-    if clean in {"stale", "deferred", "revised", "pending", "new", "awaiting_confirmation"}:
+    if clean in {"shadow", "stale", "deferred", "revised", "pending", "new", "awaiting_confirmation"}:
         return "pending"
     return "blocked"
 
@@ -1595,6 +1661,80 @@ document.querySelectorAll("[data-toggle-plan]").forEach(button => button.addEven
   detail.hidden = !detail.hidden;
   button.textContent = detail.hidden ? "查看依据" : "收起依据";
 }));
+const executionForm = document.getElementById("executionForm");
+if (executionForm) {
+  const symbol = document.getElementById("executionSymbol");
+  const target = document.getElementById("executionTarget");
+  const syncTheme = () => {
+    const option = symbol.options[symbol.selectedIndex];
+    if (option && option.dataset.theme) target.value = option.dataset.theme;
+  };
+  symbol.addEventListener("change", syncTheme);
+  syncTheme();
+  executionForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    const status = document.getElementById("executionStatus");
+    try {
+      const record = await post("/api/execution", {
+        symbol:symbol.value,
+        target_id:target.value,
+        side:document.getElementById("executionSide").value,
+        quantity:Number(document.getElementById("executionQuantity").value),
+        available_quantity:Number(document.getElementById("executionAvailable").value),
+        sold_at:document.getElementById("executionSoldAt").value,
+        sale_price:Number(document.getElementById("executionSalePrice").value),
+        executed_at:document.getElementById("executionExecutedAt").value || null,
+        execution_price:Number(document.getElementById("executionPrice").value) || null,
+        source:document.getElementById("executionSource").value,
+        user_confirmed:document.getElementById("executionConfirmed").checked,
+      });
+      status.textContent = `已追加 ${record.execution_id}；下一次点时刷新将使用 sold_at / sale_price 执行 re-entry guard。`;
+      showToast("真实成交已追加到本地 ledger。", "success");
+    } catch (error) {
+      status.textContent = `写入失败：${error.message}`;
+      showToast(status.textContent, "error");
+    }
+  });
+}
+const reentryConfirmationForm = document.getElementById("reentryConfirmationForm");
+if (reentryConfirmationForm) {
+  const failedSelect = document.getElementById("failedReentryExecution");
+  const confirmationStatus = document.getElementById("reentryConfirmationStatus");
+  fetch("/api/executions")
+    .then(response => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
+    .then(payload => {
+      (payload.executions || []).filter(item => item.side === "buy").forEach(item => {
+        const option = document.createElement("option");
+        option.value = item.execution_id;
+        option.dataset.symbol = item.symbol;
+        option.dataset.target = item.target_id;
+        option.dataset.soldAt = item.sold_at;
+        option.textContent = `${item.executed_at || "unknown"} · ${item.symbol} · ${item.execution_id}`;
+        failedSelect.appendChild(option);
+      });
+    })
+    .catch(error => { confirmationStatus.textContent = `加载接回成交失败：${error.message}`; });
+  reentryConfirmationForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    const option = failedSelect.options[failedSelect.selectedIndex];
+    try {
+      const record = await post("/api/reentry-confirmation", {
+        symbol:option.dataset.symbol,
+        target_id:option.dataset.target,
+        sold_at:option.dataset.soldAt,
+        failed_reentry_execution_id:option.value,
+        new_low_observed_at:document.getElementById("reentryNewLowAt").value,
+        source:document.getElementById("reentryConfirmationSource").value,
+        user_confirmed:document.getElementById("reentryOverrideConfirmed").checked,
+      });
+      confirmationStatus.textContent = `已追加 ${record.confirmation_id}；下一次点时刷新可进入第二次人工复核。`;
+      showToast("第二次接回复核确认已追加；仍不会自动买入。", "success");
+    } catch (error) {
+      confirmationStatus.textContent = `确认失败：${error.message}`;
+      showToast(confirmationStatus.textContent, "error");
+    }
+  });
+}
 const filterButton = document.getElementById("holdingFilter");
 if (filterButton) filterButton.addEventListener("click", () => {
   const query = document.getElementById("holdingSearch").value.trim().toLowerCase();

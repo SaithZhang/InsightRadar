@@ -73,6 +73,13 @@ class IntradaySnapshotBuilder:
         daily_pnls = [item.day_pnl for item in holdings if item.day_pnl is not None]
         daily_pnl = sum(daily_pnls) if len(daily_pnls) == len(holdings) else None
         declared_peak = _float(self.case.get("initial_account_peak_daily_pnl"))
+        timed_declared_peaks = [
+            _float(item.get("value"))
+            for item in self.case.get("account_peak_observations", [])
+            if isinstance(item, Mapping)
+            and _datetime(item.get("source_time")) is not None
+            and _datetime(item.get("source_time")) <= timestamp
+        ]
         known_peaks = [
             item.account_peak_daily_pnl
             for item in history
@@ -85,7 +92,7 @@ class IntradaySnapshotBuilder:
         ]
         peak_candidates = [
             value
-            for value in [declared_peak, daily_pnl, *known_peaks, *pnl_values]
+            for value in [declared_peak, *timed_declared_peaks, daily_pnl, *known_peaks, *pnl_values]
             if value is not None
         ]
         peak = max(peak_candidates) if peak_candidates else None
@@ -294,6 +301,8 @@ class IntradaySnapshotBuilder:
             reclaimed_rebound_high=point.get("reclaimed_rebound_high"),
             source_times=source_times,
             fetched_at=fetched_at,
+            price=_float(point.get("price")),
+            minutes_without_new_low=_minutes_without_new_low(etf_bars),
         )
 
     def _volume_ratio(
@@ -436,6 +445,14 @@ def _point_metrics(bars: list[MinuteBar], quote: PointQuote | None) -> dict[str,
         "reclaimed_rebound_high": current.close >= rebound_high if rebound_high is not None else None,
         "at_new_high": current.high >= max(item.high for item in bars),
     }
+
+
+def _minutes_without_new_low(bars: list[MinuteBar]) -> int | None:
+    if not bars:
+        return None
+    session_low = min(item.low for item in bars)
+    last_low = max(item.timestamp for item in bars if item.low <= session_low)
+    return max(0, int((bars[-1].timestamp - last_low).total_seconds() // 60))
 
 
 def _through(rows: Iterable[MinuteBar], timestamp: datetime) -> list[MinuteBar]:

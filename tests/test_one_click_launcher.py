@@ -44,6 +44,8 @@ class OneClickLauncherTests(unittest.TestCase):
         self.assertIn("did not create a fresh after-close HTML report", launcher)
         self.assertIn("Invoke-WebRequest", launcher)
         self.assertIn("InsightRadar is already running", launcher)
+        self.assertIn("--schedule-checkpoints", launcher)
+        self.assertIn("-WindowStyle Hidden", launcher)
         self.assertIn("-Mode Import", product_entry)
 
     def test_import_page_has_local_preview_and_approved_apply_flow(self) -> None:
@@ -66,6 +68,42 @@ class OneClickLauncherTests(unittest.TestCase):
         self.assertIn("high_beta", html)
         self.assertIn("normal", html)
         self.assertIn('href="/#portfolio"', html)
+
+    def test_workspace_contains_user_confirmed_execution_ledger_flow(self) -> None:
+        from stock_assist.after_close_workbench_html import render_after_close_workbench
+
+        payload = {
+            "decision_workspace": {
+                "effective_market_date": "2026-08-01",
+                "runtime_status": "reviewed",
+                "market_gate": {}, "data_health": [], "portfolio_summary": {},
+                "portfolio_positions": [], "plan_changes": [], "active_plans": [],
+                "research_tasks": [], "user_responses": [], "monitor_handoffs": [],
+                "outcome_summary": {},
+                "intraday_radar": {
+                    "status": "shadow", "data_status": "available",
+                    "freshness_status": "fresh", "decision_authority": "shadow_only",
+                    "source_time": "2026-08-01T09:35:00", "fetch_time": "2026-08-01T09:35:05",
+                    "next_check_time": "2026-08-01T10:00:00", "timeline": [],
+                    "latest_snapshot": {
+                        "timestamp": "2026-08-01T09:35:00",
+                        "exposure_by_theme": {}, "quote_freshness": [],
+                        "holding_snapshots": [
+                            {"symbol": "FIXTURE.SZ", "name": "合成标的", "primary_theme_id": "fixture_theme"}
+                        ],
+                    },
+                },
+            }
+        }
+        html = render_after_close_workbench(payload, "# fixture")
+        self.assertIn('id="executionForm"', html)
+        self.assertIn('/api/execution', html)
+        self.assertIn('id="reentryConfirmationForm"', html)
+        self.assertIn('/api/reentry-confirmation', html)
+        self.assertIn('user_confirmed', html)
+        self.assertIn('shadow_only', html)
+        self.assertIn('source_time', html)
+        self.assertIn('next_check_time', html)
 
     def test_static_report_explains_that_the_app_must_be_running(self) -> None:
         _button, modal, script = portfolio_import_html_parts()

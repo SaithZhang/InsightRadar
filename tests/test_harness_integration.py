@@ -474,7 +474,7 @@ class HarnessIntegrationTests(unittest.TestCase):
         self.assertEqual(feature_status["feat-056"], "pending")
         self.assertEqual(feature_status["feat-058"], "pending")
         self.assertEqual(feature_status["IR-001"], "pass")
-        self.assertEqual(feature_status["IR-002"], "pending")
+        self.assertEqual(feature_status["IR-002"], "in_progress")
 
         governance = json.loads(
             (PROJECT_ROOT / "configs" / "product_governance.json").read_text(

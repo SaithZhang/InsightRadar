@@ -75,12 +75,12 @@
       "title": "盘前盘中风险与机会雷达",
       "type": "workflow",
       "lane": "decision",
-      "status": "ir001_verified_live_shadow_pending",
+      "status": "ir002_p0_shadow_hardened_calibration_pending",
       "commands": ["intraday-replay", "intraday-poll"],
       "command": "python -m stock_assist.cli intraday-replay; python -m stock_assist.cli intraday-poll",
-      "summary": "从本地分钟归档构建无未来数据的账户、持仓与主题快照，运行账户风险、催化失效、机会雷达和接回约束；只给人工确认条件，不下单。",
-      "inputs": ["私有持仓快照", "20-30主题宇宙", "AmazingData分钟线/竞价快照", "东方财富逐标的fallback", "点时外部映射"],
-      "outputs": ["IntradaySnapshot/ThemeSnapshot/IntradayAlert", "本地JSONL分钟归档", "IR-001 JSON/Markdown/HTML", "盘中runtime.json"],
+      "summary": "从追加式点时档案构建无未来数据的账户、持仓与主题快照，按09:25/09:35/10:00运行账户风险、催化失效、机会雷达和接回约束；IR-002固定shadow_only，不下单也不输出仓位动作。",
+      "inputs": ["私有持仓快照", "用户确认execution ledger", "第二次接回复核确认ledger", "20-30主题宇宙", "AmazingData分钟线/竞价快照", "东方财富逐标的fallback", "点时外部映射"],
+      "outputs": ["IntradaySnapshot/ThemeSnapshot/IntradayAlert", "内容寻址observation档案", "追加式alert档案", "execution ledger", "reentry confirmation ledger", "IR-001 JSON/Markdown/HTML", "intraday-runtime/v2"],
       "next": ["实盘影子验证09:25/09:35/10:00", "接入可核验外部映射", "状态变化通知与阈值校准"]
     },
     {

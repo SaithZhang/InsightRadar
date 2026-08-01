@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime
 import hashlib
 from typing import Iterable, Mapping
 
@@ -22,12 +23,16 @@ RULE_VERSION = "intraday-rules/ir-001-v1"
 class ReentryPositionState:
     target_id: str
     sold_at: str
-    sold_fraction: float
+    sold_fraction: float | None
     sale_price: float
     reentry_count: int = 0
     first_reentry_price: float | None = None
     post_reentry_low_broken: bool = False
     account_profit_floor: float | None = None
+    symbol: str = ""
+    quantity: float | None = None
+    available_quantity: float | None = None
+    second_reentry_confirmed: bool = False
 
 
 class AccountRiskEngine:
@@ -247,6 +252,7 @@ class OpportunityRadarEngine:
                         "相对强度转负或龙头与跟随背离。",
                     ),
                     reentry=(),
+                    event_state="invalidation" if state == "失效" else "activated",
                 )
             )
         self._states = states
@@ -311,18 +317,30 @@ class ReentryGuardEngine:
             theme = by_theme.get(state.target_id)
             if theme is None or theme.return_from_open is None:
                 continue
-            price_down_enough = theme.return_from_open <= -3.0
-            if not price_down_enough and state.reentry_count == 0:
+            sold_at = _parse_time(state.sold_at, snapshot.timestamp)
+            if sold_at is None or sold_at > snapshot.timestamp:
                 continue
             profit_locked = (
                 state.account_profit_floor is not None
                 and snapshot.account_daily_pnl is not None
                 and snapshot.account_daily_pnl < state.account_profit_floor
             )
-            second_lock = state.reentry_count >= 1 and state.post_reentry_low_broken
+            dynamic_reentry_failure = (
+                state.reentry_count >= 1
+                and state.first_reentry_price is not None
+                and theme.price is not None
+                and theme.price < state.first_reentry_price
+                and theme.no_new_low is False
+            )
+            second_lock = (
+                state.reentry_count >= 1
+                and (state.post_reentry_low_broken or dynamic_reentry_failure)
+                and not state.second_reentry_confirmed
+            )
             structure_ready = all(
                 (
                     theme.no_new_low is True,
+                    (theme.minutes_without_new_low or 0) >= 5,
                     theme.higher_low is True,
                     bool(theme.reclaimed_vwap or theme.reclaimed_rebound_high),
                     (theme.breadth_above_vwap or 0) >= 0.6,
@@ -330,8 +348,10 @@ class ReentryGuardEngine:
             )
             eligible = structure_ready and not profit_locked and not second_lock
             evidence = [
-                f"相对卖出/开盘后的主题变动 {theme.return_from_open:+.2f}%",
+                f"用户确认卖出：{sold_at.strftime('%H:%M')}，卖出价 {state.sale_price:.2f}",
+                f"当前相对开盘主题变动 {theme.return_from_open:+.2f}%；回到卖出价本身不构成接回条件",
                 f"不再创新低={theme.no_new_low} / 更高低点={theme.higher_low}",
+                f"距最近低点 {theme.minutes_without_new_low if theme.minutes_without_new_low is not None else 'unknown'} 分钟",
                 f"收复VWAP或反弹高点={bool(theme.reclaimed_vwap or theme.reclaimed_rebound_high)}",
                 f"VWAP广度={(theme.breadth_above_vwap or 0):.0%}",
             ]
@@ -386,11 +406,13 @@ class IntradayDecisionEngine:
         technology_theme_ids: Iterable[str],
         catalyst_theme_ids: Iterable[str],
         opportunity_theme_ids: Iterable[str] | None = None,
+        decision_authority: str = "human_confirmation_required",
     ) -> None:
         self.account_risk = AccountRiskEngine(technology_theme_ids)
         self.catalyst_failure = CatalystFailureEngine(catalyst_theme_ids)
         self.opportunity_radar = OpportunityRadarEngine(opportunity_theme_ids)
         self.reentry_guard = ReentryGuardEngine()
+        self.decision_authority = decision_authority
 
     def evaluate(
         self,
@@ -404,10 +426,13 @@ class IntradayDecisionEngine:
         catalyst = self.catalyst_failure.evaluate(snapshot, history_rows)
         opportunity = self.opportunity_radar.evaluate(snapshot, history_rows)
         reentry = self.reentry_guard.evaluate(snapshot, reentry_states)
+        alerts = tuple(
+            [*account.alerts, *catalyst.alerts, *opportunity.alerts, *reentry.alerts]
+        )
+        if self.decision_authority == "shadow_only":
+            alerts = tuple(_shadow_only(item) for item in alerts)
         return RuleEvaluation(
-            alerts=tuple(
-                [*account.alerts, *catalyst.alerts, *opportunity.alerts, *reentry.alerts]
-            ),
+            alerts=alerts,
             opportunity_states=opportunity.opportunity_states,
             state_updates={},
         )
@@ -428,6 +453,7 @@ def _alert(
     confirmation: Iterable[str],
     invalidation: Iterable[str],
     reentry: Iterable[str],
+    event_state: str = "activated",
 ) -> IntradayAlert:
     identity = f"{alert_type}|{target_id}|{snapshot.timestamp.isoformat()}|{severity}"
     alert_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
@@ -449,4 +475,47 @@ def _alert(
         source_times=snapshot.source_times,
         rule_version=RULE_VERSION,
         fetched_at=snapshot.fetched_at,
+        event_state=event_state,
     )
+
+
+def _shadow_only(alert: IntradayAlert) -> IntradayAlert:
+    """Remove all position-action language and sizing from an IR-002 observation."""
+
+    target = alert.suggested_risk_change.get("target", alert.target_id)
+    return replace(
+        alert,
+        title=f"影子规则观察：{alert.type}",
+        conclusion="影子观察：规则条件已触发，但当前没有交易建议权限；仅记录点时结果并等待实盘校准。",
+        evidence=tuple(_shadow_observation_texts(alert.evidence)),
+        action_state="observation_only",
+        suggested_risk_change={
+            "target": target,
+            "new_risk_authorized": False,
+            "automatic_execution": False,
+        },
+        confirmation_conditions=(
+            "仅校准该规则在此 source_time 是否准确触发，不形成仓位动作。",
+        ),
+        invalidation_conditions=(
+            "条件不再满足或点时证据失效时，只记录 resolved / invalidation 事件。",
+        ),
+        reentry_conditions=(),
+    )
+
+
+def _shadow_observation_texts(values: Iterable[str]) -> list[str]:
+    action_terms = ("减仓", "兑现", "加仓", "买入", "卖出", "接回", "仓位动作")
+    result = [str(value) for value in values if not any(term in str(value) for term in action_terms)]
+    return result or ["原始动作型说明已隐藏；保留规则类型、目标、时点与状态用于校准。"]
+
+
+def _parse_time(value: str, reference: datetime) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        try:
+            parsed = datetime.combine(reference.date(), datetime.strptime(value, "%H:%M").time())
+        except ValueError:
+            return None
+    return parsed

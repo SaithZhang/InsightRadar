@@ -659,8 +659,8 @@
       "name": "Live-session intraday shadow calibration",
       "description": "Run 09:25/09:35/10:00 live shadows across multiple sessions, replace scenario external mapping with a verified point-in-time feed, measure timing/false escalation/missed protection, and admit notifications only for substantive state changes.",
       "dependencies": ["IR-001"],
-      "status": "pending",
-      "evidence": "Not started. IR-001 offline acceptance must close first; the current intraday-poll command is an uncalibrated local runtime and grants no trade authority."
+      "status": "in_progress",
+      "evidence": "P0 live-truth and authority hardening verified 2026-08-01. Archives are append-only content-addressed observations with stable ids and recoverable supplier corrections; live replay applies account peaks only when their source_time is visible; runtime v2 separates trade_date, data_status, freshness_status, and decision_authority; stale, future, and cross-day overlays expire; IR-002 remains shadow_only and its output is action-scrubbed; confirmed executions enter a private append-only ledger and drive structure-gated re-entry; a second-reentry override is a separate confirmation event referencing a real first buy and later new-low observation; the double-click launcher keeps a hidden 09:25/09:35/10:00 scheduler and the UI exposes source/fetch/next-check/authority plus resolved/invalidation transitions. Red-first regressions reproduced archive overwrite, future-peak backflow, cross-day ready leakage, shadow action copy, price-only re-entry, and missing schedule/state resolution. Focused 29/29 and full 306/306 tests pass, as do compileall, focused Ruff F checks, launcher parsing, JSON checks, real Saturday fail-closed CLI smoke, HTML contract smoke, architecture regeneration, and project-memory validation. Multi-session open-market calibration, verified external mapping, measured false escalation/missed protection, and notification admission remain incomplete; no trade authority is granted."
     }
   ]
 }
