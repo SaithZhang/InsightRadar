@@ -12,14 +12,27 @@ import pandas as pd
 from stock_assist.after_close_workbench import build_market_matrix_contract
 from stock_assist.after_close_workbench_html import render_after_close_workbench
 from stock_assist.data_sources.cninfo import latest_profit_notice
-from stock_assist.data_sources.global_markets import MarketIndexSnapshot, fetch_global_market_groups
-from stock_assist.data_sources.xysz import AmazingDataClient, AmazingDataError
+from stock_assist.data_sources.contracts import ProviderResult
+from stock_assist.data_sources.global_markets import (
+    MarketIndexSnapshot,
+    fetch_global_market_groups,
+)
+from stock_assist.data_sources.xysz import (
+    AmazingDataClient,
+    AmazingDataError,
+    daily_kline_result_for_code,
+)
 from stock_assist.decision_workspace import build_decision_workspace
-from stock_assist.paths import CONFIG_DIR, DATA_DIR, REPORT_DIR
-from stock_assist.portfolio import Holding, Portfolio, load_portfolio
 from stock_assist.execution_plans import build_holding_execution_plans
 from stock_assist.holding_decision import HoldingDecision, build_holding_decision
-from stock_assist.report_payload import create_report_payload, first_markdown_title, markdown_sections, section_items
+from stock_assist.paths import CONFIG_DIR, DATA_DIR, REPORT_DIR
+from stock_assist.portfolio import Holding, Portfolio, load_portfolio
+from stock_assist.report_payload import (
+    create_report_payload,
+    first_markdown_title,
+    markdown_sections,
+    section_items,
+)
 from stock_assist.reports import bullet
 from stock_assist.signal_outcomes import (
     CODE_PATTERN,
@@ -27,9 +40,15 @@ from stock_assist.signal_outcomes import (
     outcome_markdown_lines,
     refresh_signal_outcomes,
 )
-from stock_assist.unified_decision import build_unified_decision, inject_unified_decision
+from stock_assist.unified_decision import (
+    build_unified_decision,
+    inject_unified_decision,
+)
 from stock_assist.workflows.influencer_sentiment import load_thread_sentiments
-from stock_assist.workflows.influencer_skills import InfluencerObservation, load_observations
+from stock_assist.workflows.influencer_skills import (
+    InfluencerObservation,
+    load_observations,
+)
 
 
 @dataclass(frozen=True)
@@ -1433,8 +1452,18 @@ def _build_signals(
     calendar = client.calendar
     end_date = calendar[-1]
     begin_date = calendar[max(0, len(calendar) - lookback_days)]
-    raw = client.query_daily_kline([holding.code for holding in holdings], begin_date, end_date)
-    return [_signal_for_holding(holding, _frame_for_code(raw, holding.code)) for holding in holdings]
+    result = client.query_daily_kline_result(
+        [holding.code for holding in holdings],
+        begin_date,
+        end_date,
+    )
+    return [
+        _signal_for_holding(
+            holding,
+            daily_kline_result_for_code(result, holding.code),
+        )
+        for holding in holdings
+    ]
 
 
 def _frame_for_code(raw: object, code: str) -> pd.DataFrame:
@@ -1638,7 +1667,10 @@ def _legacy_signal_for_holding(holding: Holding, frame: pd.DataFrame) -> Holding
     )
 
 
-def _signal_for_holding(holding: Holding, frame: pd.DataFrame) -> HoldingSignal:  # type: ignore[no-redef]
+def _signal_for_holding(
+    holding: Holding,
+    frame: pd.DataFrame | ProviderResult[pd.DataFrame],
+) -> HoldingSignal:  # type: ignore[no-redef]
     decision = build_holding_decision(holding, frame)
     return _decision_to_signal(holding, decision)
 

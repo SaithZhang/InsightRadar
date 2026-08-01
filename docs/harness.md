@@ -2,6 +2,8 @@
 
 This document adapts Harness Engineering to InsightRadar. The canonical checkout and active project context use `InsightRadar`; the internal Python package remains `stock_assist`, and legacy CLI aliases remain compatible. Keep it light: use the full loop for multi-file workflow changes, data-source changes, report generation changes, and recurring automation changes. For small copy or config edits, read AGENTS.md, make the edit, and run the narrowest relevant check.
 
+For data defects, classify the task as S/M/L with `docs/DATA_INCIDENTS.md`. An S repair runs only its focused regression and does not refresh architecture, feature state, progress, handoff, or current state. Full governance refresh is reserved for product-state or topological module-boundary changes.
+
 ## Operating Loop
 
 1. Orient

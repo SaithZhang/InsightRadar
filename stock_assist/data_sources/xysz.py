@@ -8,12 +8,28 @@ import io
 import json
 import os
 import socket
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
+from zoneinfo import ZoneInfo
 
+import pandas as pd
+
+from stock_assist.data_sources.contracts import (
+    PriceBasis,
+    ProviderResult,
+    ProviderStatus,
+)
 from stock_assist.env import load_project_env
+
+SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
+DAILY_KLINE_SCHEMA_VERSION = "daily-ohlcv/v1"
+# AmazingData 1.1.8 query_kline hard-codes cq_flag=0. Keep that provider
+# semantic explicit instead of asking downstream rules to infer it from prices.
+AMAZINGDATA_DAILY_PRICE_BASIS: PriceBasis = "unadjusted"
+PRICE_DISCONTINUITY_LIMIT = 0.35
 
 
 class AmazingDataError(RuntimeError):
@@ -195,6 +211,23 @@ class AmazingDataClient:
             period=period,
         )
 
+    def query_daily_kline_result(
+        self,
+        codes: Iterable[str],
+        begin_date: int,
+        end_date: int,
+    ) -> ProviderResult[dict[str, pd.DataFrame]]:
+        """Query and normalize daily bars before they leave the adapter."""
+
+        requested_codes = list(codes)
+        raw = self.query_daily_kline(requested_codes, begin_date, end_date)
+        return normalise_daily_kline_result(
+            raw,
+            requested_codes=requested_codes,
+            fetched_at=datetime.now(tz=SHANGHAI_TZ),
+            expected_trade_date=_date_from_yyyymmdd(end_date),
+        )
+
     def query_snapshot(
         self,
         codes: Iterable[str],
@@ -284,6 +317,235 @@ class AmazingDataClient:
             "stock_basic_rows": len(basic),
             "stock_basic_columns": list(getattr(basic, "columns", []))[:12],
         }
+
+
+def normalise_daily_kline_result(
+    raw: object,
+    *,
+    requested_codes: Iterable[str],
+    fetched_at: datetime | None = None,
+    expected_trade_date: date | None = None,
+) -> ProviderResult[dict[str, pd.DataFrame]]:
+    """Turn the AmazingData dict/DataFrame response into canonical OHLCV."""
+
+    fetched = _aware_shanghai(fetched_at or datetime.now(tz=SHANGHAI_TZ))
+    codes = tuple(dict.fromkeys(str(code) for code in requested_codes))
+    frames: dict[str, pd.DataFrame] = {}
+    gaps: list[str] = []
+    errors: list[str] = []
+    trade_dates: list[date] = []
+
+    for code in codes:
+        provider_frame = _provider_frame_for_code(raw, code)
+        if provider_frame.empty:
+            frames[code] = _empty_daily_frame()
+            gaps.append(f"{code}:missing_series")
+            continue
+        frame, frame_gaps, frame_errors = _normalise_daily_frame(
+            provider_frame,
+            code=code,
+            expected_trade_date=expected_trade_date,
+        )
+        frames[code] = frame
+        gaps.extend(frame_gaps)
+        errors.extend(frame_errors)
+        if not frame.empty:
+            trade_dates.append(frame["trade_date"].iloc[-1].date())
+
+    if not codes:
+        errors.append("request:missing_codes")
+    if len(set(trade_dates)) > 1:
+        gaps.append(
+            "batch:trade_date_mismatch:"
+            + ",".join(sorted(value.isoformat() for value in set(trade_dates)))
+        )
+
+    latest_trade_date = max(trade_dates) if trade_dates else None
+    source_time = _market_close_time(latest_trade_date)
+    status = _provider_status(frames, gaps, errors)
+    return ProviderResult(
+        provider="amazingdata",
+        schema_version=DAILY_KLINE_SCHEMA_VERSION,
+        source_time=source_time,
+        fetched_at=fetched,
+        trade_date=latest_trade_date,
+        status=status,
+        gaps=tuple(gaps),
+        errors=tuple(errors),
+        price_basis=AMAZINGDATA_DAILY_PRICE_BASIS,
+        data=frames,
+    )
+
+
+def daily_kline_result_for_code(
+    result: ProviderResult[dict[str, pd.DataFrame]],
+    code: str,
+) -> ProviderResult[pd.DataFrame]:
+    """Narrow a batch contract without dropping its fault context."""
+
+    frame = result.data.get(code, _empty_daily_frame())
+    prefixes = (f"{code}:", "batch:", "request:")
+    gaps = tuple(item for item in result.gaps if item.startswith(prefixes))
+    errors = tuple(item for item in result.errors if item.startswith(prefixes))
+    trade_date = (
+        frame["trade_date"].iloc[-1].date()
+        if not frame.empty
+        else None
+    )
+    if errors:
+        status: ProviderStatus = "invalid"
+    elif frame.empty:
+        status = "empty"
+    elif any(":price_discontinuity:" in item for item in gaps):
+        status = "quarantined"
+    elif gaps:
+        status = "partial"
+    else:
+        status = "ok"
+    return ProviderResult(
+        provider=result.provider,
+        schema_version=result.schema_version,
+        source_time=_market_close_time(trade_date),
+        fetched_at=result.fetched_at,
+        trade_date=trade_date,
+        status=status,
+        gaps=gaps,
+        errors=errors,
+        price_basis=result.price_basis,
+        data=frame,
+    )
+
+
+def _provider_frame_for_code(raw: object, code: str) -> pd.DataFrame:
+    if isinstance(raw, dict):
+        value = raw.get(code)
+        if value is None:
+            value = raw.get(code.replace(".", "_"))
+        return value.copy() if isinstance(value, pd.DataFrame) else pd.DataFrame()
+    if isinstance(raw, pd.DataFrame):
+        if "code" not in raw.columns:
+            return raw.copy()
+        return raw[raw["code"].astype(str) == code].copy()
+    return pd.DataFrame()
+
+
+def _normalise_daily_frame(
+    frame: pd.DataFrame,
+    *,
+    code: str,
+    expected_trade_date: date | None,
+) -> tuple[pd.DataFrame, list[str], list[str]]:
+    gaps: list[str] = []
+    errors: list[str] = []
+    required = ("kline_time", "open", "high", "low", "close")
+    missing = [column for column in required if column not in frame.columns]
+    if missing:
+        errors.append(f"{code}:missing_fields:{','.join(missing)}")
+        return _empty_daily_frame(), gaps, errors
+
+    result = pd.DataFrame(
+        {
+            "code": (
+                frame["code"].astype(str)
+                if "code" in frame.columns
+                else pd.Series(code, index=frame.index, dtype="object")
+            ),
+            "trade_date": pd.to_datetime(frame["kline_time"], errors="coerce"),
+            "open": pd.to_numeric(frame["open"], errors="coerce"),
+            "high": pd.to_numeric(frame["high"], errors="coerce"),
+            "low": pd.to_numeric(frame["low"], errors="coerce"),
+            "close": pd.to_numeric(frame["close"], errors="coerce"),
+            "volume": (
+                pd.to_numeric(frame["volume"], errors="coerce")
+                if "volume" in frame.columns
+                else pd.Series(float("nan"), index=frame.index)
+            ),
+            "amount": (
+                pd.to_numeric(frame["amount"], errors="coerce")
+                if "amount" in frame.columns
+                else pd.Series(float("nan"), index=frame.index)
+            ),
+        }
+    )
+    invalid_required = result[["trade_date", "open", "high", "low", "close"]].isna().any(axis=1)
+    positive_prices = (result[["open", "high", "low", "close"]] > 0).all(axis=1)
+    valid_envelope = (
+        (result["high"] >= result[["open", "close"]].max(axis=1))
+        & (result["low"] <= result[["open", "close"]].min(axis=1))
+        & (result["high"] >= result["low"])
+    )
+    invalid = invalid_required | ~positive_prices | ~valid_envelope
+    if invalid.any():
+        errors.append(f"{code}:invalid_ohlc_rows:{int(invalid.sum())}")
+        result = result.loc[~invalid].copy()
+
+    if result.empty:
+        return _empty_daily_frame(), gaps, errors
+    if not result["trade_date"].is_monotonic_increasing:
+        gaps.append(f"{code}:timestamps_reordered")
+    result = result.sort_values("trade_date", kind="stable")
+    duplicate_count = int(result["trade_date"].duplicated(keep="last").sum())
+    if duplicate_count:
+        gaps.append(f"{code}:duplicate_trade_dates:{duplicate_count}")
+        result = result.drop_duplicates("trade_date", keep="last")
+
+    latest_trade_date = result["trade_date"].iloc[-1].date()
+    if expected_trade_date is not None and latest_trade_date < expected_trade_date:
+        gaps.append(
+            f"{code}:stale_trade_date:{latest_trade_date.isoformat()}"
+            f"<{expected_trade_date.isoformat()}"
+        )
+    elif expected_trade_date is not None and latest_trade_date > expected_trade_date:
+        errors.append(
+            f"{code}:future_trade_date:{latest_trade_date.isoformat()}"
+            f">{expected_trade_date.isoformat()}"
+        )
+
+    largest_gap = float(result["close"].pct_change().abs().dropna().max())
+    if largest_gap > PRICE_DISCONTINUITY_LIMIT:
+        gaps.append(f"{code}:price_discontinuity:{largest_gap:.6f}")
+    return result.reset_index(drop=True), gaps, errors
+
+
+def _provider_status(
+    frames: dict[str, pd.DataFrame],
+    gaps: list[str],
+    errors: list[str],
+) -> ProviderStatus:
+    if errors:
+        return "invalid"
+    if not frames or all(frame.empty for frame in frames.values()):
+        return "empty"
+    if any(":price_discontinuity:" in item for item in gaps):
+        return "quarantined"
+    if gaps:
+        return "partial"
+    return "ok"
+
+
+def _empty_daily_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=["code", "trade_date", "open", "high", "low", "close", "volume", "amount"]
+    )
+
+
+def _aware_shanghai(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=SHANGHAI_TZ)
+    return value.astimezone(SHANGHAI_TZ)
+
+
+def _market_close_time(value: date | None) -> datetime | None:
+    return (
+        datetime.combine(value, time(15, 0), tzinfo=SHANGHAI_TZ)
+        if value is not None
+        else None
+    )
+
+
+def _date_from_yyyymmdd(value: int) -> date:
+    text = str(value)
+    return date.fromisoformat(f"{text[:4]}-{text[4:6]}-{text[6:]}")
 
 
 def _build_parser() -> argparse.ArgumentParser:

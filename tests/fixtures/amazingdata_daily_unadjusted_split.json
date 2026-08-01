@@ -1,0 +1,33 @@
+{
+  "fixture_schema": "insight-radar-synthetic-provider-fixture/v1",
+  "classification": "synthetic_redacted",
+  "incident": "undeclared_unadjusted_price_discontinuity",
+  "requested_code": "900002.SH",
+  "fetched_at": "2026-07-31T15:05:00+08:00",
+  "expected_trade_date": "2026-07-31",
+  "response": {
+    "900002.SH": [
+      {"code": "900002.SH", "kline_time": "2026-07-03", "open": 3.08, "high": 3.13, "low": 3.06, "close": 3.10, "volume": 1000000, "amount": 3100000},
+      {"code": "900002.SH", "kline_time": "2026-07-06", "open": 3.10, "high": 3.12, "low": 3.05, "close": 3.07, "volume": 1010000, "amount": 3100700},
+      {"code": "900002.SH", "kline_time": "2026-07-07", "open": 3.07, "high": 3.11, "low": 3.04, "close": 3.09, "volume": 1020000, "amount": 3151800},
+      {"code": "900002.SH", "kline_time": "2026-07-08", "open": 3.09, "high": 3.10, "low": 3.02, "close": 3.05, "volume": 1030000, "amount": 3141500},
+      {"code": "900002.SH", "kline_time": "2026-07-09", "open": 3.05, "high": 3.08, "low": 3.01, "close": 3.03, "volume": 1040000, "amount": 3151200},
+      {"code": "900002.SH", "kline_time": "2026-07-10", "open": 3.03, "high": 3.07, "low": 3.00, "close": 3.04, "volume": 1050000, "amount": 3192000},
+      {"code": "900002.SH", "kline_time": "2026-07-13", "open": 3.04, "high": 3.06, "low": 2.99, "close": 3.01, "volume": 1060000, "amount": 3190600},
+      {"code": "900002.SH", "kline_time": "2026-07-14", "open": 3.01, "high": 3.05, "low": 2.98, "close": 3.02, "volume": 1070000, "amount": 3231400},
+      {"code": "900002.SH", "kline_time": "2026-07-15", "open": 3.02, "high": 3.04, "low": 2.96, "close": 2.99, "volume": 1080000, "amount": 3229200},
+      {"code": "900002.SH", "kline_time": "2026-07-16", "open": 2.99, "high": 3.03, "low": 2.97, "close": 3.00, "volume": 1090000, "amount": 3270000},
+      {"code": "900002.SH", "kline_time": "2026-07-17", "open": 3.00, "high": 3.02, "low": 2.95, "close": 2.98, "volume": 1100000, "amount": 3278000},
+      {"code": "900002.SH", "kline_time": "2026-07-20", "open": 2.98, "high": 3.01, "low": 2.94, "close": 2.96, "volume": 1110000, "amount": 3285600},
+      {"code": "900002.SH", "kline_time": "2026-07-21", "open": 1.17, "high": 1.20, "low": 1.15, "close": 1.18, "volume": 2800000, "amount": 3304000},
+      {"code": "900002.SH", "kline_time": "2026-07-22", "open": 1.18, "high": 1.19, "low": 1.15, "close": 1.16, "volume": 2850000, "amount": 3306000},
+      {"code": "900002.SH", "kline_time": "2026-07-23", "open": 1.16, "high": 1.19, "low": 1.14, "close": 1.17, "volume": 2900000, "amount": 3393000},
+      {"code": "900002.SH", "kline_time": "2026-07-24", "open": 1.17, "high": 1.18, "low": 1.13, "close": 1.15, "volume": 2950000, "amount": 3392500},
+      {"code": "900002.SH", "kline_time": "2026-07-27", "open": 1.15, "high": 1.18, "low": 1.14, "close": 1.16, "volume": 3000000, "amount": 3480000},
+      {"code": "900002.SH", "kline_time": "2026-07-28", "open": 1.16, "high": 1.17, "low": 1.12, "close": 1.14, "volume": 3050000, "amount": 3477000},
+      {"code": "900002.SH", "kline_time": "2026-07-29", "open": 1.14, "high": 1.17, "low": 1.13, "close": 1.15, "volume": 3100000, "amount": 3565000},
+      {"code": "900002.SH", "kline_time": "2026-07-30", "open": 1.15, "high": 1.16, "low": 1.11, "close": 1.13, "volume": 3150000, "amount": 3559500},
+      {"code": "900002.SH", "kline_time": "2026-07-31", "open": 1.13, "high": 1.17, "low": 1.12, "close": 1.15, "volume": 3200000, "amount": 3680000}
+    ]
+  }
+}

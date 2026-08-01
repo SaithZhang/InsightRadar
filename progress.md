@@ -1799,3 +1799,11 @@ Read `AGENTS.md`, `feature_list.json`, and this file first. `feat-004`, `feat-00
 - Updated the active product/version documents, startup instructions, architecture wording, public decision log, project memory, product governance, and `feat-058` pilot metadata. The historical V3.0 document and public review package remain evidence of the earlier baseline rather than being rewritten as current capability.
 - V3.1 remains sequential: `IR-002` is the sole active experiment; `feat-058` remains parked until explicitly selected. V3.2 and parallel redesign are not authorized.
 - The four first-level routes, real/synthetic/unknown truth boundary, local/private data contract, rules over AI, human confirmation, and no automatic trading remain unchanged guardrails.
+
+## 2026-08-01 - DI-001 AmazingData daily price-basis fault loop
+
+- Classified the bounded repair as M: one existing AmazingData-to-after-close vertical path, with no new provider, workflow, route, deployment, product-state change, or architecture-topology change. Added the reusable S/M/L policy in `docs/DATA_INCIDENTS.md`; no architecture, feature-state, handoff, or current-state refresh was required.
+- A synthetic `900002.SH` fixture preserves the real Provider dict/DataFrame shape and a corporate-action-sized unadjusted price discontinuity without account, credential, holding, private symbol, or raw authenticated data.
+- RED was deterministic: the offline command failed because no adapter result contract existed and the holding rule received `provider_output_unspecified`. GREEN now emits `ProviderResult[daily-ohlcv/v1]`, canonicalizes OHLCV at the AmazingData boundary, declares `price_basis=unadjusted`, and quarantines the discontinuity before technical levels can authorize a plan.
+- Invariants cover numeric positive OHLC, valid high/low envelopes, timestamp ordering/deduplication, expected trade date, explicit source/fetch times, and fail-closed invalid/stale/quarantined states. A serial real-source check reproduced the known 61.8819% discontinuity as `quarantined` with no contract errors.
+- Verification: the four-test offline reproduction completed in 0.480 seconds; 22 adjacent tests passed; full discovery passed 359/359 in 11.480 seconds; compileall, focused Ruff, focused Mypy with third-party stubs ignored, and `git diff --check` passed.

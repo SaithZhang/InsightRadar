@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import unittest
+from dataclasses import replace
 
 import pandas as pd
 
@@ -137,8 +137,8 @@ class HoldingDecisionTests(unittest.TestCase):
         self.assertTrue(repair.reachability.startswith("multi_session_min_"))
         self.assertNotEqual(repair.threshold, holding.cost)
 
-    def test_amazingdata_kline_time_is_preserved_as_technical_as_of(self) -> None:
-        frame = self._frame().rename(columns={"trade_date": "kline_time"})
+    def test_canonical_trade_date_is_preserved_as_technical_as_of(self) -> None:
+        frame = self._frame()
 
         decision = build_holding_decision(
             Holding(code="900001.SH", name="合成标的甲", market_price=96.0),

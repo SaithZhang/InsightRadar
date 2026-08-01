@@ -13,8 +13,8 @@ from typing import Literal
 
 import pandas as pd
 
+from stock_assist.data_sources.contracts import ProviderResult
 from stock_assist.portfolio import Holding
-
 
 TechnicalState = Literal[
     "unknown",
@@ -79,10 +79,29 @@ class HoldingDecision:
         raise KeyError(branch_id)
 
 
-def build_holding_decision(holding: Holding, frame: pd.DataFrame) -> HoldingDecision:
+def build_holding_decision(
+    holding: Holding,
+    observation: pd.DataFrame | ProviderResult[pd.DataFrame],
+) -> HoldingDecision:
     """Build a holding plan without using cost to synthesize technical levels."""
 
+    result = observation if isinstance(observation, ProviderResult) else None
+    frame = result.data if result is not None else observation
     prepared = _prepare_frame(frame)
+    if result is not None:
+        prepared.attrs["adjustment_basis"] = result.price_basis
+        if result.status == "invalid":
+            return _unknown_decision(
+                holding,
+                "日线行情未通过 ProviderResult 数据不变量，技术结构不可用。",
+                "；".join(result.errors) or "日线行情契约状态为 invalid。",
+            )
+        if any(":stale_trade_date:" in gap for gap in result.gaps):
+            return _unknown_decision(
+                holding,
+                "日线行情未达到要求交易日，技术结构不可用。",
+                "；".join(result.gaps),
+            )
     if prepared.empty:
         return _unknown_decision(
             holding,
@@ -90,15 +109,14 @@ def build_holding_decision(holding: Holding, frame: pd.DataFrame) -> HoldingDeci
             "补充至少20个已完成交易日的日线行情。",
         )
 
-    close_col = _pick_column(prepared, ("close", "收盘价", "S_DQ_CLOSE"))
-    if close_col is None:
+    if "close" not in prepared.columns:
         return _unknown_decision(
             holding,
             "行情缺少收盘价字段，不能计算技术结构。",
             "确认日线字段映射并重新刷新。",
         )
 
-    closes = pd.to_numeric(prepared[close_col], errors="coerce")
+    closes = pd.to_numeric(prepared["close"], errors="coerce")
     valid = closes.notna() & (closes > 0)
     prepared = prepared.loc[valid].copy()
     closes = closes.loc[valid].astype(float)
@@ -129,15 +147,22 @@ def build_holding_decision(holding: Holding, frame: pd.DataFrame) -> HoldingDeci
                 "偏差超过35%，疑似复权或标的映射口径不一致。"
             ),
         )
-    adjustment_basis = str(
-        prepared.attrs.get("adjustment_basis")
-        or prepared.attrs.get("adjust")
-        or "provider_output_unspecified"
+    adjustment_basis = (
+        result.price_basis
+        if result is not None
+        else str(
+            prepared.attrs.get("adjustment_basis")
+            or prepared.attrs.get("adjust")
+            or "provider_output_unspecified"
+        )
     )
     largest_gap = float(closes.pct_change().abs().dropna().max())
     if (
-        largest_gap > 0.35
-        and adjustment_basis == "provider_output_unspecified"
+        (result is not None and result.status == "quarantined")
+        or (
+            largest_gap > 0.35
+            and adjustment_basis == "provider_output_unspecified"
+        )
     ):
         technical = _technical_snapshot(
             prepared,
@@ -148,8 +173,9 @@ def build_holding_decision(holding: Holding, frame: pd.DataFrame) -> HoldingDeci
             holding,
             technical,
             (
-                f"日线序列存在 {largest_gap:.1%} 的单日价格断点，且数据源未声明"
-                "复权口径；均线、支撑阻力与波动指标暂不进入决策。"
+                f"日线序列存在 {largest_gap:.1%} 的单日价格断点，"
+                f"price_basis={adjustment_basis}；均线、支撑阻力与波动指标"
+                "暂不进入决策。"
             ),
         )
 
@@ -298,21 +324,8 @@ def _prepare_frame(frame: pd.DataFrame) -> pd.DataFrame:
     if frame.empty:
         return frame.copy()
     prepared = frame.copy()
-    date_col = _pick_column(
-        prepared,
-        (
-            "date",
-            "trade_date",
-            "kline_time",
-            "trade_dt",
-            "tradeDate",
-            "交易日期",
-            "TRADE_DT",
-            "TRADE_DATE",
-        ),
-    )
-    if date_col is not None:
-        prepared = prepared.sort_values(date_col, kind="stable")
+    if "trade_date" in prepared.columns:
+        prepared = prepared.sort_values("trade_date", kind="stable")
     return prepared
 
 
@@ -395,12 +408,10 @@ def _technical_state(
 
 
 def _atr14(frame: pd.DataFrame, closes: pd.Series) -> float | None:
-    high_col = _pick_column(frame, ("high", "最高价", "S_DQ_HIGH"))
-    low_col = _pick_column(frame, ("low", "最低价", "S_DQ_LOW"))
-    if high_col is None or low_col is None:
+    if "high" not in frame.columns or "low" not in frame.columns:
         return None
-    highs = pd.to_numeric(frame.loc[closes.index, high_col], errors="coerce")
-    lows = pd.to_numeric(frame.loc[closes.index, low_col], errors="coerce")
+    highs = pd.to_numeric(frame.loc[closes.index, "high"], errors="coerce")
+    lows = pd.to_numeric(frame.loc[closes.index, "low"], errors="coerce")
     previous_close = closes.shift(1)
     true_range = pd.concat(
         [
@@ -415,13 +426,9 @@ def _atr14(frame: pd.DataFrame, closes: pd.Series) -> float | None:
 
 
 def _volume_ratio_20d(frame: pd.DataFrame) -> float | None:
-    volume_col = _pick_column(
-        frame,
-        ("volume", "vol", "成交量", "S_DQ_VOLUME"),
-    )
-    if volume_col is None:
+    if "volume" not in frame.columns:
         return None
-    volumes = pd.to_numeric(frame[volume_col], errors="coerce").dropna()
+    volumes = pd.to_numeric(frame["volume"], errors="coerce").dropna()
     volumes = volumes[volumes >= 0]
     if len(volumes) < 21:
         return None
@@ -430,22 +437,9 @@ def _volume_ratio_20d(frame: pd.DataFrame) -> float | None:
 
 
 def _as_of(frame: pd.DataFrame) -> str | None:
-    date_col = _pick_column(
-        frame,
-        (
-            "date",
-            "trade_date",
-            "kline_time",
-            "trade_dt",
-            "tradeDate",
-            "交易日期",
-            "TRADE_DT",
-            "TRADE_DATE",
-        ),
-    )
-    if date_col is None or frame.empty:
+    if "trade_date" not in frame.columns or frame.empty:
         return None
-    value = frame[date_col].iloc[-1]
+    value = frame["trade_date"].iloc[-1]
     if pd.isna(value):
         return None
     if hasattr(value, "date"):
