@@ -1,0 +1,20 @@
+{
+  "schema_version": "insightradar-portfolio-beta-config/v1",
+  "benchmark": {
+    "code": "000300.SH",
+    "name": "沪深300",
+    "secid": "1.000300",
+    "tencent_code": "sh000300"
+  },
+  "window_sessions": 120,
+  "minimum_observations": 60,
+  "history_limit": 180,
+  "high_beta_threshold": 1.2,
+  "return_method": "simple_daily_return",
+  "price_adjustment": "qfq_for_holdings_provider_native_for_index",
+  "require_same_latest_session": true,
+  "fit_quality_thresholds": {
+    "moderate_r_squared": 0.1,
+    "strong_r_squared": 0.3
+  }
+}

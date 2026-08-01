@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-from datetime import datetime
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from datetime import datetime
+from pathlib import Path
 
+from stock_assist.after_close_workbench_html import render_after_close_workbench
 from stock_assist.decision_workspace import (
     append_plan_response,
     build_decision_workspace,
-    load_plan_versions,
     load_plan_responses,
+    load_plan_versions,
     record_plan_versions,
     restage_workspace,
 )
-from stock_assist.after_close_workbench_html import render_after_close_workbench
 from stock_assist.portfolio import Holding, Portfolio
 
 
@@ -382,9 +382,9 @@ class DecisionWorkspaceTests(unittest.TestCase):
         self.assertEqual(restored["plan_changes"], [])
         self.assertEqual(len(restored["today_plans"]), 1)
         self.assertEqual(restored["runtime_status"], "blocked_waiting")
-        self.assertIn("继续等待", html)
-        self.assertIn("阻断未解除", html)
-        self.assertNotIn("今天没有新的待回应或未解除阻断", html)
+        self.assertIn("判断阻断", html)
+        self.assertIn("不能把本规则变成已确认或提醒候选", html)
+        self.assertIn("blocked_acknowledged", html)
         self.assertNotEqual(recovered["active_plans"][0]["status"], "blocked")
         self.assertEqual(
             recovered["active_plans"][0]["user_response_status"],
@@ -427,6 +427,65 @@ class DecisionWorkspaceTests(unittest.TestCase):
         self.assertEqual(plans["000001.SZ"]["status"], "blocked")
         self.assertEqual(plans["000002.SZ"]["status"], "new")
         self.assertEqual(workspace["today_plans"][0]["symbol"], "000002.SZ")
+
+    def test_historical_entry_gap_is_visible_but_does_not_block_current_plan(self) -> None:
+        payload = self._payload()
+        payload["reliability"]["holdings"][0].update(
+            {
+                "context_complete": True,
+                "current_context_complete": True,
+                "historical_context_complete": False,
+                "missing_current_context_fields": [],
+                "missing_historical_context_fields": ["原始买入失效条件"],
+                "decision_ready": True,
+            }
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            responses = Path(temporary) / "responses.jsonl"
+            plans = Path(temporary) / "plans.jsonl"
+            workspace = build_decision_workspace(
+                payload,
+                self._portfolio(),
+                response_ledger=responses,
+                plan_ledger=plans,
+            )
+            record_plan_versions(workspace, plans)
+            unchanged = build_decision_workspace(
+                payload,
+                self._portfolio(),
+                response_ledger=responses,
+                plan_ledger=plans,
+            )
+            unchanged_html = render_after_close_workbench(
+                {"decision_workspace": unchanged},
+                "",
+            )
+
+        plan = workspace["active_plans"][0]
+        position = workspace["portfolio_positions"][0]
+        html = render_after_close_workbench(
+            {"decision_workspace": workspace},
+            "",
+        )
+        self.assertEqual(plan["status"], "new")
+        self.assertEqual(plan["blocking_reasons"], [])
+        self.assertEqual(position["current_context_status"], "ready")
+        self.assertEqual(position["historical_context_status"], "unknown")
+        self.assertEqual(
+            position["missing_historical_context_fields"],
+            ["原始买入失效条件"],
+        )
+        self.assertIn("历史买入上下文", html)
+        self.assertIn("只影响策略与执行复盘，不阻断当前风险计划", html)
+        self.assertIn("原始买入失效条件", html)
+        self.assertEqual(unchanged["active_plans"][0]["status"], "unchanged")
+        self.assertEqual(
+            unchanged["active_plans"][0]["user_response_status"],
+            "pending",
+        )
+        self.assertEqual(len(unchanged["today_plans"]), 1)
+        self.assertIn("请确认当前条件规则；未确认前不会生成操作提醒", unchanged_html)
+        self.assertIn("1 项待处理", unchanged_html)
 
     def test_source_time_field_prevents_false_missing_status(self) -> None:
         payload = self._payload()
@@ -549,6 +608,20 @@ class DecisionWorkspaceTests(unittest.TestCase):
                     ledger_path=Path(temporary) / "responses.jsonl",
                 )
 
+    def test_disabled_response_is_persisted_and_not_monitor_eligible(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            ledger = Path(temporary) / "responses.jsonl"
+            record = append_plan_response(
+                plan_id="holding:000001.SZ",
+                plan_version="v-123",
+                response="disabled",
+                ledger_path=ledger,
+            )
+            rows = load_plan_responses(ledger)
+
+        self.assertEqual(record["response"], "disabled")
+        self.assertEqual(rows[-1]["response"], "disabled")
+
     def test_blocked_plan_rejects_acceptance_and_renders_acknowledgement(self) -> None:
         payload = self._payload()
         payload["unified_decision"]["blocked_actions"] = ["核心数据缺口阻断执行"]
@@ -578,8 +651,8 @@ class DecisionWorkspaceTests(unittest.TestCase):
             )
 
         self.assertIn("确认已知悉阻断", html)
-        self.assertIn("不会进入有效计划或盘中监控", html)
-        self.assertNotIn("采纳为今日计划", html)
+        self.assertIn("任何按钮都不能把本规则变成已确认或提醒候选", html)
+        self.assertIn("暂不启用", html)
         self.assertNotIn('data-plan-response="accepted"', html)
 
     def test_version_display_separates_first_content_and_execution_changes(self) -> None:
@@ -653,12 +726,11 @@ class DecisionWorkspaceTests(unittest.TestCase):
             "",
         )
 
-        self.assertIn("计划内容未变，执行状态变为 blocked", unchanged_html)
-        self.assertNotIn("上一版计划 · v-same", unchanged_html)
-        self.assertIn("首次生成", first_html)
-        self.assertNotIn("上一版计划", first_html)
-        self.assertIn("上一版计划 · v-old", revised_html)
-        self.assertIn("今日建议计划 · v-new", revised_html)
+        self.assertIn('data-plan-version="v-same"', unchanged_html)
+        self.assertIn("核心数据缺口阻断执行", unchanged_html)
+        self.assertIn('data-plan-version="v-first"', first_html)
+        self.assertIn('data-plan-version="v-new"', revised_html)
+        self.assertIn("执行新计划", revised_html)
 
     def test_dispute_is_restored_only_for_the_matching_plan_version(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

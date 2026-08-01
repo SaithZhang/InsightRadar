@@ -139,13 +139,26 @@ def build_after_close_report(
     if portfolio.holdings and portfolio.context_missing:
         gaps.append(f"未找到组合上下文文件：{portfolio.context_source}，买入逻辑、初始风控线、调仓记录和复盘状态待补。")
     if portfolio.holdings and not portfolio.context_missing:
-        missing_context = [
+        missing_current_context = [
             holding.name or holding.code
             for holding in portfolio.holdings
-            if not _holding_context_complete(holding)
+            if not _current_decision_context_complete(holding)
         ]
-        if missing_context:
-            gaps.append(f"部分持仓上下文未补全：{', '.join(missing_context)}")
+        if missing_current_context:
+            gaps.append(
+                "部分持仓当前风险上下文未补全："
+                + ", ".join(missing_current_context)
+            )
+        missing_historical_context = [
+            holding.name or holding.code
+            for holding in portfolio.holdings
+            if not _historical_context_complete(holding)
+        ]
+        if missing_historical_context:
+            optional_gaps.append(
+                "部分持仓历史买入上下文未知（仅影响复盘，不阻断当前风险计划）："
+                + ", ".join(missing_historical_context)
+            )
     event_config, event_config_gaps = _load_event_calendar()
     gaps.extend(event_config_gaps)
 
@@ -435,7 +448,7 @@ def build_after_close_payload(
                 "label": "Decision-ready",
                 "value": f"{int(reliability['decision_ready_holdings'])}/{int(reliability['holding_count'])}",
                 "tone": "ok" if reliability["decision_ready_coverage"] == 1.0 else "warn",
-                "note": "Strict coverage requires current holdings, complete snapshot fields, context, action branches, and evaluated market data.",
+                "note": "Strict coverage requires current holdings, complete snapshot fields, current risk context, action branches, and evaluated market data; unknown entry history limits review only.",
             },
             {
                 "id": "sections",
@@ -527,14 +540,49 @@ def _holding_snapshot_missing_fields(holding: Holding) -> list[str]:
     return missing
 
 
-def _holding_context_complete(holding: Holding) -> bool:
-    required = (holding.thesis, holding.initial_risk_line, holding.risk_line, holding.review_status)
-    if not all(value.strip() for value in required):
-        return False
-    if holding.review_status in {"needs_context", "stale_context"}:
-        return False
-    initial = holding.initial_risk_line
-    return not any(marker in initial for marker in ("待补", "未提供", "未知"))
+_CONTEXT_PLACEHOLDER_MARKERS = ("待补", "未提供", "未知")
+
+
+def _has_context_placeholder(value: str) -> bool:
+    return any(marker in value for marker in _CONTEXT_PLACEHOLDER_MARKERS)
+
+
+def _missing_current_context_fields(holding: Holding) -> list[str]:
+    missing: list[str] = []
+    if not holding.risk_line.strip() or _has_context_placeholder(holding.risk_line):
+        missing.append("当前风险规则")
+    if not holding.review_status.strip():
+        missing.append("当前复盘状态")
+    elif holding.review_status == "needs_context":
+        missing.append("当前持仓上下文")
+    elif holding.review_status == "stale_context":
+        missing.append("当前风险规则与持仓快照冲突")
+    return missing
+
+
+def _missing_historical_context_fields(holding: Holding) -> list[str]:
+    missing: list[str] = []
+    if not holding.thesis.strip() or _has_context_placeholder(holding.thesis):
+        missing.append("原始买入逻辑")
+    if (
+        not holding.initial_risk_line.strip()
+        or _has_context_placeholder(holding.initial_risk_line)
+        or holding.review_status == "stale_context"
+    ):
+        missing.append("原始买入失效条件")
+    return missing
+
+
+def _current_decision_context_complete(holding: Holding) -> bool:
+    """Return whether current risk review inputs are usable now."""
+
+    return not _missing_current_context_fields(holding)
+
+
+def _historical_context_complete(holding: Holding) -> bool:
+    """Return whether entry-time thesis and invalidation are auditable."""
+
+    return not _missing_historical_context_fields(holding)
 
 
 def _build_core_reliability(
@@ -544,10 +592,23 @@ def _build_core_reliability(
     data_gaps: list[str],
     optional_gaps: list[str],
 ) -> dict[str, object]:
+    effective_optional_gaps = list(optional_gaps)
+    missing_historical_context = [
+        holding.name or holding.code
+        for holding in portfolio.holdings
+        if not _historical_context_complete(holding)
+    ]
+    if missing_historical_context:
+        effective_optional_gaps.append(
+            "部分持仓历史买入上下文未知（仅影响复盘，不阻断当前风险计划）："
+            + ", ".join(missing_historical_context)
+        )
     market_as_of = str(outcome_snapshot.get("as_of_trade_date") or "")
     holding_rows: list[dict[str, object]] = []
     structural_ready = 0
     decision_ready = 0
+    current_context_ready = 0
+    historical_context_ready = 0
     for holding in portfolio.holdings:
         action = next(
             (
@@ -570,12 +631,19 @@ def _build_core_reliability(
         if action_complete:
             structural_ready += 1
         missing_snapshot_fields = _holding_snapshot_missing_fields(holding)
-        context_complete = _holding_context_complete(holding)
+        missing_current_context_fields = _missing_current_context_fields(holding)
+        missing_historical_context_fields = _missing_historical_context_fields(holding)
+        current_context_complete = not missing_current_context_fields
+        historical_context_complete = not missing_historical_context_fields
+        if current_context_complete:
+            current_context_ready += 1
+        if historical_context_complete:
+            historical_context_ready += 1
         ready = bool(
             action_complete
             and market_as_of
             and portfolio.as_of
-            and context_complete
+            and current_context_complete
             and not missing_snapshot_fields
             and portfolio.risk_reconciliation_status != "blocked"
         )
@@ -586,7 +654,11 @@ def _build_core_reliability(
                 "code": holding.code,
                 "name": holding.name or holding.code,
                 "action_complete": action_complete,
-                "context_complete": context_complete,
+                "context_complete": current_context_complete,
+                "current_context_complete": current_context_complete,
+                "historical_context_complete": historical_context_complete,
+                "missing_current_context_fields": missing_current_context_fields,
+                "missing_historical_context_fields": missing_historical_context_fields,
                 "missing_snapshot_fields": missing_snapshot_fields,
                 "decision_ready": ready,
                 "risk_reconciliation_status": portfolio.risk_reconciliation_status,
@@ -604,12 +676,15 @@ def _build_core_reliability(
         "structural_action_coverage": round(structural_ready / count, 4) if count else 0.0,
         "decision_ready_holdings": decision_ready,
         "decision_ready_coverage": round(decision_ready / count, 4) if count else 0.0,
+        "current_context_ready_holdings": current_context_ready,
+        "historical_context_ready_holdings": historical_context_ready,
         "holdings": holding_rows,
         "data_gaps": _dedupe_text(data_gaps),
-        "optional_extension_gaps": _dedupe_text(optional_gaps),
+        "optional_extension_gaps": _dedupe_text(effective_optional_gaps),
         "definition": (
             "严格就绪要求当前持仓快照有as_of、股数/成本/市价/盈亏或仓位字段，"
-            "组合上下文完整，行情已评估，且动作包含仓位、上行、下行和震荡分支。"
+            "当前风险规则与复盘状态可用，行情已评估，且动作包含仓位、上行、下行和震荡分支。"
+            "原始买入逻辑和初始失效条件缺失只影响历史复盘质量，不阻断当前风险计划。"
             "显式标记为blocked的持仓/风险预算对账会阻断严格就绪。"
         ),
     }
@@ -619,8 +694,17 @@ def _core_reliability_lines(reliability: dict[str, object]) -> list[str]:
     count = int(reliability.get("holding_count", 0) or 0)
     structural = int(reliability.get("structural_action_holdings", 0) or 0)
     ready = int(reliability.get("decision_ready_holdings", 0) or 0)
+    current_context_value = reliability.get("current_context_ready_holdings", 0)
+    historical_context_value = reliability.get("historical_context_ready_holdings", 0)
+    current_context = (
+        current_context_value if isinstance(current_context_value, int) else 0
+    )
+    historical_context = (
+        historical_context_value if isinstance(historical_context_value, int) else 0
+    )
     lines = [
         f"结构化动作覆盖 {structural}/{count}；严格决策就绪 {ready}/{count}。",
+        f"当前风险上下文 {current_context}/{count}；历史买入上下文 {historical_context}/{count}（仅影响复盘）。",
         f"持仓快照：{reliability.get('portfolio_source')}；截至 {reliability.get('portfolio_as_of') or '未标注'}。",
         f"行情评估截至：{reliability.get('market_as_of_trade_date') or '未取得有效交易日'}。",
         f"持仓/风险预算对账：{reliability.get('risk_reconciliation_status') or 'unverified'}。",

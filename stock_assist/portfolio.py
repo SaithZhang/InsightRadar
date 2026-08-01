@@ -10,7 +10,6 @@ from typing import Any
 
 from stock_assist.paths import DATA_DIR
 
-
 DEFAULT_PORTFOLIO_PATH = DATA_DIR / "portfolio.json"
 DEFAULT_MANUAL_PORTFOLIO_PATH = DATA_DIR / "portfolio.manual.tsv"
 DEFAULT_GALAXY_PORTFOLIO_PATH = DATA_DIR / "portfolio.galaxy.tsv"
@@ -44,6 +43,25 @@ class AdjustmentRecord:
 
 
 @dataclass(frozen=True)
+class BetaEvidence:
+    """Deterministic market-data evidence behind one beta classification."""
+
+    beta: float | None = None
+    r_squared: float | None = None
+    benchmark: str = ""
+    window_sessions: int = 0
+    minimum_observations: int = 0
+    observations: int = 0
+    as_of: str = ""
+    asset_as_of: str = ""
+    source: str = ""
+    quality_status: str = "unknown"
+    fit_quality: str = "unknown"
+    reason: str = ""
+    calculation: str = ""
+
+
+@dataclass(frozen=True)
 class Holding:
     code: str
     name: str = ""
@@ -59,6 +77,7 @@ class Holding:
     available: float | None = None
     market: str = ""
     beta_classification: str = "unknown"
+    beta_evidence: BetaEvidence | None = None
     thesis: str = ""
     risk_line: str = ""
     initial_risk_line: str = ""
@@ -149,6 +168,7 @@ def _load_json_portfolio(path: Path) -> Portfolio:
             available=_optional_float(item.get("available")),
             market=str(item.get("market", "")),
             beta_classification=str(item.get("beta_classification") or "unknown"),
+            beta_evidence=_parse_beta_evidence(item.get("beta_evidence")),
             thesis=str(item.get("thesis", "")),
             risk_line=str(item.get("risk_line", "")),
             initial_risk_line=str(item.get("initial_risk_line", "")),
@@ -355,6 +375,7 @@ def _merge_holding_context(holding: Holding, context: dict[str, Any]) -> Holding
         available=holding.available,
         market=holding.market,
         beta_classification=holding.beta_classification,
+        beta_evidence=holding.beta_evidence,
         thesis=str(context.get("buy_thesis") or context.get("thesis") or holding.thesis),
         risk_line=(
             conflict_note
@@ -443,6 +464,26 @@ def _parse_adjustment_records(value: Any) -> tuple[AdjustmentRecord, ...]:
     return tuple(records)
 
 
+def _parse_beta_evidence(value: Any) -> BetaEvidence | None:
+    if not isinstance(value, dict):
+        return None
+    return BetaEvidence(
+        beta=_optional_float(value.get("beta")),
+        r_squared=_optional_float(value.get("r_squared")),
+        benchmark=str(value.get("benchmark") or ""),
+        window_sessions=int(value.get("window_sessions") or 0),
+        minimum_observations=int(value.get("minimum_observations") or 0),
+        observations=int(value.get("observations") or 0),
+        as_of=str(value.get("as_of") or ""),
+        asset_as_of=str(value.get("asset_as_of") or ""),
+        source=str(value.get("source") or ""),
+        quality_status=str(value.get("quality_status") or "unknown"),
+        fit_quality=str(value.get("fit_quality") or "unknown"),
+        reason=str(value.get("reason") or ""),
+        calculation=str(value.get("calculation") or ""),
+    )
+
+
 def _parse_string_list(value: Any) -> tuple[str, ...]:
     if not value:
         return ()
@@ -488,6 +529,7 @@ def _fill_missing_weights(holdings: list[Holding]) -> list[Holding]:
             available=holding.available,
             market=holding.market,
             beta_classification=holding.beta_classification,
+            beta_evidence=holding.beta_evidence,
             thesis=holding.thesis,
             risk_line=holding.risk_line,
             initial_risk_line=holding.initial_risk_line,
@@ -503,7 +545,7 @@ def _fill_missing_weights(holdings: list[Holding]) -> list[Holding]:
     ]
 
 
-def parse_galaxy_position_table(text: str) -> list[dict[str, str]]:  # type: ignore[no-redef]
+def parse_galaxy_position_table(text: str) -> list[dict[str, str]]:  # type: ignore[no-redef]  # noqa: F811
     """Parse a tab-separated broker position table with Chinese or legacy headers."""
 
     lines = [line.rstrip("\r\n") for line in text.splitlines() if line.strip()]

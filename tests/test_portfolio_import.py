@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import subprocess
-from tempfile import TemporaryDirectory
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from stock_assist.execution_plans import calculate_executable_trim
 from stock_assist.portfolio_import import (
@@ -12,7 +12,6 @@ from stock_assist.portfolio_import import (
     preview_portfolio_import,
     rerun_required_workflows,
 )
-
 
 HEADER = "操作\t证券代码\t证券名称\t自有股份可用\t股票余额\t成本价\t市价\t盈亏\t盈亏比例(%)\t当日盈亏\t当日盈亏比(%)\t市值\t仓位占比(%)\t交易市场\t当前持仓\t股份可用"
 ROW = "\t300308\t中际旭创\t100\t100\t1336.141\t979.460\t-35668.080\t-26.695\t-13354.00\t-12.00\t97946.000\t19.17\t深Ａ\t100\t100"
@@ -40,6 +39,10 @@ class PortfolioImportTests(unittest.TestCase):
         self.assertIsNone(holding["market_price"])
         self.assertIsNone(holding["pnl"])
         self.assertEqual(holding["shares"], 100)
+        self.assertEqual(holding["beta_classification"], "unknown")
+        self.assertTrue(
+            any("已忽略手工beta分类" in item for item in preview["validation"]["warnings"])
+        )
         self.assertEqual({item["status"] for item in preview["differences"]}, {"added", "removed"})
 
     def test_unknown_beta_is_not_inferred_and_blocks_reconciliation(self) -> None:
@@ -73,7 +76,7 @@ class PortfolioImportTests(unittest.TestCase):
             self.assertEqual(portfolio_path.read_text(encoding="utf-8"), '{"old":true}')
             self.assertEqual(risk_path.read_text(encoding="utf-8"), '{"old":true}')
 
-    def test_approved_apply_atomically_saves_backs_up_and_reconciles_profile(self) -> None:
+    def test_approved_apply_atomically_saves_but_beta_stays_blocked_until_refresh(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             portfolio_path = root / "portfolio.json"
@@ -101,9 +104,10 @@ class PortfolioImportTests(unittest.TestCase):
             self.assertTrue(result["saved"])
             self.assertTrue(Path(result["portfolio_backup"]).exists())
             self.assertTrue(Path(result["risk_profile_backup"]).exists())
-            self.assertEqual(saved["risk_reconciliation"]["status"], "reconciled")
+            self.assertEqual(saved["risk_reconciliation"]["status"], "blocked")
+            self.assertEqual(saved["beta_model_status"], "pending_refresh")
             self.assertEqual(risk["total_exposure_pct"], 19.17)
-            self.assertEqual(risk["high_beta_exposure_pct"], 19.17)
+            self.assertIsNone(risk["high_beta_exposure_pct"])
             self.assertTrue(risk["fomo_flag"])
 
     def test_reruns_are_serial_and_stop_on_failure(self) -> None:
@@ -117,6 +121,7 @@ class PortfolioImportTests(unittest.TestCase):
         self.assertEqual(
             calls,
             [
+                "portfolio-beta",
                 "market-levels",
                 "risk-watch",
                 "market-pulse",
@@ -127,7 +132,7 @@ class PortfolioImportTests(unittest.TestCase):
         )
         self.assertEqual(
             [item["returncode"] for item in results],
-            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0],
         )
 
     def test_board_lot_floor_never_overshoots_ratio_or_available_shares(self) -> None:

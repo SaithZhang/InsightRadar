@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from datetime import datetime
 import json
-from pathlib import Path
 import sqlite3
 import subprocess
 import sys
+from contextlib import contextmanager
+from datetime import datetime
+from pathlib import Path
 from threading import Lock, Thread
 from typing import Callable, Iterable, Iterator, Mapping
 from uuid import uuid4
@@ -25,9 +25,9 @@ from stock_assist.portfolio_import import (
     _default_runner,
 )
 
-
 DEFAULT_STATE_DB = DATA_DIR / "insightradar_state.sqlite3"
 ACTIVE_STATUSES = ("pending", "running")
+WINDOWS_PROCESS_INIT_FAILURE_CODES = frozenset({0xC0000142, -1073741502})
 ArtifactState = Mapping[str, int]
 ArtifactValidation = tuple[bool, str, Path | None]
 ArtifactValidator = Callable[[str, ArtifactState, str], ArtifactValidation]
@@ -232,6 +232,8 @@ class RefreshCoordinator:
             command = [sys.executable, "-m", "stock_assist.cli", workflow]
             try:
                 completed = self.runner(command)
+                if _is_windows_process_init_failure(completed):
+                    completed = self.runner(command)
             except Exception as exc:
                 self._fail_step(
                     run_id,
@@ -244,6 +246,8 @@ class RefreshCoordinator:
                 return
             stdout = completed.stdout.strip()[-4000:]
             stderr = completed.stderr.strip()[-4000:]
+            if _is_windows_process_init_failure(completed):
+                stderr = _windows_process_init_failure_message(workflow)
             if completed.returncode != 0:
                 self._fail_step(
                     run_id,
@@ -269,6 +273,28 @@ class RefreshCoordinator:
                     stderr=artifact_error,
                 )
                 return
+            if workflow == "portfolio-beta":
+                refreshed_portfolio = (
+                    load_portfolio(self.portfolio_path)
+                    if self.portfolio_path.exists()
+                    else Portfolio(
+                        cash=None,
+                        holdings=[],
+                        source=self.portfolio_path,
+                        missing=True,
+                    )
+                )
+                expected_portfolio_version = portfolio_version(
+                    refreshed_portfolio
+                )
+                with self._connect() as connection:
+                    connection.execute(
+                        """
+                        UPDATE refresh_runs SET portfolio_version = ?
+                        WHERE run_id = ?
+                        """,
+                        (expected_portfolio_version, run_id),
+                    )
             with self._connect() as connection:
                 connection.execute(
                     """
@@ -664,9 +690,30 @@ def select_refresh_workflows(
         for workflow in REQUIRED_RERUN_WORKFLOWS
         if workflow in stale_sources
     ]
+    if "risk-watch" in selected and "portfolio-beta" not in selected:
+        selected.insert(0, "portfolio-beta")
     if "after-close" not in selected:
         selected.append("after-close")
     return tuple(selected)
+
+
+def _is_windows_process_init_failure(
+    completed: subprocess.CompletedProcess[str],
+) -> bool:
+    return (
+        completed.returncode in WINDOWS_PROCESS_INIT_FAILURE_CODES
+        and not (completed.stdout or "").strip()
+        and not (completed.stderr or "").strip()
+    )
+
+
+def _windows_process_init_failure_message(workflow: str) -> str:
+    return (
+        f"{workflow} 的 Windows 子进程初始化失败（0xC0000142），"
+        "不是数据校验失败。系统已自动重试一次但仍未恢复；"
+        "请关闭并重新启动 InsightRadar 本地应用，再点击“全量刷新”。"
+        "持仓已经保存，上一版报告仍保留。"
+    )
 
 
 def _now() -> str:

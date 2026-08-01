@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
+import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
 from unittest.mock import patch
 
 from stock_assist.portfolio_import_server import (
@@ -12,7 +12,6 @@ from stock_assist.portfolio_import_server import (
     serve_portfolio_import,
 )
 from stock_assist.reports import portfolio_import_html_parts
-
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -59,15 +58,18 @@ class OneClickLauncherTests(unittest.TestCase):
         self.assertIn("/api/shutdown", html)
         self.assertIn("X-InsightRadar-Token", html)
         self.assertIn("127.0.0.1", html)
-        self.assertIn('id="beta-selectors"', html)
+        self.assertIn('id="beta-status"', html)
         self.assertIn('class="output"', html)
         self.assertIn("renderPreview", html)
         self.assertIn("pollRefresh", html)
+        self.assertIn('id="retry-refresh"', html)
+        self.assertIn("重新启动 InsightRadar", html)
+        self.assertIn('post("/api/refresh"', html)
         self.assertIn("后台刷新已取得任务号", html)
         self.assertNotIn("正在原子保存并串行刷新，请勿关闭本页", html)
         self.assertNotIn("JSON.stringify(last,null,2)", html)
-        self.assertIn("high_beta", html)
-        self.assertIn("normal", html)
+        self.assertIn("Beta 无需手工导入", html)
+        self.assertIn("保存后先自动计算 beta", html)
         self.assertIn('href="/#portfolio"', html)
 
     def test_workspace_contains_user_confirmed_execution_ledger_flow(self) -> None:

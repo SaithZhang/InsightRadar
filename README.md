@@ -23,7 +23,7 @@ V3.1 尚未获准开发。不得新增第五个一级菜单、用原型数据冒
 
 不需要先打开 PowerShell。直接在项目根目录双击：
 
-- `InsightRadar.cmd`：启动本地应用并打开持仓导入页面；页面内可粘贴、预览、逐只选择 beta、批准保存、打开最新报告和关闭应用；
+- `InsightRadar.cmd`：启动本地应用并打开持仓导入页面；页面内可粘贴、预览、批准保存、查看自动 beta 计算进度、打开最新报告和关闭应用；
 - `生成盘后报告.cmd`：生成并自动打开最新盘后报告；
 - `导入持仓.cmd`：与主入口相同，打开仅监听 `127.0.0.1` 的本地持仓导入页面；
 - `打开最新报告.cmd`：不刷新数据，直接打开最近一次盘后报告。
@@ -34,8 +34,8 @@ V3.1 尚未获准开发。不得新增第五个一级菜单、用原型数据冒
 
 本地工作台固定保留四个一级任务：
 
-- **今日计划**：盘后计划、晨间新鲜度复核、市场约束、变化队列和人工响应；
-- **组合风险**：已知/未知仓位、beta、数据完整度、严格就绪、风险阻塞和持仓计划；
+- **今日工作台**：盘后/周末结论、市场约束、统一关注队列和人工响应；
+- **组合风险**：已知/未知仓位、自动 beta 证据、数据完整度、严格就绪、风险阻塞和持仓计划；
 - **标的研究**：按意图建立研究任务并查看已有证据；真实技术图与 P1 研究编排尚未实现；
 - **复盘账本**：计划版本、用户响应和 T+1/T+5/T+20 后验成熟度；真实成交执行流水尚未接入。
 
@@ -137,7 +137,7 @@ $env:AD_PERMISSION_END="2027-05-22"
 .venv\Scripts\python -m stock_assist.cli portfolio-import --serve
 ```
 
-该命令只监听 `127.0.0.1`。根路径提供四任务工作台，`/portfolio-import` 提供本地粘贴/预览/批准导入页；所有状态写操作要求当前进程生成的随机 Token。服务不接受交易指令。
+该命令只监听 `127.0.0.1`。根路径提供四任务工作台，`/portfolio-import` 提供本地粘贴/预览/批准导入页；保存后先运行 `portfolio-beta`，以沪深300为基准、120个交易日窗口和至少60个有效样本计算 beta，再继续风险刷新。样本不足、过期或异常保持 `unknown`。所有状态写操作要求当前进程生成的随机 Token，服务不接受交易指令。
 
 安装后可使用新的产品命令 `insight-radar`；`shenyan-radar` 和原 `stock-assist` 命令保留为兼容别名。下面仍使用 `python -m stock_assist.cli`，避免本地入口脚本未刷新时影响运行。
 
@@ -314,7 +314,7 @@ InsightRadar 把文件分成四类：
 ### Replayable portfolio context
 
 - `data/portfolio.manual.tsv`: easiest manual holdings input. Copy broker position rows into this tab-separated file using the same header as `data/portfolio.manual.example.tsv`. InsightRadar uses `当前持仓` as the true current position and ignores rows where `当前持仓` is 0, so same-day sells or frozen historical balances do not become false holdings.
-- `data/portfolio_context.json`: real local position context. Copy `data/portfolio_context.example.json`, then maintain buy thesis, initial/current risk line, adjustment history, horizon, and review status for each holding. This file is intentionally separate from broker snapshots so Galaxy data can refresh without deleting research memory.
+- `data/portfolio_context.json`: real local position context. Copy `data/portfolio_context.example.json`, then maintain the current risk rule/review state and, when genuinely known, the original entry thesis/invalidation and adjustment history. Unknown entry history stays explicit and limits Review quality without blocking a current risk plan. This file is intentionally separate from broker snapshots so Galaxy data can refresh without deleting research memory.
 
 ## 开发验证
 

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from html import escape
 import json
-from typing import Mapping
+from collections.abc import Mapping
+from html import escape
 
 from stock_assist.branding import PRODUCT_NAME
 from stock_assist.decision_workspace import overlay_plan_responses
+from stock_assist.today_workbench import build_today_workbench
 
 
 def render_after_close_workbench(
@@ -26,6 +27,8 @@ def render_after_close_workbench(
 
 
 def _document(workspace: Mapping[str, object]) -> str:
+    workspace = dict(workspace)
+    workspace["today_workbench"] = build_today_workbench(workspace)
     safe_json = json.dumps(workspace, ensure_ascii=False, default=str).replace("</", "<\\/")
     positions = _dict_rows(workspace.get("portfolio_positions"))
     plans = _today_plans(workspace)
@@ -44,16 +47,16 @@ def _document(workspace: Mapping[str, object]) -> str:
     <aside class="sidebar">
       <div class="brand"><span class="brand-mark">IR</span><div>{escape(PRODUCT_NAME)}<small>Rule-first decision intelligence</small></div></div>
       <nav class="nav" aria-label="主要任务">
-        {_nav("today", "今日雷达", str(len(plans)), True)}
-        {_nav("portfolio", "持仓风险", f"{len(positions)} 持仓")}
-        {_nav("lookup", "机会发现", "结构确认")}
-        {_nav("review", "复盘验证", "IR-001")}
+        {_nav("today", "今日工作台", str(len(plans)), True)}
+        {_nav("portfolio", "组合风险", f"{len(positions)} 持仓")}
+        {_nav("lookup", "标的研究", "证据优先")}
+        {_nav("review", "复盘账本", "历史验证")}
       </nav>
       <div class="sidebar-card"><strong>本地单用户工作台</strong>真实本地数据 · 无交易权<br>规则决定状态，AI只做解释。</div>
     </aside>
     <main class="content">
       <header class="topbar">
-        <div><div id="pageEyebrow" class="eyebrow">09:25 · 09:35 · 10:00</div><h1 id="pageTitle">今日雷达</h1></div>
+        <div><div id="pageEyebrow" class="eyebrow">After close · Weekend ready</div><h1 id="pageTitle">今日工作台</h1></div>
         <div class="top-actions">
           <span class="chip">数据截至 {escape(source_time)}</span>
           <span class="chip" id="stage-label">{escape(_stage_label(workspace))}</span>
@@ -107,49 +110,171 @@ def _nav(
 
 
 def _today(workspace: Mapping[str, object]) -> str:
-    gate = _mapping(workspace.get("market_gate"))
-    plans = _today_plans(workspace)
-    health = _dict_rows(workspace.get("data_health"))
-    a_share = _theme_by_id(workspace, "a_share_technology")
-    first = plans[0] if plans else None
-    queue = plans[1:]
-    queue_html = "".join(
-        _plan_card(item, index + 1, workspace) for index, item in enumerate(queue)
-    )
-    if queue_html:
-        queue_html = (
-            '<section class="remaining-plans">'
-            '<div class="section-head"><div><h2>其余需关注计划</h2>'
-            "<p>包含待回应计划，以及已知悉但仍未解除的阻断。</p></div>"
-            f'<span class="status pending">{len(queue)} 项</span></div>'
-            f'<div class="queue">{queue_html}</div></section>'
-        )
-    primary = (
-        _action_command(first, workspace)
-        if first
-        else _empty(
-            "今天没有新的待回应或未解除阻断",
-            "仅沿用已确认有效计划；被阻断的版本不会被包装成已确认计划。",
-        )
-    )
+    today = _mapping(workspace.get("today_workbench"))
+    phase = str(today.get("phase") or "after_close")
+    quality = str(today.get("data_quality") or "unknown")
     return f"""
-<section class="view active" id="today" data-route-panel="today">
-  {_intraday_today_panel(workspace)}
-  {_decision_stage_rail(workspace)}
-  {_decision_conclusion(workspace)}
-  {primary}
-  {_authority_chain(workspace, first, gate, health, a_share)}
-  {_holding_impact_strip(workspace)}
-  <div class="decision-support">
-    {_evidence_delta_panel(workspace, first)}
-    {_risk_exit_panel(workspace, first)}
+<section class="view active" id="route-today" data-route-panel="today">
+  <section class="today-phase-banner {escape(phase)}" aria-label="当前市场阶段">
+    <span class="phase-dot" aria-hidden="true"></span>
+    <strong>{escape(str(today.get('phase_label') or '盘后复盘'))}</strong>
+    <span>{escape(str(today.get('phase_message') or '仅用于复盘，不产生实时交易动作。'))}</span>
+    <em class="source {_status_class(quality)}">数据质量 {escape(quality)}</em>
+  </section>
+  <div class="today-workbench-grid">
+    {_today_account_column(today)}
+    {_today_attention_column(today)}
+    {_today_decision_column(today)}
   </div>
-  {_decision_trust_summary(workspace)}
-  {queue_html}
+  {_today_data_details(today)}
   <footer class="authority-disclaimer">
-    AI 仅提取与解释证据；规则决定授权；交易需手动确认；海外证据不独立产生交易授权。
+    事实与数字由结构化数据和确定性代码计算；规则状态由本地状态机管理；AI 未使用；交易权限始终为 none。
   </footer>
 </section>"""
+
+
+def _today_account_column(today: Mapping[str, object]) -> str:
+    account = _mapping(today.get("account_snapshot"))
+    daily = account.get("daily_pnl")
+    peak = account.get("peak_daily_pnl")
+    giveback = account.get("giveback_amount")
+    ratio = account.get("giveback_ratio")
+    if isinstance(daily, (int, float)) and isinstance(ratio, (int, float)):
+        headline = (
+            "账户仍赚钱，但利润回吐过半。"
+            if daily > 0 and ratio >= 0.5
+            else "账户收红，回吐仍在一半以内。"
+            if daily > 0
+            else "账户收亏，先核对亏损来源与数据质量。"
+        )
+    else:
+        headline = "账户关键数字不完整，先看已确认事实。"
+    attribution = _dict_rows(account.get("attribution"))
+    attribution_html = "".join(
+        f'<li><span>{escape(str(item.get("name") or item.get("symbol") or "未命名持仓"))}</span>'
+        f'<strong class="pnl {"up" if isinstance(item.get("day_pnl"), (int, float)) and float(item["day_pnl"]) >= 0 else "down"}">{_money(item.get("day_pnl"))}</strong></li>'
+        for item in attribution
+    ) or '<li><span>盈亏来源</span><strong class="unknown-text">unknown</strong></li>'
+    gaps = _string_rows(account.get("gaps"))
+    gaps_html = "".join(f"<li>{escape(item)}</li>" for item in gaps) or "<li>当前未记录额外数据缺口。</li>"
+    return f"""<article class="today-column what-column">
+      <header class="today-column-head"><div><span class="eyebrow">01 · 发生了什么</span><h2>{escape(headline)}</h2></div><span class="source {_status_class(account.get('data_quality'))}">{escape(str(account.get('data_quality') or 'unknown'))}</span></header>
+      <div class="account-pnl"><small>收盘当日盈亏</small><strong class="{_pnl_class(daily)}">{_money(daily)}</strong></div>
+      <div class="account-metric-grid">
+        <div><small>日内利润峰值</small><strong>{_money(peak)}</strong></div>
+        <div><small>从峰值回吐</small><strong class="amber-text">{_money(giveback)}</strong><em>{_percent(ratio)}</em></div>
+      </div>
+      <div class="today-subsection"><h3>主要盈亏来源</h3><ul class="attribution-list">{attribution_html}</ul></div>
+      <details class="today-details"><summary>数据异常与不可判断事项</summary><ul>{gaps_html}</ul><p>口径：{escape(str(account.get('pnl_source') or 'unknown'))} · 截至 {escape(str(account.get('as_of') or 'unknown'))}</p></details>
+    </article>"""
+
+
+def _today_attention_column(today: Mapping[str, object]) -> str:
+    items = _dict_rows(today.get("attention_items"))
+    positions = [item for item in items if item.get("type") == "position"][:2]
+    opportunities = [item for item in items if item.get("type") == "opportunity"][:1]
+    selected = [*positions, *opportunities]
+    cards = "".join(_attention_card(item) for item in selected)
+    if not cards:
+        cards = '<div class="today-empty">没有可展示的结构化关注项。</div>'
+    blocked = sum(item.get("data_quality") == "blocked" for item in selected)
+    headline = (
+        f"{blocked} 个判断阻断，另有 {max(0, len(selected) - blocked)} 项需复核。"
+        if blocked
+        else f"{len(selected)} 项按重要性统一排序。"
+    )
+    return f"""<article class="today-column attention-column">
+      <header class="today-column-head"><div><span class="eyebrow">02 · 最需要关注</span><h2>{escape(headline)}</h2></div><span class="status">{len(selected)} 项</span></header>
+      <div class="attention-stack">{cards}</div>
+    </article>"""
+
+
+def _attention_card(item: Mapping[str, object]) -> str:
+    item_type = str(item.get("type") or "position")
+    quality = str(item.get("data_quality") or "unknown")
+    state = str(item.get("plan_status") or "observation_only")
+    route = str(item.get("detail_route") or ("portfolio" if item_type == "position" else "lookup"))
+    query = _mapping(item.get("detail_query"))
+    evidence = _dict_rows(item.get("evidence"))
+    evidence_html = "".join(
+        f'<div class="attention-evidence"><b>{escape(str(row.get("claim") or "未提供结论"))}</b><span>{escape(str(row.get("source_ref") or "unknown"))} · {escape(str(row.get("source_time") or "unknown"))}</span></div>'
+        for row in evidence[:3]
+    ) or '<p class="unknown-text">暂无达到展示门槛的支持证据。</p>'
+    counters = _string_rows(item.get("counter_evidence"))
+    counter_html = "".join(f"<li>{escape(value)}</li>" for value in counters) or "<li>反证条件尚未结构化。</li>"
+    route_label = "打开组合风险" if route == "portfolio" else "打开标的研究"
+    return f"""<section class="attention-card {escape(item_type)} {_status_class(quality)}">
+      <div class="attention-card-head"><div><strong>{escape(str(item.get('title') or '未命名关注项'))}</strong><span>{'持仓关注' if item_type == 'position' else '研究机会'}</span></div><span class="source {_status_class(state)}">{escape(_today_state_label(state))}</span></div>
+      <p><b>发生了什么：</b>{escape(str(item.get('what_happened') or 'unknown'))}</p>
+      <p><b>为什么重要：</b>{escape(str(item.get('why_it_matters') or 'unknown'))}</p>
+      <div class="attention-meta"><span>计划 {_today_state_label(state)}</span><span>数据 {escape(quality)}</span><span>重要性 {escape(str(item.get('importance_score') or 0))}</span></div>
+      <details class="today-details"><summary>支持证据与可能推翻</summary>{evidence_html}<div class="counter-block"><b>可能推翻当前判断</b><ul>{counter_html}</ul></div></details>
+      <button class="btn small" type="button" data-view-link="{escape(route)}" data-route-symbol="{escape(str(query.get('symbol') or ''))}" data-route-plan="{escape(str(query.get('plan_id') or ''))}" data-route-intent="{escape(str(query.get('intent') or ''))}">{route_label}</button>
+    </section>"""
+
+
+def _today_decision_column(today: Mapping[str, object]) -> str:
+    requirements = _dict_rows(today.get("decision_requirements"))
+    rank = {"blocked": 0, "pending_confirmation": 1, "confirmed": 2, "observation_only": 3, "disabled": 4}
+    requirements.sort(key=lambda item: rank.get(str(item.get("status")), 9))
+    actionable = [
+        item
+        for item in requirements
+        if item.get("status") in {"blocked", "pending_confirmation"}
+    ]
+    secondary = [item for item in requirements if item not in actionable]
+    visible = [*actionable, *secondary[: max(0, 3 - len(actionable))]]
+    pending = len(actionable)
+    cards = "".join(_decision_card(item, index + 1) for index, item in enumerate(visible))
+    if not cards:
+        cards = '<div class="today-empty">当前没有待确认规则；继续等待新计划版本。</div>'
+    return f"""<article class="today-column decision-column">
+      <header class="today-column-head"><div><span class="eyebrow">03 · 我需要决定什么</span><h2>{pending} 项待处理，其余保持观察。</h2></div><span class="status pending">{pending} 项待处理</span></header>
+      <div class="decision-stack">{cards}</div>
+    </article>"""
+
+
+def _decision_card(item: Mapping[str, object], index: int) -> str:
+    status = str(item.get("status") or "pending_confirmation")
+    allowed = set(_string_rows(item.get("allowed_responses")))
+    rule_id = str(item.get("rule_id") or "")
+    version = str(item.get("rule_version") or "unknown")
+    blocking = _string_rows(item.get("blocking_reasons"))
+    blocking_html = "".join(f"<li>{escape(value)}</li>" for value in blocking)
+    controls: list[str] = []
+    if "blocked_acknowledged" in allowed:
+        controls.append('<button class="btn primary decision" type="button" data-plan-response="blocked_acknowledged">确认已知悉阻断</button>')
+    elif "accepted" in allowed:
+        controls.append('<button class="btn primary decision" type="button" data-plan-response="accepted">确认</button>')
+    if "disputed" in allowed:
+        controls.append('<button class="btn decision" type="button" data-plan-response="disputed">修改</button>')
+    if "disabled" in allowed:
+        controls.append('<button class="btn decision" type="button" data-plan-response="disabled">暂不启用</button>')
+    if not controls:
+        controls.append(f'<span class="decision-static-state">{escape(_today_state_label(status))}</span>')
+    blocked_note = (
+        '<p class="blocked-inline">数据阻断时，任何按钮都不能把本规则变成已确认或提醒候选。</p>'
+        if status == "blocked"
+        else ""
+    )
+    details = (
+        f'<details class="today-details"><summary>查看阻断原因</summary><ul>{blocking_html}</ul></details>'
+        if blocking
+        else ""
+    )
+    return f"""<section class="decision-card {_status_class(status)}" data-plan-id="{escape(rule_id)}" data-plan-version="{escape(version)}">
+      <div class="decision-card-index">{index}</div>
+      <div class="decision-card-body"><div class="decision-card-title"><strong>{escape(str(item.get('title') or '未命名规则'))}</strong><span class="source {_status_class(status)}" data-response-label>{escape(_today_state_label(status))}</span></div>
+      <p>{escape(str(item.get('prompt') or '等待规则状态明确。'))}</p>{details}
+      <div class="today-rule-actions" role="group" aria-label="{escape(str(item.get('title') or '规则'))} 操作">{''.join(controls)}</div>
+      <p class="decision-feedback" data-rule-feedback aria-live="polite">当前状态：{escape(_today_state_label(status))}；规则版本 {escape(version)}。</p>{blocked_note}</div>
+    </section>"""
+
+
+def _today_data_details(today: Mapping[str, object]) -> str:
+    gaps = _string_rows(today.get("data_gaps"))
+    rows = "".join(f"<li>{escape(item)}</li>" for item in gaps) or "<li>当前未记录额外缺口。</li>"
+    return f"""<details class="today-data-details"><summary>数据详情</summary><div><p><span>回看交易日</span><strong>{escape(str(today.get('review_trade_date') or 'unknown'))}</strong></p><p><span>市场阶段</span><strong>{escape(str(today.get('phase') or 'after_close'))}</strong></p><p><span>AI 状态</span><strong>{escape(str(today.get('ai_status') or 'not_used'))}</strong></p><p><span>交易权限</span><strong>{escape(str(today.get('trade_authority') or 'none'))}</strong></p></div><ul>{rows}</ul></details>"""
 
 
 def _decision_stage_rail(workspace: Mapping[str, object]) -> str:
@@ -886,6 +1011,24 @@ def _ratio(value: object) -> str:
     return f"{float(value) * 100:.1f}%" if isinstance(value, (int, float)) else "unknown"
 
 
+def _beta_cell(item: Mapping[str, object]) -> str:
+    classification = escape(str(item.get("beta_classification") or "unknown"))
+    evidence = _mapping(item.get("beta_evidence"))
+    beta = evidence.get("beta")
+    if not isinstance(beta, (int, float)):
+        reason = escape(str(evidence.get("reason") or "等待自动计算证据"))
+        return f"<b>{classification}</b><small>{reason}</small>"
+    r_squared = evidence.get("r_squared")
+    detail = (
+        f"R² {float(r_squared):.2f} · fit {evidence.get('fit_quality') or 'unknown'} · "
+        f"{evidence.get('as_of') or 'unknown'} · {evidence.get('quality_status') or 'unknown'}"
+    )
+    return (
+        f"<b>{float(beta):.2f} · {classification}</b>"
+        f"<small>{escape(detail)}</small>"
+    )
+
+
 def _portfolio(workspace: Mapping[str, object]) -> str:
     summary = _mapping(workspace.get("portfolio_summary"))
     positions = _dict_rows(workspace.get("portfolio_positions"))
@@ -904,7 +1047,7 @@ def _portfolio(workspace: Mapping[str, object]) -> str:
         f"<small>{escape(str(item.get('symbol') or ''))}</small></td>"
         f"<td>{_value(item.get('weight_pct'), suffix='%')}</td>"
         f"<td class=\"pnl {'up' if isinstance(item.get('pnl_pct'), (int, float)) and float(item.get('pnl_pct')) >= 0 else 'down'}\">{_value(item.get('pnl_pct'), suffix='%')}</td>"
-        f"<td>{escape(str(item.get('beta_classification') or 'unknown'))}</td>"
+        f"<td>{_beta_cell(item)}</td>"
         f"<td><span class='source {_status_class(item.get('data_completeness'))}'>{escape(str(item.get('data_completeness') or 'missing'))}</span></td>"
         f"<td><span class='source {_status_class(item.get('today_status'))}'>{escape(_plan_status(str(item.get('today_status') or 'blocked')))}</span></td>"
         f"<td><strong>{escape(str(item.get('current_plan_version') or '暂无'))}</strong>"
@@ -926,13 +1069,13 @@ def _portfolio(workspace: Mapping[str, object]) -> str:
     complete_width = int(complete / total * 100)
     cash_label = _value(summary.get("cash"))
     return f"""
-<section class="view" id="portfolio" data-route-panel="portfolio">
+<section class="view" id="route-portfolio" data-route-panel="portfolio">
   {_intraday_portfolio_panel(workspace)}
   <div class="metrics">
     <div class="metric"><small>持仓数量</small><strong>{len(positions)}</strong><em>真实 portfolio.json</em></div>
     <div class="metric"><small>已知仓位</small><strong>{_value(known_exposure, suffix='%')}</strong><em>未知不按 0 处理</em></div>
     <div class="metric"><small>未知权重</small><strong class="danger-text">{unknown_weight} 只</strong><em>阻塞完整风险计算</em></div>
-    <div class="metric"><small>Beta 未分类</small><strong>{unknown_beta} 只</strong><em>不按代码推断</em></div>
+    <div class="metric"><small>Beta 证据不足</small><strong>{unknown_beta} 只</strong><em>历史收益率自动计算</em></div>
     <div class="metric"><small>今日必须处理</small><strong>{len(changes)}</strong><em>逐项确认</em></div>
   </div>
   <div class="portfolio-layout">
@@ -940,7 +1083,7 @@ def _portfolio(workspace: Mapping[str, object]) -> str:
       <div class="section-head"><div><h2>组合风险驾驶舱</h2><p>先回答风险和数据缺口，再展示盈亏。</p></div><a class="btn" href="/portfolio-import">导入/更新持仓</a></div>
       <div class="exposure-list">
         <div class="exposure-item"><span>已知仓位</span><div class="bar"><span style="width:{known_width}%"></span></div><b>{_value(known_exposure, suffix='%')}</b></div>
-        <div class="exposure-item"><span>Beta 已分类</span><div class="bar"><span style="width:{classified_width}%"></span></div><b>{classified}/{len(positions)}</b></div>
+        <div class="exposure-item"><span>Beta 自动分类</span><div class="bar"><span style="width:{classified_width}%"></span></div><b>{classified}/{len(positions)}</b></div>
         <div class="exposure-item"><span>数据完整</span><div class="bar"><span style="width:{complete_width}%"></span></div><b>{complete}/{len(positions)}</b></div>
         <div class="exposure-item"><span>严格就绪</span><div class="bar"><span style="width:{ready_width}%"></span></div><b>{escape(str(summary.get("decision_ready_holdings") or 0))}/{len(positions)}</b></div>
       </div>
@@ -948,7 +1091,7 @@ def _portfolio(workspace: Mapping[str, object]) -> str:
     <section class="panel section">
       <div class="section-head"><div><h3>风险阻塞项</h3><p>unknown 不能按 0 或正常处理。</p></div></div>
       <div class="risk-list">
-        <div class="risk-row danger"><span>Beta 未知</span><strong>{unknown_beta} 只</strong></div>
+        <div class="risk-row danger"><span>Beta 证据不足</span><strong>{unknown_beta} 只</strong></div>
         <div class="risk-row danger"><span>组合现金</span><strong>{escape(cash_label)}</strong></div>
         <div class="risk-row warn"><span>风险对账</span><strong>{escape(str(summary.get("risk_reconciliation_status") or "unknown"))}</strong></div>
         <div class="risk-row"><span>持仓字段完整</span><strong>{complete}/{len(positions)}</strong></div>
@@ -985,7 +1128,7 @@ def _research(workspace: Mapping[str, object]) -> str:
         item.get("status") in {"missing", "blocked", "failed"} for item in health
     )
     return f"""
-<section class="view" id="lookup" data-route-panel="lookup">
+<section class="view" id="route-lookup" data-route-panel="lookup">
   {_intraday_opportunity_panel(workspace)}
   <section class="panel section">
     <div class="section-head"><div><h2>先明确研究问题，再调用数据和 AI</h2><p>规则负责可判定状态；AI只在非结构化证据变化时归纳和解释。</p></div><span class="status blocked">P1 尚未接入研究编排</span></div>
@@ -1023,6 +1166,18 @@ def _research(workspace: Mapping[str, object]) -> str:
 
 def _review(workspace: Mapping[str, object]) -> str:
     outcome = _mapping(workspace.get("outcome_summary"))
+    positions = _dict_rows(workspace.get("portfolio_positions"))
+    historical_unknown = [
+        item
+        for item in positions
+        if str(item.get("historical_context_status") or "unknown") != "ready"
+    ]
+    historical_ready = len(positions) - len(historical_unknown)
+    historical_gap_detail = "；".join(
+        f"{item.get('name') or item.get('symbol') or '未命名持仓'}："
+        + "、".join(_string_rows(item.get("missing_historical_context_fields")))
+        for item in historical_unknown
+    ) or "无"
     horizons = _mapping(outcome.get("horizons"))
     versions = _dict_rows(workspace.get("plan_version_history"))
     visible_versions = versions[-8:]
@@ -1074,7 +1229,7 @@ def _review(workspace: Mapping[str, object]) -> str:
     )
     data_state = "blocked"
     return f"""
-<section class="view" id="review" data-route-panel="review">
+<section class="view" id="route-review" data-route-panel="review">
   {_intraday_replay_panel(workspace)}
   <div class="review-inline-meta">
     <span>更新于 {escape(str(outcome.get("as_of_trade_date") or workspace.get("generated_at") or "unknown"))}</span>
@@ -1147,9 +1302,11 @@ def _review(workspace: Mapping[str, object]) -> str:
       <div class="risk-list">
         <div class="risk-row"><span>规则事前声明</span><strong>{len(versions)} 条</strong></div>
         <div class="risk-row"><span>用户确认/异议留痕</span><strong>{len(responses)} 条</strong></div>
+        <div class="risk-row"><span>历史买入上下文</span><strong class="{'amber-text' if historical_unknown else ''}">{historical_ready}/{len(positions)} 完整</strong></div>
         <div class="risk-row"><span>真实成交执行流水</span><strong class="danger-text">未接入</strong></div>
         <div class="risk-row"><span>决策价值路径</span><strong class="danger-text">未实现</strong></div>
       </div>
+      <p class="prototype-note">历史买入逻辑或初始失效条件缺失只影响策略与执行复盘，不阻断当前风险计划。缺口：{escape(historical_gap_detail)}</p>
     </section>
   </div>
 </section>"""
@@ -1283,6 +1440,7 @@ def _response_label(value: str) -> str:
         "disputed": "有异议",
         "rejected": "已拒绝",
         "deferred": "稍后决定",
+        "disabled": "暂不启用",
         "blocked_acknowledged": "已知悉阻断",
     }.get(value, value)
 
@@ -1302,15 +1460,45 @@ def _value(value: object, *, suffix: str = "") -> str:
     return f"{value}{suffix}"
 
 
+def _money(value: object) -> str:
+    if not isinstance(value, (int, float)):
+        return "unknown"
+    sign = "+" if float(value) > 0 else ""
+    return f"{sign}{float(value):,.0f} 元"
+
+
+def _percent(value: object) -> str:
+    if not isinstance(value, (int, float)):
+        return "unknown"
+    return f"{float(value):.1%}"
+
+
+def _pnl_class(value: object) -> str:
+    if not isinstance(value, (int, float)):
+        return "unknown-text"
+    return "danger-text" if float(value) >= 0 else "good-text"
+
+
+def _today_state_label(value: str) -> str:
+    return {
+        "blocked": "判断阻断",
+        "pending_confirmation": "计划待确认",
+        "confirmed": "已确认",
+        "modification_requested": "修改中",
+        "observation_only": "仅观察",
+        "disabled": "暂不启用",
+    }.get(value, value or "unknown")
+
+
 def _rate(value: object) -> str:
     return f"{float(value):.0%}" if isinstance(value, (int, float)) else "Pending"
 
 
 def _status_class(value: object) -> str:
     clean = str(value or "pending").lower()
-    if clean in {"ready", "fresh", "accepted", "unchanged", "reviewed"}:
+    if clean in {"ready", "fresh", "accepted", "confirmed", "unchanged", "reviewed"}:
         return "ready"
-    if clean in {"shadow", "stale", "deferred", "revised", "pending", "new", "awaiting_confirmation"}:
+    if clean in {"shadow", "stale", "deferred", "revised", "pending", "new", "awaiting_confirmation", "pending_confirmation", "observation_only", "modification_requested"}:
         return "pending"
     return "blocked"
 
@@ -1520,10 +1708,10 @@ window.addEventListener("unhandledrejection", event => {
 });
 const routes = new Set(["today", "portfolio", "lookup", "review"]);
 const titles = {
-  today:["09:25 · 09:35 · 10:00","今日雷达"],
-  portfolio:["Portfolio Intraday Risk","持仓风险"],
-  lookup:["Opportunity · Structure First","机会发现"],
-  review:["IR-001 · Strategy ≠ Execution","复盘验证"],
+  today:["After close · Weekend ready","今日工作台"],
+  portfolio:["Portfolio Risk","组合风险"],
+  lookup:["Evidence before conclusion","标的研究"],
+  review:["Plan · Attribution · Quality","复盘账本"],
 };
 const token = document.querySelector('meta[name="insightradar-session-token"]').content;
 const toast = document.getElementById("toast");
@@ -1542,18 +1730,41 @@ function selectRoute(requested) {
   });
   document.getElementById("pageEyebrow").textContent = titles[route][0];
   document.getElementById("pageTitle").textContent = titles[route][1];
+  const params = new URLSearchParams(location.search);
+  if (route === "portfolio" && params.get("symbol")) {
+    const query = params.get("symbol").toLowerCase();
+    const input = document.getElementById("holdingSearch");
+    if (input) input.value = params.get("symbol");
+    document.querySelectorAll("#holdingsTable tbody tr").forEach(row => {
+      row.style.display = row.dataset.name.toLowerCase().includes(query) ? "" : "none";
+    });
+  }
+  if (route === "lookup" && params.get("symbol")) {
+    const select = document.getElementById("stockCode");
+    if (select && [...select.options].some(option => option.value === params.get("symbol"))) {
+      select.value = params.get("symbol");
+    }
+  }
   window.scrollTo({top:0, behavior:"auto"});
   window.requestAnimationFrame(() => window.scrollTo({top:0, behavior:"auto"}));
 }
-function setRoute(route) {
-  history.replaceState(null, "", `${location.pathname}${location.search}`);
+function setRoute(route, params={}) {
+  const url = new URL(location.href);
+  ["symbol", "plan_id", "intent"].forEach(key => url.searchParams.delete(key));
+  Object.entries(params).forEach(([key, value]) => { if (value) url.searchParams.set(key, value); });
+  url.hash = route;
+  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   selectRoute(route);
 }
 document.querySelectorAll("[data-view]").forEach(button => button.addEventListener("click", () => setRoute(button.dataset.view)));
-document.querySelectorAll("[data-view-link]").forEach(button => button.addEventListener("click", () => setRoute(button.dataset.viewLink)));
-window.addEventListener("hashchange", () => setRoute(location.hash.slice(1)));
+document.querySelectorAll("[data-view-link]").forEach(button => button.addEventListener("click", () => setRoute(button.dataset.viewLink, {
+  symbol:button.dataset.routeSymbol,
+  plan_id:button.dataset.routePlan,
+  intent:button.dataset.routeIntent,
+})));
+window.addEventListener("hashchange", () => selectRoute(location.hash.slice(1)));
 const initialRoute = location.hash.slice(1) || "today";
-setRoute(initialRoute);
+if (location.hash) selectRoute(initialRoute); else setRoute(initialRoute);
 function openDataDrawer() {
   lastFocus = document.activeElement;
   const backdrop = document.getElementById("data-backdrop");
@@ -1687,12 +1898,14 @@ document.querySelectorAll("[data-plan-response]").forEach(button => button.addEv
   try {
     const record = await post("/api/plan-response", {plan_id:card.dataset.planId, plan_version:card.dataset.planVersion, response:button.dataset.planResponse, note});
     const label = card.querySelector("[data-response-label]");
-    const labels = {accepted:"已写入今日计划版本", disputed:"异议已记录", rejected:"旧计划已确认作废", deferred:"已标记稍后处理", blocked_acknowledged:"已知悉阻断"};
+    const labels = {accepted:"已确认", disputed:"已请求修改", rejected:"旧计划已确认作废", deferred:"已标记仅观察", disabled:"已暂不启用", blocked_acknowledged:"已知悉阻断"};
     if (label) {
       label.textContent = labels[record.response] || record.response;
       label.className = `source ${record.response === "accepted" ? "user" : record.response === "rejected" ? "blocked" : "ai"}`;
     }
     button.textContent = labels[record.response] || record.response;
+    const feedback = card.querySelector("[data-rule-feedback]");
+    if (feedback) feedback.textContent = `状态已更新：${labels[record.response] || record.response}；正在读取本地审计流水。`;
     showToast("回应已写入本地审计流水。", "success");
     window.setTimeout(() => window.location.reload(), 350);
   } catch (error) {
@@ -1875,6 +2088,12 @@ def _css() -> str:
 .review-value-summary{min-height:92px;margin-top:12px;border:1px solid var(--line);border-radius:8px;background:#081827;display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) minmax(150px,.8fr);overflow:hidden}.review-value-summary>div{min-width:0;padding:14px 18px;border-left:1px solid var(--line);display:grid;align-content:center;gap:3px}.review-value-summary>div:first-child{border-left:0}.review-value-summary small{color:var(--muted);font-size:11px}.review-value-summary strong{font-size:22px}.review-value-summary em{overflow:hidden;color:#71879a;font-size:9px;font-style:normal;text-overflow:ellipsis;white-space:nowrap}.unknown-text{color:var(--muted)!important}.review-data-state.blocked{background:#1d1820}.review-data-state.blocked strong{color:var(--danger)}
 .review-comparison-panel{margin-top:14px;border:1px solid var(--line);border-radius:8px;background:#081827;overflow:hidden}.review-controls{min-height:54px;padding:8px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}.review-segmented,.review-periods{display:flex;gap:3px}.review-periods{margin-left:auto}.review-segmented button,.review-periods button{min-height:32px;padding:0 12px;border:1px solid transparent;border-radius:5px;color:var(--muted);background:transparent;font-size:11px}.review-segmented button:hover,.review-periods button:hover{color:var(--text);background:#0d2030}.review-segmented button.active,.review-periods button.active{color:var(--text);border-color:#315b7b;background:#10263a}.review-chart-head{min-height:45px;padding:0 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:14px;color:var(--muted);font-size:10px}.review-legend{display:flex;gap:18px;flex-wrap:wrap}.review-legend span{display:flex;align-items:center;gap:6px}.review-legend i{width:18px;height:2px;background:#5f9fff}.review-legend i.actual{background:#f29a42}.review-legend i.baseline{background:#929da7}.review-chart-blocked{min-height:360px;padding:42px;display:grid;grid-template-columns:minmax(0,.85fr) minmax(320px,1.15fr);align-items:center;gap:38px;background:#071522}.review-chart-blocked strong{font-size:23px}.review-chart-blocked p{max-width:560px;margin:9px 0 0;color:var(--muted);line-height:1.7}.review-chart-blocked ul{margin:0;padding:0;list-style:none;display:grid;gap:10px}.review-chart-blocked li{padding:13px 15px;border:1px solid var(--line);border-radius:7px;background:#091a28;display:flex;justify-content:space-between;gap:15px;color:var(--muted);font-size:11px}.review-chart-blocked li span{color:var(--text);font-weight:700}.review-chart-blocked li b{color:var(--danger);font-weight:600;text-align:right}
 .review-attribution-blocked{min-height:92px;margin-top:14px;padding:13px 16px;border:1px solid var(--line);border-radius:8px;background:#081827;display:grid;grid-template-columns:130px minmax(0,1fr) 230px;align-items:center;gap:14px}.review-attribution-blocked>div:first-child{padding-right:14px;border-right:1px solid var(--line)}.review-attribution-blocked>div:first-child strong,.review-attribution-blocked>div:first-child span{display:block}.review-attribution-blocked>div:first-child span{margin-top:5px;color:var(--muted);font-size:10px}.attribution-unknowns{min-width:0;display:grid;grid-template-columns:repeat(4,minmax(80px,1fr) 18px) minmax(116px,1.2fr);align-items:center}.attribution-unknowns p{margin:0;display:grid;justify-items:center;gap:4px}.attribution-unknowns span{color:var(--muted);font-size:10px}.attribution-unknowns b{color:var(--muted);font-size:15px}.attribution-unknowns em{color:var(--muted);font-style:normal;text-align:center}.attribution-unknowns .total{min-height:52px;border-left:1px solid var(--line)}.review-attribution-blocked>p{margin:0;color:var(--muted);font-size:10px;line-height:1.55}.review-ledger-section{margin-top:15px}.review-table-wrap{overflow:auto;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.review-table{min-width:920px;table-layout:fixed}.review-table td,.review-table th{height:44px;padding:0 13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.review-table td small{display:block}.ledger-state.pending{color:var(--amber)}.ledger-state.blocked{color:var(--danger)}.review-evidence-grid{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.today-phase-banner{min-height:48px;margin-bottom:12px;padding:10px 14px;border:1px solid #4a5437;border-radius:var(--radius);color:var(--muted);background:#121d22;display:flex;align-items:center;gap:9px}.today-phase-banner strong{color:var(--text)}.today-phase-banner em{margin-left:auto;font-style:normal}.today-phase-banner .phase-dot{width:8px;height:8px;border-radius:50%;background:var(--amber)}.today-phase-banner.after_close{border-color:#3d586f;background:#0a1a28}.today-phase-banner.after_close .phase-dot{background:var(--blue)}
+.today-workbench-grid{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.08fr) minmax(0,1.14fr);gap:12px;align-items:start}.today-column{min-width:0;border:1px solid var(--line);border-top:3px solid var(--blue);border-radius:var(--radius);background:var(--panel);overflow:hidden}.what-column{border-top-color:var(--danger)}.attention-column{border-top-color:var(--amber)}.decision-column{border-top-color:var(--blue)}.today-column-head{min-height:107px;padding:18px 18px 14px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.today-column-head h2{max-width:410px;margin:8px 0 0;font-size:22px;line-height:1.42;letter-spacing:-.02em}.today-column-head>.source,.today-column-head>.status{flex:0 0 auto}
+.account-pnl{padding:18px;border-bottom:1px solid var(--line)}.account-pnl small,.account-metric-grid small{display:block;color:var(--muted);font-size:11px}.account-pnl strong{display:block;margin-top:6px;font-size:34px;line-height:1}.account-metric-grid{margin:12px 18px;display:grid;grid-template-columns:1fr 1fr;gap:8px}.account-metric-grid>div{min-height:74px;padding:11px;border:1px solid var(--line);border-radius:7px;background:#0a1d2c}.account-metric-grid strong{display:block;margin-top:5px;font-size:17px}.account-metric-grid em{display:block;margin-top:3px;color:var(--amber);font-size:11px;font-style:normal}.today-subsection{padding:8px 18px 16px}.today-subsection h3{margin:0 0 8px;color:var(--muted);font-size:11px}.attribution-list{margin:0;padding:0;list-style:none}.attribution-list li{padding:8px 0;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;font-size:11px}.attribution-list li:first-child{border-top:0}.attribution-list span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.attribution-list strong{flex:0 0 auto}
+.attention-stack,.decision-stack{padding:10px;display:grid;gap:10px}.attention-card{padding:13px;border:1px solid var(--line);border-radius:7px;background:#0a1a28}.attention-card.blocked{border-color:#6f3f45;background:#171923}.attention-card.opportunity{border-color:#56603d;background:#151d20}.attention-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.attention-card-head>div{min-width:0}.attention-card-head strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px}.attention-card-head>div>span{display:block;margin-top:3px;color:var(--muted);font-size:9px}.attention-card p{margin:10px 0 0;color:var(--muted);font-size:11px;line-height:1.65}.attention-card p b{color:var(--text)}.attention-card>.btn{margin-top:10px}.attention-meta{margin-top:10px;display:flex;gap:5px;flex-wrap:wrap}.attention-meta span{padding:3px 6px;border:1px solid var(--line);border-radius:5px;color:var(--muted);font-size:9px}.attention-evidence{padding:8px 0;border-top:1px solid var(--line)}.attention-evidence:first-child{border-top:0}.attention-evidence b,.attention-evidence span{display:block}.attention-evidence b{font-size:10px}.attention-evidence span{margin-top:3px;color:var(--muted);font-size:9px}.counter-block{margin-top:8px;padding-top:8px;border-top:1px solid #6f3f45;color:var(--muted);font-size:10px}.counter-block>b{color:var(--danger)}.counter-block ul{margin:5px 0 0;padding-left:16px}
+.today-details{margin-top:9px;color:var(--muted);font-size:10px}.what-column>.today-details{margin:0;padding:12px 18px 16px;border-top:1px solid var(--line)}.today-details summary{min-height:28px;color:var(--blue2);font-weight:700;cursor:pointer}.today-details ul{margin:7px 0 0;padding-left:17px}.today-details p{margin:7px 0 0!important}.today-empty{min-height:120px;padding:20px;display:grid;place-items:center;text-align:center;border:1px dashed var(--line);border-radius:7px;color:var(--muted)}
+.decision-card{padding:12px;border:1px solid var(--line);border-radius:7px;background:#0a1a28;display:grid;grid-template-columns:30px minmax(0,1fr);gap:10px}.decision-card.blocked{border-color:#6f3f45;background:#171923}.decision-card-index{width:26px;height:26px;border:1px solid var(--line2);border-radius:5px;display:grid;place-items:center;color:var(--blue2);font-size:11px;font-weight:800}.decision-card.blocked .decision-card-index{color:var(--danger);border-color:#6f3f45}.decision-card-title{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.decision-card-title strong{font-size:13px;line-height:1.45}.decision-card-body>p{margin:7px 0 0;color:var(--muted);font-size:10px;line-height:1.65}.today-rule-actions{margin-top:10px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.today-rule-actions .btn{min-height:32px;padding:5px 6px;font-size:10px}.today-rule-actions .btn.primary{grid-column:auto}.decision-feedback{color:#70879a!important;font-size:9px!important}.blocked-inline{color:var(--danger)!important}.decision-static-state{grid-column:1/-1;padding:6px 8px;border:1px solid var(--line);border-radius:5px;color:var(--muted);text-align:center}.today-data-details{margin-top:10px;border:1px solid var(--line);border-radius:var(--radius);background:#081725;color:var(--muted)}.today-data-details>summary{min-height:42px;padding:10px 14px;color:var(--blue2);font-weight:700;cursor:pointer}.today-data-details>div{padding:0 14px 12px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.today-data-details p{margin:0;padding:9px;border:1px solid var(--line);border-radius:6px;background:#0a1a28}.today-data-details span,.today-data-details strong{display:block}.today-data-details span{font-size:9px}.today-data-details strong{margin-top:3px;color:var(--text);font-size:11px}.today-data-details>ul{margin:0;padding:0 30px 14px;font-size:10px}
 .runtime-strip{display:grid;grid-template-columns:minmax(230px,1.05fr) repeat(3,minmax(160px,.72fr));overflow:hidden;margin-bottom:12px}.runtime-cell{padding:13px 16px;border-left:1px solid var(--line)}.runtime-cell:first-child{border-left:0}.runtime-cell small{display:block;color:var(--muted)}.runtime-cell strong{display:block;margin:4px 0 1px}.runtime-cell em{color:var(--muted);font-size:10px;font-style:normal}.market-gate{display:grid;grid-template-columns:minmax(190px,.9fr) repeat(2,minmax(180px,1fr)) minmax(180px,.75fr);overflow:hidden}.market-gate>div{padding:16px 18px;border-left:1px solid var(--line)}.market-gate>div:first-child{border-left:0}.market-gate strong{display:block;margin:6px 0 3px;font-size:18px}.market-gate small{color:var(--muted)}.danger-text,.blocked-text{color:var(--danger)!important}.amber-text,.pending-text{color:var(--amber)!important}.fresh{color:var(--blue2)!important}.good-text,.ready-text{color:var(--good)!important}.theme-line{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:13px;margin-top:10px;padding:12px 15px;border:1px solid rgba(221,168,76,.25);border-radius:13px;color:var(--muted);background:rgba(221,168,76,.055)}.theme-line strong{color:var(--amber)}
 .today-layout{display:grid;grid-template-columns:minmax(0,1.46fr) minmax(320px,.58fr);gap:14px;margin-top:18px}.change-card{padding:18px 20px}.change-title{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:15px}.change-title h2{margin:2px 0 0;font-size:25px}.change-type{font-size:11px;font-weight:820}.change-type.pending{color:var(--amber)}.change-type.blocked{color:var(--danger)}.change-type.ready{color:var(--good)}.diff-grid{display:grid;grid-template-columns:1fr 42px 1fr;gap:10px;align-items:stretch}.diff-box{padding:13px 14px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02)}.diff-box.state-change{margin-bottom:10px}.diff-box small{display:block;margin-bottom:5px;color:var(--muted)}.diff-box strong{font-size:15px}.diff-arrow{display:grid;place-items:center;color:var(--muted);font-size:19px}.reason-box{margin-top:10px;padding:12px 14px;border-left:3px solid var(--amber);color:#d6e0e9;background:rgba(221,168,76,.065)}.reason-box.danger{border-color:var(--danger);background:rgba(223,116,110,.065)}.provenance{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:10px}.prov{padding:10px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.018)}.prov small{display:block;color:var(--muted)}.prov strong{display:block;margin-top:3px;font-size:11px}.rules{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin-top:12px;border:1px solid var(--line);border-radius:12px;overflow:hidden}.rules.single-column{grid-template-columns:1fr}.rule-item{padding:12px 13px;border-left:1px solid var(--line)}.rule-item:first-child{border-left:0}.rule-item b{display:block;margin-bottom:6px;color:var(--blue2);font-size:10px;letter-spacing:.08em}.rule-item.invalid b{color:var(--danger)}.rule-item span{font-size:11px;color:#d4dee7}.card-footer{display:flex;justify-content:space-between;gap:12px;align-items:flex-end;margin-top:14px}.evidence-row{color:var(--muted);font-size:10px}.response-box{display:grid;grid-template-columns:minmax(180px,1fr) auto;gap:10px;align-items:end}.response-box>.prototype-note{grid-column:1/-1;margin-top:0}.response-box label{color:var(--muted);font-size:10px}.response-box .input{display:block;width:100%;margin-top:4px}.response-box.compact{margin-top:12px}.queue{display:grid;gap:10px;margin-top:10px}.queue-item{display:grid;grid-template-columns:42px minmax(180px,.65fr) minmax(240px,1.2fr) auto;gap:14px;align-items:center;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:rgba(12,27,41,.83)}.queue-number{color:var(--blue);font-size:20px;font-weight:820}.queue-item h3{margin:3px 0 0;font-size:17px}.queue-item p{margin:0;color:var(--muted);font-size:11px}.queue-item p strong{color:var(--text)}.queue-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}.queue-detail{grid-column:2/-1}.queue-detail[hidden]{display:none}
 .side-stack{display:grid;gap:12px;align-content:start}.risk-meter,.handoff,.data-health{padding:18px 19px}.metric-title{display:flex;justify-content:space-between;align-items:center;gap:10px}.metric-title strong{font-size:17px}.bar{height:9px;margin:10px 0 5px;border-radius:999px;background:#142637;overflow:hidden}.bar span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--blue),#9cc5ea)}.risk-list{display:grid;margin-top:8px}.risk-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line);color:var(--muted);font-size:11px}.risk-row strong{color:var(--text);text-align:right}.risk-row.warn strong{color:var(--amber)}.risk-row.danger strong{color:var(--danger)}.handoff{border-color:rgba(112,172,228,.28);background:rgba(112,172,228,.05)}.handoff strong{display:block;margin:4px 0;color:var(--amber)}.handoff p,.data-health p{margin:0;color:var(--muted);font-size:11px}
@@ -1882,7 +2101,9 @@ def _css() -> str:
 .form-grid{display:grid;grid-template-columns:minmax(220px,1fr) repeat(3,minmax(150px,.45fr)) auto;gap:8px}.input,.select{min-height:39px;padding:8px 11px;border:1px solid var(--line2);border-radius:10px;color:var(--text);background:rgba(4,13,22,.68)}.lookup-result{display:grid;grid-template-columns:minmax(0,1.18fr) minmax(350px,.72fr);gap:14px;margin-top:14px}.chart-empty{min-height:245px;display:grid;place-content:center;gap:8px;padding:28px;text-align:center;border:1px dashed var(--line2);border-radius:13px;color:var(--muted);background:rgba(4,13,22,.45)}.chart-empty strong{color:var(--text);font-size:16px}.research-metrics{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:12px}.objective-banner{padding:11px 12px;border-left:3px solid var(--blue);color:var(--muted);background:rgba(112,172,228,.065)}.analysis-title{margin:4px 0 11px}.evidence-list{display:grid;gap:8px;margin-top:12px}.evidence-item{padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.018)}.evidence-item strong{display:flex;justify-content:space-between;gap:10px}.evidence-item p{margin:5px 0 0;color:var(--muted);font-size:10px}.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.tab{min-height:31px;padding:6px 10px;border:1px solid var(--line);border-radius:9px;color:var(--muted);background:transparent}.tab.active{color:var(--text);border-color:rgba(112,172,228,.45);background:rgba(112,172,228,.08)}.tab-panel{display:none;margin-top:10px}.tab-panel.active{display:block}.source-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:12px}.source-card{padding:11px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.018)}.source-card small{display:block;color:var(--muted)}.source-card strong{display:block;margin:4px 0}.source-card em{font-size:10px;font-style:normal;color:var(--muted)}
 .review-top{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}.score-card{padding:16px;border:1px solid var(--line);border-radius:14px;background:rgba(12,27,41,.82)}.score-card small{display:block;color:var(--muted)}.score-card strong{display:block;margin-top:5px;font-size:22px}.score-card .date-score{font-size:15px}.ledger{overflow:auto;border:1px solid var(--line);border-radius:13px}.maturity{display:grid;grid-template-columns:repeat(10,1fr);gap:5px;margin:12px 0}.maturity i{height:8px;border-radius:999px;background:rgba(255,255,255,.08)}.maturity i.done{background:var(--blue)}.maturity i.current{background:var(--amber)}
 .drawer-backdrop{position:fixed;inset:0;display:flex;justify-content:flex-end;background:rgba(0,0,0,.58);backdrop-filter:blur(3px);z-index:100}.drawer-backdrop[hidden]{display:none}.drawer{width:min(560px,94vw);height:100%;overflow:auto;padding:24px;border-left:1px solid var(--line2);background:#091724;box-shadow:-20px 0 55px rgba(0,0,0,.35);outline:0}.evidence-drawer{width:min(720px,96vw)}.drawer-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start}.drawer h2{margin:5px 0 0}.timeline,.evidence-chain{display:grid;gap:10px;margin-top:18px}.timeline-item{position:relative;padding:13px 14px 13px 18px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02)}.timeline-item:before{content:"";position:absolute;left:8px;top:18px;width:5px;height:5px;border-radius:50%;background:var(--blue)}.timeline-item small{display:block;color:var(--muted)}.timeline-item strong{display:block;margin-top:4px}.timeline-item p{margin:7px 0 0;color:var(--muted);font-size:10px}.evidence-chain-item{padding:15px 16px;border:1px solid var(--line);border-radius:9px;background:#0a1a28}.evidence-chain-item header{display:flex;justify-content:space-between;gap:12px;color:var(--blue);font-size:10px;text-transform:uppercase}.evidence-chain-item header em{font-style:normal}.evidence-chain-item h3{margin:9px 0;font-size:15px}.evidence-chain-item p{margin:6px 0;color:var(--muted);font-size:11px}.evidence-chain-item p b{color:var(--text)}.evidence-chain-item footer{margin-top:10px;padding-top:9px;border-top:1px solid var(--line);color:#7f93a4;font-size:10px}.toast{position:fixed;right:22px;bottom:22px;z-index:120;transform:translateY(18px);opacity:0;padding:10px 13px;border:1px solid var(--line2);border-radius:11px;background:#102536;box-shadow:var(--shadow);transition:.18s;pointer-events:none}.toast.visible{transform:translateY(0);opacity:1}.toast.success{border-color:rgba(121,184,174,.45)}.toast.error{border-color:rgba(223,116,110,.45)}.mobile-nav{display:none}.prototype-note{margin-top:12px;padding:11px 13px;border:1px dashed rgba(137,169,198,.25);border-radius:12px;color:var(--muted);font-size:10px}.empty-state{min-height:220px;display:grid;place-content:center;padding:22px;text-align:center;border:1px dashed var(--line2);border-radius:var(--radius);color:var(--muted);background:rgba(12,27,41,.6)}.empty-state h2{margin-bottom:6px;color:var(--text)}
-@media(max-width:1120px){.today-layout,.portfolio-layout,.lookup-result,.decision-support,.review-evidence-grid,.decision-conclusion{grid-template-columns:1fr}.conclusion-invalid{grid-column:1}.side-stack{grid-template-columns:repeat(3,minmax(0,1fr))}.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.form-grid .btn{grid-column:1/-1}.review-top{grid-template-columns:repeat(3,minmax(0,1fr))}.authority-chain-new{grid-template-columns:repeat(2,minmax(0,1fr))}.authority-step:nth-child(3){border-left:0;border-top:1px solid var(--line)}.authority-step:nth-child(4){border-top:1px solid var(--line)}.review-value-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.review-value-summary>div:nth-child(3),.review-value-summary>div:nth-child(5){border-top:1px solid var(--line)}.review-value-summary>div:nth-child(3),.review-value-summary>div:nth-child(5){border-left:0}.review-data-state{grid-column:1/-1}.review-chart-blocked{grid-template-columns:1fr;min-height:420px}.review-attribution-blocked{grid-template-columns:120px minmax(0,1fr)}.review-attribution-blocked>p{grid-column:1/-1;padding-top:10px;border-top:1px solid var(--line)}}
+@media(max-width:1120px){.today-workbench-grid,.today-layout,.portfolio-layout,.lookup-result,.decision-support,.review-evidence-grid,.decision-conclusion{grid-template-columns:1fr}.today-workbench-grid{gap:14px}.conclusion-invalid{grid-column:1}.side-stack{grid-template-columns:repeat(3,minmax(0,1fr))}.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.form-grid .btn{grid-column:1/-1}.review-top{grid-template-columns:repeat(3,minmax(0,1fr))}.authority-chain-new{grid-template-columns:repeat(2,minmax(0,1fr))}.authority-step:nth-child(3){border-left:0;border-top:1px solid var(--line)}.authority-step:nth-child(4){border-top:1px solid var(--line)}.review-value-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.review-value-summary>div:nth-child(3),.review-value-summary>div:nth-child(5){border-top:1px solid var(--line)}.review-value-summary>div:nth-child(3),.review-value-summary>div:nth-child(5){border-left:0}.review-data-state{grid-column:1/-1}.review-chart-blocked{grid-template-columns:1fr;min-height:420px}.review-attribution-blocked{grid-template-columns:120px minmax(0,1fr)}.review-attribution-blocked>p{grid-column:1/-1;padding-top:10px;border-top:1px solid var(--line)}}
 @media(max-width:820px){.app{display:block}.sidebar{display:none}.content{padding:16px 12px 90px}.topbar{display:block;margin-bottom:14px}.top-actions{margin-top:10px}.runtime-strip,.market-gate{grid-template-columns:repeat(2,minmax(0,1fr))}.runtime-cell:first-child,.market-gate>div:first-child{grid-column:1/-1}.runtime-cell:nth-child(2),.market-gate>div:nth-child(2){border-left:0}.theme-line{grid-template-columns:1fr}.decision-stage-rail{display:flex;overflow-x:auto}.stage-node{flex:0 0 142px}.action-command{min-height:0;padding:23px 18px 19px;display:grid;gap:22px}.action-command-controls{width:100%;display:grid}.authority-chain-new{display:block}.authority-step{width:100%;min-height:75px;border-top:1px solid var(--line);border-left:0}.authority-step:first-child{border-top:0}.holding-impact-strip{padding:16px;display:block}.holding-impact-strip h3{margin-bottom:12px}.holding-impact-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.holding-impact{padding:0;border-left:0}.evidence-command-panel,.risk-exit-panel{padding:18px 16px}.rules,.provenance,.source-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.rule-item:nth-child(3),.prov:nth-child(3){border-left:0}.queue-item{grid-template-columns:34px 1fr}.queue-item>:nth-child(3),.queue-actions,.queue-detail{grid-column:2}.queue-actions{justify-content:flex-start}.side-stack{grid-template-columns:1fr}.metrics,.review-top{grid-template-columns:repeat(2,minmax(0,1fr))}.decision-trust-summary{padding:12px 14px;flex-wrap:wrap;gap:7px 14px}.decision-trust-summary .trust-summary-kicker{flex-basis:100%}.decision-trust-summary em{margin-left:0}.review-inline-meta{justify-content:flex-start}.review-inline-meta span:first-child{flex-basis:100%;margin-right:0;padding-left:0}.review-controls{display:grid}.review-periods{margin-left:0;overflow:auto}.review-chart-blocked{padding:28px 20px}.review-attribution-blocked{display:block;overflow:auto}.review-attribution-blocked>div:first-child{padding:0 0 10px;border-right:0;border-bottom:1px solid var(--line)}.attribution-unknowns{min-width:700px;margin-top:12px}.review-attribution-blocked>p{min-width:330px;margin-top:12px}.mobile-nav{position:fixed;right:0;bottom:0;left:0;z-index:80;display:grid;grid-template-columns:repeat(4,1fr);padding:7px 8px calc(7px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:#06111c}.mobile-nav button{display:block;min-height:43px;border:0;border-radius:9px;color:var(--muted);background:transparent;text-align:center}.mobile-nav button.active{color:var(--text);background:#132a3e}.mobile-nav button span{display:inline}.card-footer,.response-box{display:block}.card-actions{margin-top:10px}}
 @media(max-width:520px){.runtime-strip,.market-gate,.rules,.provenance,.source-grid,.metrics,.review-top,.form-grid,.research-metrics,.review-value-summary{display:block}.runtime-cell,.market-gate>div,.rule-item,.prov,.source-card,.metric,.score-card,.review-value-summary>div{border-left:0;border-top:1px solid var(--line);margin-top:7px}.runtime-cell:first-child,.market-gate>div:first-child,.rule-item:first-child,.review-value-summary>div:first-child{border-top:0}.action-command h2{font-size:28px}.holding-impact-list{grid-template-columns:1fr}.evidence-command-panel>header,.risk-exit-panel>header{display:block}.evidence-command-panel>header .btn{margin-top:10px}.evidence-delta{grid-template-columns:56px minmax(0,1fr)}.evidence-delta em{grid-column:2}.risk-facts,.exit-conditions>div,.risk-next{grid-template-columns:1fr}.risk-facts>div{padding:9px 0;border-top:1px solid var(--line);border-left:0}.risk-facts>div:first-child{border-top:0}.review-chart-head{display:grid;padding:10px}.review-chart-blocked{padding:24px 14px}.review-chart-blocked li{display:grid}.review-value-summary>div{margin-top:0}.diff-grid{grid-template-columns:1fr}.diff-arrow{transform:rotate(90deg)}.card-footer,.section-head{display:block}.card-actions,.section-head>.inline{margin-top:10px}.change-title h2{font-size:21px}.content{padding-left:10px;padding-right:10px}.top-actions .chip:first-child{display:none}.btn,.input,.select{min-height:44px}}
+@media(max-width:820px){.today-phase-banner{align-items:flex-start;flex-wrap:wrap}.today-phase-banner em{margin-left:0}.today-column-head{min-height:0}.today-data-details>div{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.today-column-head{padding:15px;display:block}.today-column-head>.source,.today-column-head>.status{margin-top:10px}.today-column-head h2{font-size:20px}.account-pnl{padding:15px}.account-metric-grid{margin:10px 15px;grid-template-columns:1fr}.attention-stack,.decision-stack{padding:8px}.today-rule-actions{grid-template-columns:1fr}.decision-card-title{display:block}.decision-card-title .source{margin-top:6px}.today-data-details>div{grid-template-columns:1fr}}
 """

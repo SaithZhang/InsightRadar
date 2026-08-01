@@ -2,23 +2,27 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
-from typing import Callable, Iterable
+from datetime import datetime
+from pathlib import Path
+from typing import Callable, Iterable, Mapping
 
 from stock_assist.paths import DATA_DIR, REPORT_DIR
-from stock_assist.portfolio import BROKER_HEADER_ALIASES, load_portfolio, parse_galaxy_position_table
-
+from stock_assist.portfolio import (
+    BROKER_HEADER_ALIASES,
+    load_portfolio,
+    parse_galaxy_position_table,
+)
 
 DEFAULT_PORTFOLIO_PATH = DATA_DIR / "portfolio.json"
 DEFAULT_RISK_PROFILE_PATH = DATA_DIR / "risk_watch_profile.json"
 VALID_BETA_CLASSES = {"high_beta", "normal", "unknown"}
 REQUIRED_RERUN_WORKFLOWS = (
+    "portfolio-beta",
     "market-levels",
     "risk-watch",
     "market-pulse",
@@ -36,7 +40,6 @@ def preview_portfolio_import(
     risk_profile_path: Path = DEFAULT_RISK_PROFILE_PATH,
     as_of: str | None = None,
 ) -> dict[str, object]:
-    classification_map = {str(key): str(value) for key, value in (classifications or {}).items()}
     rows = parse_galaxy_position_table(text)
     errors: list[str] = []
     warnings: list[str] = []
@@ -56,10 +59,6 @@ def preview_portfolio_import(
             continue
         if not name:
             errors.append(f"{code}缺少证券名称。")
-        classification = classification_map.get(code, "unknown")
-        if classification not in VALID_BETA_CLASSES:
-            errors.append(f"{code}的beta分类{classification!r}无效。")
-            classification = "unknown"
         market_price = _number(_cell(row, "market_price"))
         market_value = _number(_cell(row, "market_value"))
         weight_pct = _number(_cell(row, "weight_pct"))
@@ -82,7 +81,8 @@ def preview_portfolio_import(
                 "market_value": market_value,
                 "weight_pct": weight_pct,
                 "market": market,
-                "beta_classification": classification,
+                "beta_classification": "unknown",
+                "beta_evidence": None,
                 "thesis": "券商持仓导入，待补买入逻辑。",
                 "risk_line": "按原始风险线、市场状态和组合预算复核。",
                 "review_status": "needs_context",
@@ -92,8 +92,10 @@ def preview_portfolio_import(
         errors.append("未找到可解析的券商TSV表头和数据行。")
     if not holdings:
         errors.append("未找到当前持仓大于0的记录。")
-    if any(item["beta_classification"] == "unknown" for item in holdings):
-        warnings.append("存在unknown beta分类；系统没有根据股票代码静默推断高β。")
+    if classifications:
+        warnings.append("已忽略手工beta分类；保存后由历史收益率工作流自动计算。")
+    if holdings:
+        warnings.append("beta将在保存后的后台刷新中自动计算；计算完成前风险对账保持阻断。")
 
     old = load_portfolio(portfolio_path)
     old_rows = {
@@ -112,11 +114,12 @@ def preview_portfolio_import(
     profile = _load_json_object(risk_profile_path)
     reconciliation = _reconcile_risk(holdings, profile)
     portfolio_payload = {
-        "schema_version": "insightradar-portfolio/v2",
+        "schema_version": "insightradar-portfolio/v3",
         "as_of": as_of or datetime.now().date().isoformat(),
         "cash": None,
         "source_note": "本地券商TSV经用户批准导入；未上传。",
         "risk_reconciliation": reconciliation,
+        "beta_model_status": "pending_refresh",
         "holdings": holdings,
     }
     risk_payload = _risk_profile_payload(profile, holdings, reconciliation, portfolio_payload["as_of"])
@@ -195,6 +198,129 @@ def apply_portfolio_import(
     }
 
 
+def apply_portfolio_beta_evidence(
+    evidence: Iterable[Mapping[str, object]],
+    *,
+    model: Mapping[str, object],
+    portfolio_path: Path = DEFAULT_PORTFOLIO_PATH,
+    risk_profile_path: Path = DEFAULT_RISK_PROFILE_PATH,
+) -> dict[str, object]:
+    """Atomically persist deterministic beta evidence and derived risk state."""
+
+    portfolio_payload = _load_json_object(portfolio_path)
+    holdings = portfolio_payload.get("holdings")
+    if not isinstance(holdings, list):
+        raise ValueError("持仓文件缺少holdings，不能写入beta证据。")
+    by_code = {
+        str(item.get("code") or ""): dict(item)
+        for item in evidence
+        if str(item.get("code") or "")
+    }
+    persisted_evidence: dict[str, dict[str, object]] = {}
+    for raw_holding in holdings:
+        if not isinstance(raw_holding, dict):
+            continue
+        code = str(raw_holding.get("code") or "")
+        item = by_code.get(code)
+        if item is None:
+            item = {
+                "code": code,
+                "beta": None,
+                "r_squared": None,
+                "benchmark": str(model.get("benchmark") or ""),
+                "window_sessions": int(model.get("window_sessions") or 0),
+                "minimum_observations": int(model.get("minimum_observations") or 0),
+                "observations": 0,
+                "as_of": "",
+                "asset_as_of": "",
+                "source": "",
+                "quality_status": "failed",
+                "fit_quality": "unknown",
+                "reason": "本次计算没有返回该持仓的beta证据。",
+                "calculation": str(model.get("calculation") or ""),
+                "classification": "unknown",
+            }
+        quality = str(item.get("quality_status") or "unknown")
+        classification = str(item.get("classification") or "unknown")
+        if quality != "ready" or classification not in {"high_beta", "normal"}:
+            classification = "unknown"
+        evidence_payload = {
+            key: item.get(key)
+            for key in (
+                "beta",
+                "r_squared",
+                "benchmark",
+                "window_sessions",
+                "minimum_observations",
+                "observations",
+                "as_of",
+                "asset_as_of",
+                "source",
+                "quality_status",
+                "fit_quality",
+                "reason",
+                "calculation",
+            )
+        }
+        raw_holding["beta_classification"] = classification
+        raw_holding["beta_evidence"] = evidence_payload
+        persisted_evidence[code] = evidence_payload
+
+    profile = _load_json_object(risk_profile_path)
+    reconciliation = _reconcile_risk(
+        [item for item in holdings if isinstance(item, dict)],
+        profile,
+    )
+    portfolio_payload.update(
+        {
+            "schema_version": "insightradar-portfolio/v3",
+            "beta_model_status": (
+                "ready"
+                if reconciliation.get("classification_coverage") == 1.0
+                else "blocked"
+            ),
+            "beta_model": dict(model),
+            "risk_reconciliation": reconciliation,
+        }
+    )
+    risk_payload = _risk_profile_payload(
+        profile,
+        [item for item in holdings if isinstance(item, dict)],
+        reconciliation,
+        portfolio_payload.get("as_of"),
+    )
+    risk_payload["beta_model"] = dict(model)
+    risk_payload["position_beta_evidence"] = persisted_evidence
+
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    portfolio_backup = _backup_path(portfolio_path, timestamp)
+    risk_backup = _backup_path(risk_profile_path, timestamp)
+    portfolio_temp = _write_temp_json(portfolio_path, portfolio_payload)
+    risk_temp = _write_temp_json(risk_profile_path, risk_payload)
+    try:
+        if portfolio_path.exists():
+            shutil.copy2(portfolio_path, portfolio_backup)
+        if risk_profile_path.exists():
+            shutil.copy2(risk_profile_path, risk_backup)
+        os.replace(portfolio_temp, portfolio_path)
+        os.replace(risk_temp, risk_profile_path)
+    except Exception:
+        if portfolio_backup.exists():
+            shutil.copy2(portfolio_backup, portfolio_path)
+        if risk_backup.exists():
+            shutil.copy2(risk_backup, risk_profile_path)
+        raise
+    finally:
+        portfolio_temp.unlink(missing_ok=True)
+        risk_temp.unlink(missing_ok=True)
+    return {
+        "saved": True,
+        "risk_reconciliation": reconciliation,
+        "portfolio_backup": str(portfolio_backup) if portfolio_backup.exists() else None,
+        "risk_profile_backup": str(risk_backup) if risk_backup.exists() else None,
+    }
+
+
 def rerun_required_workflows(
     *,
     runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
@@ -267,9 +393,9 @@ def _reconcile_risk(holdings: list[dict[str, object]], existing: dict[str, objec
     if not weights_complete:
         reason = "仓位占比字段不完整，portfolio与risk profile无法对账。"
     elif not classifications_complete:
-        reason = "存在unknown beta分类，高β敞口无法对账。"
+        reason = "自动beta证据缺失、过期或样本不足，高β敞口无法对账。"
     else:
-        reason = "持仓权重和显式beta分类已与risk profile同步。"
+        reason = "持仓权重和自动beta分类已与risk profile同步。"
     return {
         "status": "reconciled" if weights_complete and classifications_complete else "blocked",
         "reason": reason,

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime
 import json
+import unittest
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
 
 from stock_assist.after_close_workbench import (
     build_market_matrix_contract,
@@ -90,11 +90,7 @@ class AfterCloseWorkbenchContractTests(unittest.TestCase):
             [group["id"] for group in matrix["groups"]],
             ["risk_assets", "macro_pressure"],
         )
-        cards = [
-            card
-            for group in matrix["groups"]
-            for card in group["cards"]
-        ]
+        cards = [card for group in matrix["groups"] for card in group["cards"]]
         self.assertEqual(
             [card["id"] for card in cards],
             [
@@ -232,9 +228,7 @@ class AfterCloseWorkbenchViewTests(unittest.TestCase):
 
         self.assertEqual(view.risk_label, "黄灯")
         self.assertIn("上游市场数据源超时", view.gaps)
-        self.assertFalse(
-            any("HTTPSConnectionPool" in item for item in view.gaps)
-        )
+        self.assertFalse(any("HTTPSConnectionPool" in item for item in view.gaps))
 
 
 class AfterCloseWorkbenchHTMLTests(unittest.TestCase):
@@ -315,12 +309,14 @@ class AfterCloseWorkbenchHTMLTests(unittest.TestCase):
         )
 
         self.assertIn('data-route="today"', html)
-        self.assertIn('id="today"', html)
-        self.assertIn('id="portfolio"', html)
-        self.assertLess(html.index("当前首要状态"), html.index("授权因果链"))
-        self.assertIn("今日环境", html)
-        self.assertIn("谨慎持有", html)
-        self.assertIn("A股科技", html)
+        self.assertIn('id="route-today" data-route-panel="today"', html)
+        self.assertIn('id="route-portfolio" data-route-panel="portfolio"', html)
+        self.assertLess(html.index("01 · 发生了什么"), html.index("02 · 最需要关注"))
+        self.assertLess(
+            html.index("02 · 最需要关注"), html.index("03 · 我需要决定什么")
+        )
+        self.assertIn("今日工作台", html)
+        self.assertIn("暂无经证据验证的机会", html)
         self.assertIn("location.hash", html)
         self.assertNotIn("0 / 100", html)
 
@@ -341,23 +337,29 @@ class AfterCloseWorkbenchHTMLTests(unittest.TestCase):
         )
 
         for route in ("today", "portfolio", "lookup", "review"):
-            self.assertIn(f'id="{route}"', html)
+            self.assertIn(
+                f'id="route-{route}" data-route-panel="{route}"',
+                html,
+            )
             self.assertIn(f'data-view="{route}"', html)
             self.assertIn(f'data-route="{route}"', html)
         self.assertNotIn('id="route-holdings"', html)
         self.assertNotIn('id="route-market"', html)
-        self.assertIn("IF", html)
-        self.assertIn("THEN", html)
-        self.assertIn("UNTIL", html)
-        self.assertIn("INVALID", html)
+        self.assertIn("发生了什么", html)
+        self.assertIn("为什么重要", html)
+        self.assertIn("支持证据与可能推翻", html)
+        self.assertIn("数据异常与不可判断事项", html)
         self.assertIn("确认已知悉阻断", html)
-        self.assertNotIn("采纳为今日计划", html)
-        self.assertIn("提出异议", html)
+        self.assertIn("修改", html)
+        self.assertIn("暂不启用", html)
+        self.assertNotIn('data-plan-response="accepted"', html)
         self.assertIn("现有后验统计", html)
         self.assertIn("系统净决策价值", html)
         self.assertIn("unknown 不按 0 处理", html)
 
-    def test_html_matches_v3_shell_without_copying_prototype_market_values(self) -> None:
+    def test_html_matches_v3_shell_without_copying_prototype_market_values(
+        self,
+    ) -> None:
         html = render_after_close_workbench(
             self._payload(),
             "# 盘后持仓操作指引",
@@ -365,15 +367,20 @@ class AfterCloseWorkbenchHTMLTests(unittest.TestCase):
 
         self.assertIn("grid-template-columns:250px minmax(0,1fr)", html)
         self.assertIn("max-width:1340px", html)
-        self.assertIn('class="decision-stage-rail"', html)
-        self.assertIn('class="action-command risk"', html)
-        self.assertIn('class="authority-chain-new"', html)
-        self.assertIn('class="holding-impact-strip"', html)
-        self.assertIn('class="decision-support"', html)
+        self.assertIn('class="today-workbench-grid"', html)
+        self.assertIn('class="today-column what-column"', html)
+        self.assertIn('class="today-column attention-column"', html)
+        self.assertIn('class="today-column decision-column"', html)
+        self.assertIn(
+            "grid-template-columns:minmax(0,.9fr) minmax(0,1.08fr) minmax(0,1.14fr)",
+            html,
+        )
         self.assertIn('id="refresh-data"', html)
         self.assertIn('id="refresh-all-data"', html)
         self.assertIn('post("/api/refresh"', html)
-        self.assertIn('const failureDetail = String(job.error || "").slice(0, 140)', html)
+        self.assertIn(
+            'const failureDetail = String(job.error || "").slice(0, 140)', html
+        )
         self.assertIn('`刷新失败：${job.failed_step || "unknown"}${failureDetail', html)
         self.assertIn('class="review-value-summary"', html)
         self.assertIn('class="review-chart-blocked"', html)
@@ -384,7 +391,9 @@ class AfterCloseWorkbenchHTMLTests(unittest.TestCase):
         self.assertNotIn("33 / 100", html)
         self.assertNotIn("+2.4%", html)
 
-    def test_review_evidence_strength_uses_mature_decisions_not_horizon_sum(self) -> None:
+    def test_review_evidence_strength_uses_mature_decisions_not_horizon_sum(
+        self,
+    ) -> None:
         html = render_after_close_workbench(
             {
                 "decision_workspace": {
