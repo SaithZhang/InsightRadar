@@ -15,6 +15,8 @@ import os
 import secrets
 import urllib.request
 
+from stock_assist.intraday.network import build_urllib_opener, provider_policy
+
 
 IWENCAI_API_URL = "https://openapi.iwencai.com/v1/query2data"
 
@@ -136,7 +138,8 @@ def fetch_ths_all_a(
         {"query": query, "page": "1", "limit": "1", "is_cache": "1", "expand_index": "true"}
     ).encode("utf-8")
     request = urllib.request.Request(IWENCAI_API_URL, data=body, headers=headers, method="POST")
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    opener = build_urllib_opener(provider_policy("iwencai"))
+    with opener.open(request, timeout=timeout) as response:
         payload = json.load(response)
     records = payload.get("datas") if isinstance(payload, dict) else None
     if not isinstance(records, list) or not records or not isinstance(records[0], dict):
@@ -252,7 +255,8 @@ def _query_iwencai(
         ensure_ascii=False,
     ).encode("utf-8")
     request = urllib.request.Request(IWENCAI_API_URL, data=body, headers=headers, method="POST")
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    opener = build_urllib_opener(provider_policy("iwencai"))
+    with opener.open(request, timeout=timeout) as response:
         payload = json.load(response)
     if not isinstance(payload, dict):
         raise RuntimeError("Iwencai returned a non-object response")

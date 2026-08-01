@@ -44,8 +44,9 @@ class OneClickLauncherTests(unittest.TestCase):
         self.assertIn("did not create a fresh after-close HTML report", launcher)
         self.assertIn("Invoke-WebRequest", launcher)
         self.assertIn("InsightRadar is already running", launcher)
-        self.assertIn("--schedule-checkpoints", launcher)
-        self.assertIn("-WindowStyle Hidden", launcher)
+        self.assertIn('"--serve", "--intraday"', launcher)
+        self.assertNotIn("intraday-poll --iterations 1", launcher)
+        self.assertNotIn("-WindowStyle Hidden", launcher)
         self.assertIn("-Mode Import", product_entry)
 
     def test_import_page_has_local_preview_and_approved_apply_flow(self) -> None:

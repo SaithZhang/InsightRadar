@@ -123,6 +123,8 @@ class ThemeSnapshot:
     fetched_at: tuple[datetime, ...] = ()
     price: float | None = None
     minutes_without_new_low: int | None = None
+    component_source_times: Mapping[str, datetime | None] = field(default_factory=dict)
+    component_freshness: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

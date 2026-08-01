@@ -11,7 +11,13 @@ from datetime import date, timedelta
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import Request
+
+from stock_assist.intraday.network import (
+    build_urllib_opener,
+    provider_policy,
+    sanitized_error_type,
+)
 
 
 REPORT_ENDPOINT = "https://reportapi.eastmoney.com/report/list"
@@ -72,10 +78,13 @@ def fetch_reports(
     url = f"{REPORT_ENDPOINT}?{urlencode(params)}"
     request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
     try:
-        with urlopen(request, timeout=15) as response:
+        opener = build_urllib_opener(provider_policy("eastmoney"))
+        with opener.open(request, timeout=15) as response:
             text = response.read().decode("utf-8", errors="replace")
     except (HTTPError, URLError, TimeoutError) as exc:
-        raise EastmoneyReportError(f"Eastmoney report query failed: {exc}") from exc
+        raise EastmoneyReportError(
+            f"Eastmoney report query failed: {sanitized_error_type(exc)}"
+        ) from exc
 
     payload = _parse_jsonp(text)
     rows = payload.get("data", [])

@@ -33,6 +33,7 @@ class ReentryPositionState:
     quantity: float | None = None
     available_quantity: float | None = None
     second_reentry_confirmed: bool = False
+    sale_execution_id: str = ""
 
 
 class AccountRiskEngine:
@@ -40,6 +41,14 @@ class AccountRiskEngine:
         self.technology_theme_ids = tuple(technology_theme_ids)
 
     def evaluate(self, snapshot: IntradaySnapshot) -> RuleEvaluation:
+        if snapshot.portfolio_value is None or any(
+            snapshot.exposure_by_theme.get(item) is None
+            for item in self.technology_theme_ids
+            if item in snapshot.exposure_by_theme
+        ):
+            return RuleEvaluation(
+                state_updates={"account_risk": "insufficient_data"}
+            )
         concentration = sum(
             float(snapshot.exposure_by_theme.get(item) or 0.0)
             for item in self.technology_theme_ids
@@ -263,6 +272,11 @@ class OpportunityRadarEngine:
         theme: ThemeSnapshot,
         previous: OpportunityState | None,
     ) -> OpportunityState:
+        if (
+            theme.component_freshness
+            and theme.component_freshness.get("etf") != "fresh"
+        ):
+            return "观察" if theme.gap_pct is not None else "未出现"
         required = (
             theme.return_from_open,
             theme.vwap_distance,
@@ -365,7 +379,10 @@ class ReentryGuardEngine:
                     alert_type="reentry_guard",
                     severity="info" if eligible else "red",
                     target_type="theme",
-                    target_id=state.target_id,
+                    target_id=(
+                        f"{state.target_id}:{state.sale_execution_id}"
+                        if state.sale_execution_id else state.target_id
+                    ),
                     title="结构修复后才允许人工复核接回" if eligible else "禁止仅因下跌无条件接回",
                     conclusion=(
                         "结构门槛已满足，但仍只允许人工复核，不自动接回。"

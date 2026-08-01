@@ -30,6 +30,7 @@ from stock_assist.intraday.polling import (
 from stock_assist.intraday.execution import (
     append_execution,
     append_reentry_confirmation,
+    append_reentry_failure,
     load_executions,
     load_reentry_confirmations,
 )
@@ -217,6 +218,8 @@ class IntradayRadarTests(unittest.TestCase):
         }
 
         class FakeClient:
+            calendar = [20260731, 20260803]
+
             def logout(self) -> None:
                 return None
 
@@ -285,8 +288,9 @@ class IntradayRadarTests(unittest.TestCase):
                 workspace = _latest_workspace()
         self.assertIsNotNone(workspace)
         runtime = workspace["intraday_radar"]
-        self.assertEqual(runtime["freshness_status"], "expired")
-        self.assertEqual(runtime["decision_authority"], "none")
+        self.assertEqual(runtime["overlay_freshness_status"], "expired")
+        self.assertEqual(runtime["decision_authority"], "shadow_only")
+        self.assertEqual(runtime["view_mode"], "historical_stale")
         self.assertNotEqual(runtime["status"], "ready")
         self.assertIn("intraday_history", workspace)
         self.assertNotIn("减仓", json.dumps(runtime["timeline"], ensure_ascii=False))
@@ -305,8 +309,8 @@ class IntradayRadarTests(unittest.TestCase):
             now=datetime(2026, 8, 3, 9, 40),
         )
         self.assertTrue(historical)
-        self.assertEqual(runtime["freshness_status"], "expired")
-        self.assertEqual(runtime["decision_authority"], "none")
+        self.assertEqual(runtime["overlay_freshness_status"], "expired")
+        self.assertEqual(runtime["decision_authority"], "shadow_only")
 
     def test_future_same_day_runtime_cannot_overlay_current_workspace(self) -> None:
         runtime, historical = _normalize_intraday_overlay(
@@ -320,8 +324,9 @@ class IntradayRadarTests(unittest.TestCase):
             now=datetime(2026, 8, 3, 9, 35),
         )
         self.assertTrue(historical)
-        self.assertEqual(runtime["status"], "expired")
-        self.assertEqual(runtime["decision_authority"], "none")
+        self.assertEqual(runtime["status"], "shadow")
+        self.assertEqual(runtime["decision_authority"], "shadow_only")
+        self.assertFalse(runtime["overlay_available"])
 
     def test_account_risk_matches_ir001_acceptance_range(self) -> None:
         snapshot = self._snapshot(
@@ -622,13 +627,14 @@ class IntradayRadarTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             execution_path = Path(temporary) / "execution_ledger.jsonl"
             confirmation_path = Path(temporary) / "reentry_confirmation_ledger.jsonl"
+            failure_path = Path(temporary) / "reentry_failure_ledger.jsonl"
             sale_payload = {
                 "symbol": "588200.SH", "target_id": "ai_hardware_semiconductor",
                 "side": "sell", "quantity": 500.0, "available_quantity": 1000.0,
                 "sold_at": "2026-07-31T09:25:00", "sale_price": 1.18,
                 "source": "user_confirmed_broker_execution", "user_confirmed": True,
             }
-            append_execution(
+            sale = append_execution(
                 sale_payload,
                 path=execution_path,
                 confirmed_at=datetime(2026, 7, 31, 9, 26),
@@ -637,6 +643,7 @@ class IntradayRadarTests(unittest.TestCase):
                 {
                     **sale_payload,
                     "side": "buy", "quantity": 100.0,
+                    "reference_execution_id": sale.execution_id,
                     "executed_at": "2026-07-31T10:00:00", "execution_price": 1.17,
                 },
                 path=execution_path,
@@ -645,25 +652,41 @@ class IntradayRadarTests(unittest.TestCase):
             locked = load_reentry_states(
                 execution_path,
                 confirmation_path=confirmation_path,
+                failure_path=failure_path,
             )[0]
             self.assertFalse(locked.second_reentry_confirmed)
+            failure = append_reentry_failure(
+                {
+                    "referenced_buy_execution_id": first_buy.execution_id,
+                    "referenced_sell_execution_id": sale.execution_id,
+                    "source_time": "2026-07-31T10:08:00",
+                    "fetched_at": "2026-07-31T10:08:02",
+                    "price": 1.16,
+                    "first_reentry_price": 1.17,
+                    "market_observation_id": "fixture-observation",
+                    "rule_version": "intraday-rules/ir-001-v1",
+                },
+                execution_path=execution_path,
+                path=failure_path,
+            )
             confirmation = append_reentry_confirmation(
                 {
                     "symbol": "588200.SH",
                     "target_id": "ai_hardware_semiconductor",
                     "sold_at": "2026-07-31T09:25:00",
-                    "failed_reentry_execution_id": first_buy.execution_id,
-                    "new_low_observed_at": "2026-07-31T10:08:00",
+                    "failure_observation_id": failure.failure_id,
                     "source": "user_confirmed_reentry_override",
                     "user_confirmed": True,
                 },
                 execution_path=execution_path,
+                failure_path=failure_path,
                 path=confirmation_path,
                 confirmed_at=datetime(2026, 7, 31, 10, 10),
             )
             unlocked = load_reentry_states(
                 execution_path,
                 confirmation_path=confirmation_path,
+                failure_path=failure_path,
             )[0]
             self.assertTrue(unlocked.second_reentry_confirmed)
             self.assertEqual(len(load_executions(execution_path)), 2)

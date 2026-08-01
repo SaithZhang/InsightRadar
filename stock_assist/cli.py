@@ -73,6 +73,11 @@ def _build_parser() -> argparse.ArgumentParser:
     portfolio_import.add_argument("--no-rerun", action="store_true", help="save only; do not rerun workflows")
     portfolio_import.add_argument("--no-open", action="store_true", help="do not open the latest report after a successful rerun")
     portfolio_import.add_argument("--serve", action="store_true", help="start the token-protected loopback import UI")
+    portfolio_import.add_argument(
+        "--intraday",
+        action="store_true",
+        help="start one background intraday refresh and register bounded checkpoints",
+    )
     portfolio_import.add_argument("--port", type=int, default=8765, help="loopback UI port")
 
     industry = subparsers.add_parser("industry-pool", help=command_for("industry-pool").help)
@@ -165,7 +170,11 @@ def main(argv: list[str] | None = None) -> int:
             path = json.dumps(payload, ensure_ascii=False, indent=2)
         elif args.command == "portfolio-import":
             if args.serve:
-                serve_portfolio_import(port=args.port, open_browser=not args.no_open)
+                serve_portfolio_import(
+                    port=args.port,
+                    open_browser=not args.no_open,
+                    intraday_mode=args.intraday,
+                )
                 path = f"portfolio importer stopped: http://127.0.0.1:{args.port}/"
             else:
                 if args.file is None:

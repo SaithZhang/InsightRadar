@@ -2,15 +2,48 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime, time
-from typing import Iterable
+import time as time_module
+from typing import Callable, Iterable
 
 from stock_assist.data_sources.xysz import AmazingDataClient
 from stock_assist.data_sources.eastmoney_klines import fetch_klines
 from stock_assist.intraday.contracts import MinuteBar, PointQuote
+from stock_assist.intraday.network import (
+    build_urllib_opener,
+    provider_policy,
+    sanitized_error_type,
+)
 
 
 AMAZINGDATA_SOURCE = "Galaxy AmazingData"
+
+
+@dataclass
+class EndpointCircuitBreaker:
+    failure_threshold: int = 3
+    state: str = "closed"
+    consecutive_failures: int = 0
+    last_error_type: str | None = None
+
+    def allow_request(self) -> bool:
+        return self.state != "open"
+
+    def record_success(self) -> None:
+        self.consecutive_failures = 0
+        self.last_error_type = None
+
+    def record_failure(self, exc: BaseException) -> None:
+        signature = sanitized_error_type(exc)
+        self.consecutive_failures = (
+            self.consecutive_failures + 1
+            if signature == self.last_error_type
+            else 1
+        )
+        self.last_error_type = signature
+        if self.consecutive_failures >= self.failure_threshold:
+            self.state = "open"
 
 
 def fetch_amazingdata_minute_bars(
@@ -20,6 +53,7 @@ def fetch_amazingdata_minute_bars(
     start: date,
     end: date,
     fetched_at: datetime | None = None,
+    timeout_seconds: float | None = None,
 ) -> list[MinuteBar]:
     """Fetch one-minute K-lines with one already-authenticated client."""
 
@@ -27,12 +61,16 @@ def fetch_amazingdata_minute_bars(
     if not codes:
         return []
     period = client.ad.constant.Period.min1.value
+    query_kwargs: dict[str, object] = {}
+    if timeout_seconds is not None:
+        query_kwargs["timeout"] = max(0.1, timeout_seconds)
     raw = client._call_sdk(
         client.market_data.query_kline,
         code_list=codes,
         begin_date=int(start.strftime("%Y%m%d")),
         end_date=int(end.strftime("%Y%m%d")),
         period=period,
+        **query_kwargs,
     )
     captured_at = fetched_at or datetime.now()
     result: list[MinuteBar] = []
@@ -71,6 +109,7 @@ def fetch_amazingdata_auction_quotes(
     *,
     trade_date: date,
     fetched_at: datetime | None = None,
+    timeout_seconds: float | None = None,
 ) -> list[PointQuote]:
     """Return the last positive auction quote visible no later than 09:26."""
 
@@ -78,7 +117,12 @@ def fetch_amazingdata_auction_quotes(
     if not codes:
         return []
     stamp = int(trade_date.strftime("%Y%m%d"))
-    raw = client.query_snapshot(codes, begin_date=stamp, end_date=stamp)
+    raw = client.query_snapshot(
+        codes,
+        begin_date=stamp,
+        end_date=stamp,
+        timeout=timeout_seconds,
+    )
     frames = raw.get(stamp, raw) if isinstance(raw, dict) else {}
     captured_at = fetched_at or datetime.now()
     result: list[PointQuote] = []
@@ -122,6 +166,7 @@ def fetch_amazingdata_latest_quotes(
     *,
     as_of: datetime,
     fetched_at: datetime | None = None,
+    timeout_seconds: float | None = None,
 ) -> list[PointQuote]:
     """Return each symbol's latest positive quote visible at ``as_of``."""
 
@@ -129,7 +174,12 @@ def fetch_amazingdata_latest_quotes(
     if not codes:
         return []
     stamp = int(as_of.strftime("%Y%m%d"))
-    raw = client.query_snapshot(codes, begin_date=stamp, end_date=stamp)
+    raw = client.query_snapshot(
+        codes,
+        begin_date=stamp,
+        end_date=stamp,
+        timeout=timeout_seconds,
+    )
     frames = raw.get(stamp, raw) if isinstance(raw, dict) else {}
     captured_at = fetched_at or datetime.now()
     result: list[PointQuote] = []
@@ -172,7 +222,12 @@ def fetch_eastmoney_minute_bars(
     start: date,
     end: date,
     fetched_at: datetime | None = None,
-) -> tuple[list[MinuteBar], dict[str, str]]:
+    candle_fetcher: Callable[..., object] = fetch_klines,
+    circuit_breaker: EndpointCircuitBreaker | None = None,
+    include_diagnostics: bool = False,
+    total_timeout_seconds: float = 20.0,
+    monotonic_fn: Callable[[], float] = time_module.monotonic,
+) -> tuple[list[MinuteBar], dict[str, str]] | tuple[list[MinuteBar], dict[str, str], dict[str, object]]:
     """Public fallback for symbols missing from the primary archive.
 
     Each symbol fails independently.  The caller receives both usable bars and
@@ -182,13 +237,44 @@ def fetch_eastmoney_minute_bars(
     captured_at = fetched_at or datetime.now()
     bars: list[MinuteBar] = []
     failures: dict[str, str] = {}
-    for raw_symbol in symbols:
-        symbol = str(raw_symbol).upper()
+    policy = provider_policy("eastmoney_push2his")
+    opener = build_urllib_opener(policy)
+    breaker = circuit_breaker or EndpointCircuitBreaker(
+        failure_threshold=policy.circuit_breaker_policy.failure_threshold
+    )
+    started = monotonic_fn()
+    attempts = 0
+    symbol_rows = [str(item).upper() for item in symbols]
+    timed_out = False
+    for index, symbol in enumerate(symbol_rows):
+        if monotonic_fn() - started >= total_timeout_seconds:
+            timed_out = True
+            failures.update(
+                {item: "refresh_total_timeout" for item in symbol_rows[index:]}
+            )
+            break
+        if not breaker.allow_request():
+            failures.update(
+                {
+                    item: "provider_unavailable_due_to_circuit_breaker"
+                    for item in symbol_rows[index:]
+                }
+            )
+            break
+        attempts += 1
         try:
-            candles = fetch_klines(_eastmoney_secid(symbol), "1m", limit=3000)
+            candles = candle_fetcher(
+                _eastmoney_secid(symbol),
+                "1m",
+                limit=3000,
+                timeout=policy.timeout_seconds,
+                opener=opener,
+            )
         except Exception as exc:
-            failures[symbol] = f"{type(exc).__name__}: {exc}"
+            breaker.record_failure(exc)
+            failures[symbol] = sanitized_error_type(exc)
             continue
+        breaker.record_success()
         for candle in candles:
             if not start <= candle.time.date() <= end:
                 continue
@@ -209,6 +295,18 @@ def fetch_eastmoney_minute_bars(
             )
         if not any(item.symbol == symbol for item in bars):
             failures[symbol] = "Eastmoney returned no bars inside the requested date window."
+    diagnostics: dict[str, object] = {
+        **policy.safe_diagnostic(),
+        "provider": "eastmoney_push2his",
+        "elapsed_ms": max(0, int((monotonic_fn() - started) * 1000)),
+        "status": "partial" if failures else "success",
+        "sanitized_error_type": breaker.last_error_type,
+        "attempt_count": attempts,
+        "circuit_state": breaker.state,
+        "timed_out": timed_out,
+    }
+    if include_diagnostics:
+        return bars, failures, diagnostics
     return bars, failures
 
 

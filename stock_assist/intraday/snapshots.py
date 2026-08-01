@@ -262,6 +262,26 @@ class IntradaySnapshotBuilder:
                 }
             )
         )
+        component_source_times = {
+            "etf": point.get("source_time") if isinstance(point.get("source_time"), datetime) else None,
+            "benchmark": (
+                benchmark_point.get("source_time")
+                if isinstance(benchmark_point.get("source_time"), datetime) else None
+            ),
+            "representatives": max(
+                (
+                    row.get("source_time")
+                    for row in usable
+                    if isinstance(row.get("source_time"), datetime)
+                ),
+                default=None,
+            ),
+            "external_mapping": external_source_time,
+        }
+        component_freshness = {
+            key: _component_freshness(timestamp, value, self.max_quote_age_seconds)
+            for key, value in component_source_times.items()
+        }
         state = (
             "unavailable"
             if point.get("price") is None
@@ -303,6 +323,8 @@ class IntradaySnapshotBuilder:
             fetched_at=fetched_at,
             price=_float(point.get("price")),
             minutes_without_new_low=_minutes_without_new_low(etf_bars),
+            component_source_times=component_source_times,
+            component_freshness=component_freshness,
         )
 
     def _volume_ratio(
@@ -360,7 +382,7 @@ class IntradaySnapshotBuilder:
         }
         symbols.update(
             {
-                item.representative_etf: item.source_times[-1] if item.source_times else None
+                item.representative_etf: item.component_source_times.get("etf")
                 for item in themes
             }
         )
@@ -399,6 +421,17 @@ class IntradaySnapshotBuilder:
                 )
             )
         return tuple(result)
+
+
+def _component_freshness(
+    timestamp: datetime,
+    source_time: datetime | None,
+    max_age_seconds: int,
+) -> str:
+    if source_time is None:
+        return "missing"
+    age = (timestamp - source_time).total_seconds()
+    return "fresh" if 0 <= age <= max_age_seconds else "stale"
 
 
 def _point_metrics(bars: list[MinuteBar], quote: PointQuote | None) -> dict[str, object]:

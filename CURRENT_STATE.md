@@ -36,7 +36,7 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 ## Verified Baseline
 
 - `IR-001` passed: 36,060 private minute bars, 25 auction snapshots, 255 no-lookahead snapshots, and 15 transitions reproduced the bounded case. Private results beat full hold on profit protection; account values stay local and improvement versus actual remains unknown.
-- `IR-002` P0 is hardened but still uncalibrated: archives are append-only observations; live peaks and alerts advance monotonically by source time; runtime v2 separates trade date/data/freshness/authority and is fixed `shadow_only`; confirmed executions drive structural re-entry guards, while a second-attempt override is a separate event tied to a real first buy and later new-low observation; the double-click entry schedules 09:25/09:35/10:00 and the UI exposes source/fetch/next/authority plus resolved/invalidation. No notification or trade authority is admitted.
+- `IR-002` P0 is weekend-usable but still uncalibrated: the page opens before bounded provider work; explicit domestic/foreign/local routes, real exchange/runtime/display dates, latest-completed historical review, a pre-registered restart-safe scheduler, and a terminable sub-60-second refresh are live. Runtime v2 remains `shadow_only`; per-component freshness and unknowns fail closed. Confirmed executions and real re-entry-failure observations retain per-sell lineage under single-flight ledger writes. No notification or trade authority is admitted.
 
 - `feat-054` passed after ultimate independent read-only review at `d115e2e` returned PASS with no findings. The bootstrap now provides bounded governance, exact read-only agent contracts, executable manifests, PUBLIC-only traces, goal-bound checkpoints, fail-closed public privacy, and deterministic smoke evidence. This proves structural contracts only, not model-performance benefit or trade authority.
 - `feat-053` passed: the guarded Iwencai completed-close IF/IH/IC/IM adapter aligns spot/contract dates, selects active positive-open-interest contracts, exposes basis and positioning, and falls back serially. It never invents a four-minute change or grants decision authority.
@@ -70,7 +70,7 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 - IR-001 external-mapping returns are explicit acceptance-case inputs, not verified external price observations. Live `catalyst_failure` remains unavailable until a point-in-time external mapping source is wired.
 - Actual 2026-07-31 broker executions are unavailable, so `improvement_vs_actual` remains `unknown`; no proxy strategy is labelled as actual behavior.
-- The live poller has no open-session IR-002 calibration sample yet; the 2026-08-01 Saturday smoke correctly produced missing/blocked, not live evidence. Offline tests do not establish profitability or authorize notifications.
+- The live poller has no open-session IR-002 calibration sample yet. The 2026-08-01 Saturday smoke resolved the real 2026-07-31 session, loaded 90/90 archived symbols, and exposed historical-only authority; this proves weekend usability, not live timing, profitability, or notification admission.
 - The workbench can append user-confirmed sell/re-entry evidence and gate re-entry, but no real execution has been supplied; absence remains unknown rather than “no sale”.
 
 - Codex config and the weekday brief target `D:\work\InsightRadar`. The old `%USERPROFILE%\Documents\stock-assist` root remains empty but process-locked; do not force-delete it.

@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hashlib
 import json
 import secrets
-from threading import Thread
+from threading import Event, Thread
 
 from stock_assist.after_close_workbench_html import render_after_close_workbench
 from stock_assist.decision_workspace import (
@@ -23,11 +23,20 @@ from stock_assist.decision_workspace import (
     restage_workspace,
     write_runtime_state,
 )
-from stock_assist.intraday.polling import _shadow_event_mapping, load_intraday_runtime
+from stock_assist.intraday.polling import (
+    _shadow_event_mapping,
+    load_intraday_runtime,
+    persist_execution_guard,
+    run_intraday_service,
+    stop_intraday_scheduler,
+    stop_intraday_refresh_process,
+)
+from stock_assist.intraday.network import sanitize_diagnostic_text
 from stock_assist.intraday.execution import (
     append_execution,
     append_reentry_confirmation,
     load_executions,
+    load_reentry_failures,
     load_reentry_confirmations,
 )
 from stock_assist.paths import REPORT_DIR
@@ -43,6 +52,7 @@ def serve_portfolio_import(
     port: int = 8765,
     open_browser: bool = True,
     refresh_coordinator: RefreshCoordinator | None = None,
+    intraday_mode: bool = False,
 ) -> None:
     token = secrets.token_urlsafe(24)
     coordinator = refresh_coordinator or RefreshCoordinator()
@@ -68,17 +78,17 @@ def serve_portfolio_import(
                 return
             if self.path == "/api/intraday":
                 raw_runtime = load_intraday_runtime()
-                workspace = _latest_workspace()
-                payload = workspace.get("intraday_radar") if isinstance(workspace, dict) else None
-                if payload is None and isinstance(raw_runtime, dict):
-                    payload, _historical = _normalize_intraday_overlay(
-                        raw_runtime,
-                        expected_trade_date=datetime.now().date().isoformat(),
-                    )
-                if payload is None:
+                if not isinstance(raw_runtime, dict):
                     self._send_json({"error": "尚未生成 intraday runtime"}, status=404)
                     return
-                self._send_json(payload)
+                self._send_json(_intraday_workspace_views(raw_runtime))
+                return
+            if self.path == "/api/intraday/runtime":
+                raw_runtime = load_intraday_runtime()
+                if not isinstance(raw_runtime, dict):
+                    self._send_json({"error": "尚未生成 intraday runtime"}, status=404)
+                    return
+                self._send_json(raw_runtime)
                 return
             if self.path == "/api/executions":
                 self._send_json(
@@ -86,6 +96,9 @@ def serve_portfolio_import(
                         "executions": [asdict(item) for item in load_executions()],
                         "reentry_confirmations": [
                             asdict(item) for item in load_reentry_confirmations()
+                        ],
+                        "reentry_failures": [
+                            asdict(item) for item in load_reentry_failures()
                         ],
                     }
                 )
@@ -180,7 +193,9 @@ def serve_portfolio_import(
                     return
                 if self.path == "/api/execution":
                     record = append_execution(body)
-                    self._send_json(asdict(record), status=201)
+                    result = asdict(record)
+                    result["guard"] = persist_execution_guard()
+                    self._send_json(result, status=201)
                     return
                 if self.path == "/api/reentry-confirmation":
                     record = append_reentry_confirmation(body)
@@ -245,6 +260,24 @@ def serve_portfolio_import(
 
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     url = f"http://127.0.0.1:{port}/"
+    intraday_stop = Event()
+    intraday_thread: Thread | None = None
+    if intraday_mode:
+        def intraday_worker() -> None:
+            try:
+                run_intraday_service(stop_event=intraday_stop)
+            except Exception as exc:
+                print(
+                    "盘中后台刷新结束："
+                    + sanitize_diagnostic_text(type(exc).__name__)
+                )
+
+        intraday_thread = Thread(
+            target=intraday_worker,
+            name="InsightRadarIntradayService",
+            daemon=True,
+        )
+        intraday_thread.start()
     if open_browser:
         import webbrowser
 
@@ -254,6 +287,12 @@ def serve_portfolio_import(
     try:
         server.serve_forever()
     finally:
+        if intraday_mode:
+            intraday_stop.set()
+            stop_intraday_refresh_process()
+            if intraday_thread is not None:
+                intraday_thread.join(timeout=3.0)
+            stop_intraday_scheduler()
         server.server_close()
 
 
@@ -299,10 +338,12 @@ def _latest_workspace() -> dict[str, object] | None:
     if intraday is not None:
         normalized, historical = _normalize_intraday_overlay(
             intraday,
-            expected_trade_date=str(selected.get("effective_market_date") or ""),
+            expected_trade_date=datetime.now().date().isoformat(),
         )
-        selected["intraday_radar"] = normalized
-        if historical:
+        views = _intraday_workspace_views(normalized)
+        selected.update(views)
+        selected["intraday_radar"] = dict(views["selected_session"])
+        if historical and not selected.get("intraday_history"):
             selected["intraday_history"] = [dict(normalized)]
     replay = _latest_intraday_replay()
     if replay is not None:
@@ -317,7 +358,7 @@ def _normalize_intraday_overlay(
     now: datetime | None = None,
     max_age_seconds: int = 180,
 ) -> tuple[dict[str, object], bool]:
-    """Fail closed when a runtime belongs to another day or is outside freshness."""
+    """Classify the runtime view without rewriting its recorded authority state."""
 
     result = dict(runtime)
     for field in ("timeline", "active_alerts"):
@@ -331,9 +372,19 @@ def _normalize_intraday_overlay(
     trade_date = str(result.get("trade_date") or "")
     source_time = _parse_datetime(result.get("source_time"))
     current = now or datetime.now()
+    if result.get("session_mode") == "non_trading_day" or result.get("view_mode") == "historical_review":
+        result["view_mode"] = "historical_review"
+        result["analysis_authority"] = str(
+            result.get("analysis_authority") or "historical_shadow"
+        )
+        result["decision_authority"] = str(
+            result.get("decision_authority") or "historical_shadow_only"
+        )
+        result["trade_authority"] = "none"
+        result["realtime_decision_available"] = False
+        return result, True
     cross_day = (
         not trade_date
-        or trade_date != expected_trade_date
         or trade_date != current.date().isoformat()
     )
     expired = cross_day
@@ -347,16 +398,70 @@ def _normalize_intraday_overlay(
     if result.get("freshness_status") != "fresh":
         expired = True
     if expired:
-        result["status"] = "expired"
-        result["freshness_status"] = "expired"
-        result["decision_authority"] = "none"
+        if result.get("status") == "ready":
+            result["status"] = "shadow"
+        if result.get("decision_authority") == "ready":
+            result["decision_authority"] = "shadow_only"
+        result["view_mode"] = "historical_stale"
+        result["overlay_available"] = False
+        result["overlay_freshness_status"] = "expired"
+        result["trade_authority"] = "none"
         result["data_status"] = "historical" if cross_day else result.get("data_status", "stale")
         result["next_check_time"] = None
     else:
+        result["view_mode"] = str(result.get("view_mode") or "current_session")
+        result["overlay_available"] = True
         if result.get("status") == "ready":
             result["status"] = "shadow"
-        result["decision_authority"] = "shadow_only"
+        result["decision_authority"] = str(
+            result.get("decision_authority") or "shadow_only"
+        )
+        result["trade_authority"] = "none"
     return result, cross_day or expired
+
+
+def _intraday_workspace_views(
+    runtime: Mapping[str, object],
+    *,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    current = now or datetime.now()
+    normalized, historical = _normalize_intraday_overlay(
+        dict(runtime),
+        expected_trade_date=current.date().isoformat(),
+        now=current,
+    )
+    current_session: dict[str, object]
+    latest_completed: dict[str, object] | None = None
+    history: list[dict[str, object]] = []
+    if normalized.get("view_mode") == "historical_review":
+        current_session = {
+            "calendar_date": str(normalized.get("calendar_date") or current.date().isoformat()),
+            "current_exchange_trade_date": normalized.get("current_exchange_trade_date"),
+            "session_mode": "non_trading_day",
+            "view_mode": "current_session",
+            "data_status": "not_applicable_non_trading_day",
+            "analysis_authority": "none",
+            "decision_authority": "blocked_non_trading_day",
+            "trade_authority": "none",
+            "realtime_decision_available": False,
+        }
+        latest_completed = dict(normalized)
+        history.append(dict(normalized))
+        selected = latest_completed
+    else:
+        current_session = dict(normalized)
+        selected = current_session
+        if historical:
+            history.append(dict(normalized))
+    return {
+        "schema_version": "intraday-workspace/v1",
+        "view_mode": str(selected.get("view_mode") or "current_session"),
+        "current_session": current_session,
+        "latest_completed_session": latest_completed,
+        "intraday_history": history,
+        "selected_session": selected,
+    }
 
 
 def _parse_datetime(value: object) -> datetime | None:

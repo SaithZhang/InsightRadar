@@ -200,12 +200,18 @@ class AmazingDataClient:
         codes: Iterable[str],
         begin_date: int,
         end_date: int,
+        *,
+        timeout: float | None = None,
     ) -> Any:
+        kwargs: dict[str, Any] = {}
+        if timeout is not None:
+            kwargs["timeout"] = timeout
         return self._call_sdk(
             self.market_data.query_snapshot,
             code_list=list(codes),
             begin_date=begin_date,
             end_date=end_date,
+            **kwargs,
         )
 
     def get_future_code_list(self, security_type: str = "ZJ_FUTURE") -> list[str]:

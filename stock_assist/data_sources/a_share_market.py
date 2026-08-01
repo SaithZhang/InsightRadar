@@ -8,10 +8,15 @@ import json
 import re
 from typing import Any
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from stock_assist.data_sources.iwencai_market import _query_iwencai
 from stock_assist.data_sources.xysz import AmazingDataClient
+from stock_assist.intraday.network import (
+    build_urllib_opener,
+    provider_policy,
+    sanitized_error_type,
+)
 
 
 EASTMONEY_TRENDS_URL = "https://push2.eastmoney.com/api/qt/stock/trends2/get"
@@ -395,10 +400,14 @@ def fetch_intraday_snapshot(secid: str, label: str, category: str, timeout: int 
     url = f"{EASTMONEY_TRENDS_URL}?{urlencode(params)}"
     try:
         request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urlopen(request, timeout=timeout) as response:
+        opener = build_urllib_opener(provider_policy("eastmoney_push2"))
+        with opener.open(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except Exception as exc:
-        return _empty_snapshot(secid, label, category, f"request failed: {exc}")
+        return _empty_snapshot(
+            secid, label, category,
+            f"request failed: {sanitized_error_type(exc)}",
+        )
 
     data = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(data, dict):

@@ -2,30 +2,49 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import datetime, time as clock_time
 import hashlib
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
+from threading import Event, Lock
 import time
-from typing import Iterable, Mapping
+from typing import Callable, Iterable, Mapping
 
 from stock_assist.data_sources.xysz import AmazingDataClient
 from stock_assist.intraday.archive import MinuteArchive
 from stock_assist.intraday.contracts import IntradayAlert, IntradaySnapshot, contract_dict
 from stock_assist.intraday.execution import (
     DEFAULT_EXECUTION_LEDGER,
+    DEFAULT_REENTRY_FAILURE_LEDGER,
     DEFAULT_REENTRY_CONFIRMATION_LEDGER,
+    detect_reentry_failures,
     load_executions,
+    load_reentry_failures,
     load_reentry_confirmations,
 )
 from stock_assist.intraday.providers import (
+    EndpointCircuitBreaker,
     fetch_amazingdata_latest_quotes,
     fetch_amazingdata_minute_bars,
     fetch_eastmoney_minute_bars,
 )
-from stock_assist.intraday.rules import IntradayDecisionEngine, ReentryPositionState
+from stock_assist.intraday.network import (
+    declared_provider_routes,
+    provider_policy,
+    sanitize_diagnostic_text,
+    sanitized_error_type,
+)
+from stock_assist.intraday.session import TradingSessionResolution, resolve_trading_session
+from stock_assist.intraday.rules import (
+    RULE_VERSION,
+    IntradayDecisionEngine,
+    ReentryPositionState,
+)
 from stock_assist.intraday.snapshots import IntradaySnapshotBuilder
 from stock_assist.intraday.universe import load_intraday_universe, universe_symbols
 from stock_assist.paths import DATA_DIR
@@ -36,6 +55,11 @@ RUNTIME_PATH = DATA_DIR / "intraday" / "runtime.json"
 REENTRY_STATE_PATH = DATA_DIR / "intraday" / "reentry_state.json"
 SCHEDULER_LOCK_PATH = DATA_DIR / "intraday" / "checkpoint-scheduler.lock"
 ALERT_ARCHIVE_ROOT = DATA_DIR / "intraday" / "alerts"
+PROVIDER_DIAGNOSTIC_PATH = DATA_DIR / "intraday" / "provider-diagnostics.jsonl"
+REFRESH_LOCK_PATH = DATA_DIR / "intraday" / "refresh.lock"
+REFRESH_HARD_TIMEOUT_SECONDS = 57.0
+_ACTIVE_REFRESH_PROCESS: subprocess.Popen[bytes] | None = None
+_ACTIVE_REFRESH_PROCESS_LOCK = Lock()
 CHECKPOINTS = (clock_time(9, 25), clock_time(9, 35), clock_time(10, 0))
 TECHNOLOGY_THEME_IDS = (
     "ai_hardware_semiconductor",
@@ -59,77 +83,275 @@ def poll_intraday(
         raise ValueError("iterations must be between 1 and 240")
     if not 5 <= interval_seconds <= 60:
         raise ValueError("interval_seconds must be between 5 and 60")
-    payload: dict[str, object] = {}
-    for index in range(iterations):
-        payload = poll_intraday_once(allow_fallback=allow_fallback)
-        _append_alert_archive(payload)
-        _atomic_json(RUNTIME_PATH, payload)
-        if index + 1 < iterations:
-            time.sleep(interval_seconds)
-    return payload
+    lock = _acquire_refresh_lock(datetime.now())
+    if lock is None:
+        existing = load_intraday_runtime() or {}
+        return {
+            **existing,
+            "refresh_single_flight": "already_running",
+        }
+    try:
+        payload: dict[str, object] = {}
+        for index in range(iterations):
+            payload = poll_intraday_once(
+                allow_fallback=allow_fallback,
+                persist_progress=True,
+            )
+            _append_alert_archive(payload)
+            _atomic_json(RUNTIME_PATH, payload)
+            if index + 1 < iterations:
+                time.sleep(interval_seconds)
+        return payload
+    finally:
+        os.close(lock)
+        try:
+            REFRESH_LOCK_PATH.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def poll_intraday_once(
     *,
     as_of: datetime | None = None,
     allow_fallback: bool = True,
+    persist_progress: bool = False,
+    refresh_timeout_seconds: float = 60.0,
 ) -> dict[str, object]:
     now = as_of or datetime.now()
     previous = load_intraday_runtime()
-    if not isinstance(previous, Mapping) or previous.get("trade_date") != now.date().isoformat():
-        previous = None
     universe = load_intraday_universe()
     themes = [dict(item) for item in universe["themes"]]
     symbols = universe_symbols(universe)
     portfolio = load_portfolio()
     symbols = tuple(dict.fromkeys([*symbols, *(item.code.upper() for item in portfolio.holdings)]))
     archive = MinuteArchive()
+    started = time.monotonic()
+    deadline = started + refresh_timeout_seconds
     failures: dict[str, str] = {}
-    bars = []
-    quotes = []
-    client = AmazingDataClient()
+    bars: list[object] = []
+    quotes: list[object] = []
+    diagnostics: list[dict[str, object]] = []
+    client: AmazingDataClient | None = None
+
+    def progress(
+        phase: str,
+        *,
+        provider: str | None = None,
+        batch: int = 0,
+        total_batches: int = 0,
+        processed: int = 0,
+        succeeded: int = 0,
+        failed: int = 0,
+        missing: int = 0,
+        circuit_state: str = "closed",
+        next_action: str = "",
+        session: TradingSessionResolution | None = None,
+    ) -> None:
+        if not persist_progress:
+            return
+        _write_refresh_progress(
+            now,
+            previous,
+            phase=phase,
+            provider=provider,
+            batch=batch,
+            total_batches=total_batches,
+            processed=processed,
+            total_symbols=len(symbols),
+            succeeded=succeeded,
+            failed=failed,
+            missing=missing,
+            circuit_state=circuit_state,
+            elapsed_seconds=max(0.0, time.monotonic() - started),
+            next_action=next_action,
+            session=session,
+        )
+
+    progress("resolving_trade_date", next_action="解析A股真实交易日")
     try:
-        for batch in _batches(symbols, 24):
+        try:
+            client = AmazingDataClient()
+        except Exception as exc:
+            failures["galaxy_amazingdata:configuration"] = sanitized_error_type(exc)
+            _append_provider_diagnostic("galaxy_amazingdata", exc, 0, "failed", 1, "closed")
+        session = resolve_trading_session(now, client=client, archive=archive)
+        progress(
+            "trade_date_resolved",
+            provider="galaxy_amazingdata",
+            next_action="读取本地不可变行情档案",
+            session=session,
+        )
+        runtime_day = session.runtime_trade_date
+        if runtime_day is None:
+            return _runtime_envelope(
+                now,
+                status="blocked",
+                data_status="missing",
+                freshness_status="missing",
+                source_time=None,
+                previous=None,
+                session=session,
+                extra={
+                    "latest_snapshot": None,
+                    "timeline": [],
+                    "active_alerts": [],
+                    "opportunity_states": {},
+                    "data_gaps": list(session.data_gaps),
+                    "provider_status": {"diagnostics": diagnostics},
+                },
+            )
+        if not isinstance(previous, Mapping) or previous.get("trade_date") != runtime_day.isoformat():
+            previous = None
+
+        through = now if runtime_day == now.date() else None
+        archived = archive.read_bars(
+            runtime_day,
+            symbols=symbols,
+            through=through,
+            observed_through=now,
+        )
+        archived_symbols = set(archived)
+        missing_primary = [symbol for symbol in symbols if symbol not in archived_symbols]
+        batches = list(_batches(missing_primary, 24))
+        succeeded_symbols: set[str] = set(archived_symbols)
+        for batch_index, batch in enumerate(batches, start=1):
+            if time.monotonic() >= deadline:
+                failures.update({symbol: "refresh_total_timeout" for symbol in batch})
+                break
+            progress(
+                "fetching_primary",
+                provider="galaxy_amazingdata",
+                batch=batch_index,
+                total_batches=len(batches),
+                processed=len(succeeded_symbols) + len(failures),
+                succeeded=len(succeeded_symbols),
+                failed=len(failures),
+                missing=max(0, len(symbols) - len(succeeded_symbols)),
+                next_action="继续读取银河分钟行情",
+                session=session,
+            )
             try:
-                bars.extend(
-                    fetch_amazingdata_minute_bars(
-                        client,
-                        batch,
-                        start=now.date(),
-                        end=now.date(),
-                        fetched_at=now,
+                if client is None:
+                    raise RuntimeError("AmazingData client unavailable")
+                remaining = max(0.1, deadline - time.monotonic())
+                fetched_bars = fetch_amazingdata_minute_bars(
+                    client,
+                    batch,
+                    start=runtime_day,
+                    end=runtime_day,
+                    fetched_at=now,
+                    timeout_seconds=min(
+                        provider_policy("galaxy_amazingdata").timeout_seconds,
+                        remaining,
+                    ),
+                )
+                bars.extend(fetched_bars)
+                succeeded_symbols.update(item.symbol for item in fetched_bars)
+                if runtime_day == now.date() and session.session_mode in {
+                    "preopen", "live", "after_close"
+                }:
+                    quotes.extend(
+                        fetch_amazingdata_latest_quotes(
+                            client,
+                            batch,
+                            as_of=now,
+                            fetched_at=now,
+                            timeout_seconds=min(
+                                provider_policy("galaxy_amazingdata").timeout_seconds,
+                                max(0.1, deadline - time.monotonic()),
+                            ),
+                        )
+                    )
+                diagnostics.append(
+                    _provider_diagnostic(
+                        "galaxy_amazingdata",
+                        elapsed_ms=int((time.monotonic() - started) * 1000),
+                        status="success",
+                        error_type=None,
+                        attempt_count=batch_index,
+                        circuit_state="closed",
                     )
                 )
-                quotes.extend(fetch_amazingdata_latest_quotes(client, batch, as_of=now, fetched_at=now))
             except Exception as exc:
-                message = f"{type(exc).__name__}: {exc}"
-                failures.update({symbol: message for symbol in batch})
+                error_type = sanitized_error_type(exc)
+                failures.update({symbol: error_type for symbol in batch})
+                _append_provider_diagnostic(
+                    "galaxy_amazingdata", exc,
+                    int((time.monotonic() - started) * 1000),
+                    "failed", batch_index, "closed",
+                )
+                diagnostics.append(
+                    _provider_diagnostic(
+                        "galaxy_amazingdata",
+                        elapsed_ms=int((time.monotonic() - started) * 1000),
+                        status="failed",
+                        error_type=error_type,
+                        attempt_count=batch_index,
+                        circuit_state="closed",
+                    )
+                )
     finally:
-        client.logout()
+        if client is not None:
+            client.logout()
     if bars:
         archive.write_bars(bars)
     if quotes:
         archive.write_quotes(quotes)
     archived_today = archive.read_bars(
-        now.date(), symbols=symbols, through=now, observed_through=now
+        runtime_day, symbols=symbols,
+        through=now if runtime_day == now.date() else None,
+        observed_through=now,
     )
     missing = sorted(set(symbols) - set(archived_today))
     fallback_failures: dict[str, str] = {}
-    if allow_fallback and missing:
-        fallback, fallback_failures = fetch_eastmoney_minute_bars(
-            missing,
-            start=now.date(),
-            end=now.date(),
-            fetched_at=now,
+    if allow_fallback and missing and time.monotonic() < deadline:
+        progress(
+            "fetching_fallback",
+            provider="eastmoney_push2his",
+            processed=len(symbols) - len(missing),
+            succeeded=len(archived_today),
+            failed=len(failures),
+            missing=len(missing),
+            next_action="备用源有界请求并在重复错误后熔断",
+            session=session,
         )
+        remaining_seconds = max(0.1, min(20.0, deadline - time.monotonic()))
+        fallback_result = fetch_eastmoney_minute_bars(
+            missing,
+            start=runtime_day,
+            end=runtime_day,
+            fetched_at=now,
+            circuit_breaker=EndpointCircuitBreaker(failure_threshold=3),
+            include_diagnostics=True,
+            total_timeout_seconds=remaining_seconds,
+        )
+        fallback, fallback_failures, fallback_diagnostic = fallback_result
+        diagnostics.append(dict(fallback_diagnostic))
         if fallback:
             archive.write_bars(fallback)
             archived_today = archive.read_bars(
-                now.date(), symbols=symbols, through=now, observed_through=now
+                runtime_day, symbols=symbols,
+                through=now if runtime_day == now.date() else None,
+                observed_through=now,
             )
             for recovered in {item.symbol for item in fallback}:
                 failures.pop(recovered, None)
+        progress(
+            "fallback_finished",
+            provider="eastmoney_push2his",
+            processed=len(symbols),
+            succeeded=len(archived_today),
+            failed=len(fallback_failures),
+            missing=max(0, len(symbols) - len(archived_today)),
+            circuit_state=str(fallback_diagnostic.get("circuit_state") or "closed"),
+            next_action="构建点时快照",
+            session=session,
+        )
+    elif missing and time.monotonic() >= deadline:
+        fallback_failures.update({symbol: "refresh_total_timeout" for symbol in missing})
     failures.update(fallback_failures)
+    if archived_today:
+        detect_reentry_failures(archived_today, rule_version=RULE_VERSION)
     if not archived_today and not quotes:
         return _runtime_envelope(
             now,
@@ -138,6 +360,7 @@ def poll_intraday_once(
             freshness_status="missing",
             source_time=None,
             previous=previous,
+            session=session,
             extra={
             "latest_snapshot": None,
             "timeline": list(previous.get("timeline", [])) if isinstance(previous, Mapping) else [],
@@ -145,24 +368,33 @@ def poll_intraday_once(
             "opportunity_states": {},
             "data_gaps": [
                 "当前交易日没有可见分钟线或快照；页面保留盘后能力，但盘中状态不可用。",
-                *sorted(set(failures.values())),
+                *_failure_summaries(failures),
+                *session.data_gaps,
             ],
-            "provider_status": {"failed_symbols": failures},
+            "provider_status": {
+                "failed_count": len(failures),
+                "diagnostics": diagnostics,
+            },
+            "refresh_progress": _final_progress(
+                started, len(symbols), 0, len(failures), len(symbols), "failed"
+            ),
             },
         )
     case = _live_case(portfolio, themes, quotes, previous=previous)
-    prior_dates = [day for day in archive.available_dates() if day <= now.date()][-6:]
+    prior_dates = [day for day in archive.available_dates() if day <= runtime_day][-6:]
     bars_by_date = {
         day: archive.read_bars(
             day,
             symbols=symbols,
-            through=now if day == now.date() else None,
+            through=now if day == runtime_day and runtime_day == now.date() else None,
             observed_through=now,
         )
         for day in prior_dates
     }
     visible_quotes = archive.read_quotes(
-        now.date(), through=now, observed_through=now
+        runtime_day,
+        through=now if runtime_day == now.date() else None,
+        observed_through=now,
     )
     builder = IntradaySnapshotBuilder(
         case=case,
@@ -226,9 +458,9 @@ def poll_intraday_once(
         non_advancing_gap = (
             "本轮 source_time 未单调推进；新供应商 observation 已追加保存，但未改写既有点时快照或警报。"
         )
-    if (now - source_time).total_seconds() > 120 and "runtime_source_time" not in stale:
+    if runtime_day == now.date() and (now - source_time).total_seconds() > 120 and "runtime_source_time" not in stale:
         stale.append("runtime_source_time")
-    freshness_status = (
+    freshness_status = "historical" if session.view_mode == "historical_review" else (
         "missing"
         if not latest.quote_freshness
         else "stale"
@@ -238,11 +470,22 @@ def poll_intraday_once(
     peak_observations = _merge_peak_observations(previous, snapshots, previous_source_time)
     return _runtime_envelope(
         now,
-        status="partial" if failures or stale or freshness_status != "fresh" else "shadow",
-        data_status="partial" if failures else "available",
+        status=(
+            "historical_review"
+            if session.view_mode == "historical_review"
+            else "partial" if failures or stale or freshness_status != "fresh" else "shadow"
+        ),
+        data_status=(
+            "historical_partial"
+            if session.view_mode == "historical_review" and failures
+            else "historical_available"
+            if session.view_mode == "historical_review"
+            else "partial" if failures else "available"
+        ),
         freshness_status=freshness_status,
         source_time=source_time,
         previous=previous,
+        session=session,
         extra={
         "latest_snapshot": latest_snapshot_payload,
         "timeline": timeline,
@@ -251,7 +494,8 @@ def poll_intraday_once(
         "opportunity_states": dict(latest_states),
         "data_gaps": [
             *(f"行情不新鲜或缺失：{', '.join(stale)}" for _ in [0] if stale),
-            *(f"{symbol}: {reason}" for symbol, reason in sorted(failures.items())),
+            *_failure_summaries(failures),
+            *session.data_gaps,
             *([non_advancing_gap] if non_advancing_gap else []),
             "外部映射强度尚未接入实时点时源，catalyst_failure 只在该字段可用时授权。",
             *(
@@ -263,9 +507,18 @@ def poll_intraday_once(
         "provider_status": {
             "primary_bar_count": len(bars),
             "quote_count": len(quotes),
-            "failed_symbols": failures,
-            "local_archive": str(archive.root),
+            "failed_count": len(failures),
+            "local_archive_available": bool(archived_today),
+            "diagnostics": diagnostics,
         },
+        "refresh_progress": _final_progress(
+            started,
+            len(symbols),
+            len(archived_today),
+            len(failures),
+            max(0, len(symbols) - len(archived_today)),
+            "partial" if failures else "succeeded",
+        ),
         },
     )
 
@@ -275,10 +528,17 @@ def poll_intraday_checkpoints(
     allow_fallback: bool = True,
     now_fn=datetime.now,
     sleep_fn=time.sleep,
+    refresh_fn: Callable[[], dict[str, object]] | None = None,
+    stop_event: Event | None = None,
+    scheduler_lock: int | None = None,
 ) -> dict[str, object]:
     """Reliably run the remaining 09:25/09:35/10:00 checkpoints once per day."""
 
-    lock = _acquire_scheduler_lock(now_fn())
+    lock = (
+        scheduler_lock
+        if scheduler_lock is not None
+        else _acquire_scheduler_lock(now_fn())
+    )
     if lock is None:
         return load_intraday_runtime() or {
             "status": "scheduler_already_running",
@@ -286,10 +546,23 @@ def poll_intraday_checkpoints(
         }
     try:
         while True:
+            if stop_event is not None and stop_event.is_set():
+                return load_intraday_runtime() or {
+                    "status": "scheduler_stopped",
+                    "decision_authority": "shadow_only",
+                    "trade_authority": "none",
+                }
             now = now_fn()
             runtime = load_intraday_runtime()
+            if isinstance(runtime, Mapping) and runtime.get("session_mode") == "non_trading_day":
+                result = dict(runtime)
+                result["checkpoint_status"] = "disabled_non_trading_day"
+                result["next_check_time"] = None
+                _atomic_json(RUNTIME_PATH, result)
+                return result
             completed = _completed_checkpoints(runtime, now.date().isoformat())
-            target = _next_scheduler_target(now, completed)
+            exhausted = _exhausted_checkpoints(runtime, now.date().isoformat())
+            target = _next_scheduler_target(now, completed | exhausted)
             if target is None:
                 return runtime or _runtime_envelope(
                     now,
@@ -302,17 +575,21 @@ def poll_intraday_checkpoints(
                 )
             wait_seconds = (target - now).total_seconds()
             if wait_seconds > 0:
-                sleep_fn(min(wait_seconds, 30.0))
+                wait_slice = min(wait_seconds, 30.0)
+                if stop_event is not None:
+                    stop_event.wait(wait_slice)
+                else:
+                    sleep_fn(wait_slice)
                 continue
-            payload = poll_intraday_once(as_of=now, allow_fallback=allow_fallback)
+            payload = (
+                refresh_fn()
+                if refresh_fn is not None
+                else poll_intraday_once(as_of=now, allow_fallback=allow_fallback)
+            )
             _append_alert_archive(payload)
             _atomic_json(RUNTIME_PATH, payload)
     finally:
-        os.close(lock)
-        try:
-            SCHEDULER_LOCK_PATH.unlink()
-        except FileNotFoundError:
-            pass
+        _release_scheduler_lock(lock)
 
 
 def _runtime_envelope(
@@ -323,32 +600,62 @@ def _runtime_envelope(
     freshness_status: str,
     source_time: datetime | None,
     previous: Mapping[str, object] | None,
+    session: TradingSessionResolution | None = None,
     extra: Mapping[str, object],
 ) -> dict[str, object]:
-    trade_date = now.date().isoformat()
+    runtime_day = session.runtime_trade_date if session is not None else now.date()
+    trade_date = runtime_day.isoformat() if runtime_day is not None else ""
     runs = [
         dict(item)
         for item in previous.get("checkpoint_runs", [])
         if isinstance(item, Mapping) and item.get("trade_date") == trade_date
     ] if isinstance(previous, Mapping) else []
-    completed = {str(item.get("checkpoint")) for item in runs}
-    checkpoint = _checkpoint_for_poll(now, completed)
+    completed = {
+        str(item.get("checkpoint"))
+        for item in runs
+        if item.get("status") in {"succeeded", "partial"}
+    }
+    pre_exhausted = _exhausted_checkpoints(
+        {"trade_date": trade_date, "checkpoint_runs": runs},
+        trade_date,
+    )
+    checkpoints_enabled = session is None or session.session_mode != "non_trading_day"
+    checkpoint = (
+        _checkpoint_for_poll(now, completed | pre_exhausted)
+        if checkpoints_enabled
+        else None
+    )
     if checkpoint is not None:
+        run_status = _checkpoint_run_status(status)
         runs.append(
             {
                 "trade_date": trade_date,
                 "checkpoint": checkpoint.strftime("%H:%M"),
                 "source_time": source_time.isoformat(timespec="seconds") if source_time else None,
                 "fetch_time": now.isoformat(timespec="seconds"),
-                "status": status,
+                "status": run_status,
+                "attempt_count": 1 + sum(
+                    1 for item in runs if item.get("checkpoint") == checkpoint.strftime("%H:%M")
+                ),
             }
         )
-        completed.add(checkpoint.strftime("%H:%M"))
-    next_check = next_checkpoint_time(now, completed)
+        if run_status in {"succeeded", "partial"}:
+            completed.add(checkpoint.strftime("%H:%M"))
+    exhausted = _exhausted_checkpoints(
+        {"trade_date": trade_date, "checkpoint_runs": runs},
+        trade_date,
+    )
+    resolved_checkpoints = completed | exhausted
+    next_check = (
+        next_checkpoint_time(now, resolved_checkpoints)
+        if checkpoints_enabled
+        else None
+    )
     missed = [
         checkpoint.strftime("%H:%M")
         for checkpoint in CHECKPOINTS
-        if checkpoint.strftime("%H:%M") not in completed
+        if checkpoints_enabled
+        and checkpoint.strftime("%H:%M") not in resolved_checkpoints
         and (now - datetime.combine(now.date(), checkpoint)).total_seconds() > 180
     ]
     payload: dict[str, object] = {
@@ -362,10 +669,27 @@ def _runtime_envelope(
         "status": status,
         "data_status": data_status,
         "freshness_status": freshness_status,
-        "decision_authority": "shadow_only",
+        "analysis_authority": (
+            session.analysis_authority if session is not None else "live_shadow"
+        ),
+        "decision_authority": (
+            session.decision_authority if session is not None else "shadow_only"
+        ),
+        "trade_authority": "none",
+        "network_routes": declared_provider_routes(),
         "checkpoint_runs": runs,
         "missed_checkpoints": missed,
+        "checkpoint_status": (
+            "disabled_non_trading_day"
+            if not checkpoints_enabled
+            else _checkpoint_run_status(status) if checkpoint is not None
+            else "scheduled" if next_check is not None
+            else "succeeded"
+        ),
     }
+    if session is not None:
+        payload.update(session.as_dict())
+        payload["trade_date"] = trade_date
     payload.update(extra)
     payload["timeline"] = [
         _shadow_event_mapping(item)
@@ -378,6 +702,385 @@ def _runtime_envelope(
         if isinstance(item, Mapping)
     ]
     return payload
+
+
+def run_intraday_service(
+    *,
+    allow_fallback: bool = True,
+    stop_event: Event | None = None,
+) -> dict[str, object]:
+    """Own one initial refresh and the remaining bounded checkpoints in-process."""
+
+    now = datetime.now()
+    scheduler_lock = _acquire_scheduler_lock(now)
+    if scheduler_lock is None:
+        return load_intraday_runtime() or {
+            "status": "scheduler_already_running",
+            "decision_authority": "shadow_only",
+            "trade_authority": "none",
+        }
+    try:
+        _write_refresh_progress(
+            now,
+            load_intraday_runtime(),
+            phase="workspace_started",
+            provider=None,
+            batch=0,
+            total_batches=0,
+            processed=0,
+            total_symbols=0,
+            succeeded=0,
+            failed=0,
+            missing=0,
+            circuit_state="closed",
+            elapsed_seconds=0.0,
+            next_action="后台解析A股真实交易日",
+            session=None,
+        )
+        payload = _run_bounded_refresh(allow_fallback=allow_fallback)
+        progress = payload.get("refresh_progress")
+        if isinstance(progress, Mapping):
+            print(
+                "盘中刷新："
+                f"{progress.get('status')}，已处理 {progress.get('processed_symbols')}/"
+                f"{progress.get('total_symbols')}，失败 {progress.get('failed_count')}。"
+            )
+        if payload.get("session_mode") == "non_trading_day":
+            return payload
+        checkpoint_lock = scheduler_lock
+        scheduler_lock = None
+        return poll_intraday_checkpoints(
+            allow_fallback=allow_fallback,
+            refresh_fn=lambda: _run_bounded_refresh(allow_fallback=allow_fallback),
+            stop_event=stop_event,
+            scheduler_lock=checkpoint_lock,
+        )
+    finally:
+        if scheduler_lock is not None:
+            _release_scheduler_lock(scheduler_lock)
+
+
+def _write_refresh_progress(
+    now: datetime,
+    previous: Mapping[str, object] | None,
+    *,
+    phase: str,
+    provider: str | None,
+    batch: int,
+    total_batches: int,
+    processed: int,
+    total_symbols: int,
+    succeeded: int,
+    failed: int,
+    missing: int,
+    circuit_state: str,
+    elapsed_seconds: float,
+    next_action: str,
+    session: TradingSessionResolution | None,
+) -> None:
+    payload = dict(previous) if isinstance(previous, Mapping) else {}
+    payload.update(
+        {
+            "schema_version": "intraday-runtime/v2",
+            "generated_at": now.isoformat(timespec="seconds"),
+            "fetch_time": now.isoformat(timespec="seconds"),
+            "status": "running",
+            "trade_authority": "none",
+            "network_routes": declared_provider_routes(),
+            "scheduler_status": "registered",
+            "refresh_progress": {
+                "phase": phase,
+                "provider": provider,
+                "route_policy": (
+                    provider_policy(provider).proxy_policy if provider else "automatic"
+                ),
+                "route_display": (
+                    provider_policy(provider).display_route if provider else "自动/未知"
+                ),
+                "batch": batch,
+                "total_batches": total_batches,
+                "processed_symbols": processed,
+                "total_symbols": total_symbols,
+                "succeeded_count": succeeded,
+                "failed_count": failed,
+                "missing_count": missing,
+                "circuit_state": circuit_state,
+                "elapsed_seconds": round(elapsed_seconds, 1),
+                "last_success_time": payload.get("last_success_time"),
+                "next_action": next_action,
+                "status": "running",
+            },
+        }
+    )
+    if session is not None:
+        payload.update(session.as_dict())
+        payload["trade_date"] = (
+            session.runtime_trade_date.isoformat()
+            if session.runtime_trade_date is not None else ""
+        )
+    _atomic_json(RUNTIME_PATH, payload)
+    route = provider_policy(provider).display_route if provider else "自动/未知"
+    print(
+        f"盘中刷新 · {phase} · {provider or 'session'} / {route} · "
+        f"{processed}/{total_symbols} · {elapsed_seconds:.1f}s"
+    )
+
+
+def _final_progress(
+    started: float,
+    total: int,
+    succeeded: int,
+    failed: int,
+    missing: int,
+    status: str,
+) -> dict[str, object]:
+    return {
+        "phase": "refresh_finished",
+        "provider": None,
+        "route_policy": "automatic",
+        "route_display": "自动/未知",
+        "batch": 0,
+        "total_batches": 0,
+        "processed_symbols": total,
+        "total_symbols": total,
+        "succeeded_count": succeeded,
+        "failed_count": failed,
+        "missing_count": missing,
+        "circuit_state": "closed",
+        "elapsed_seconds": round(max(0.0, time.monotonic() - started), 1),
+        "last_success_time": (
+            datetime.now().isoformat(timespec="seconds") if succeeded else None
+        ),
+        "next_action": "页面可继续使用",
+        "status": status,
+    }
+
+
+def _run_bounded_refresh(
+    *,
+    allow_fallback: bool,
+    timeout_seconds: float = REFRESH_HARD_TIMEOUT_SECONDS,
+) -> dict[str, object]:
+    """Run one real refresh out-of-process so a stuck SDK call is terminable."""
+
+    global _ACTIVE_REFRESH_PROCESS
+    command = [
+        sys.executable,
+        "-m",
+        "stock_assist.cli",
+        "intraday-poll",
+        "--iterations",
+        "1",
+    ]
+    if not allow_fallback:
+        command.append("--no-fallback")
+    started = time.monotonic()
+    process = subprocess.Popen(
+        command,
+        cwd=Path(__file__).resolve().parents[2],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    with _ACTIVE_REFRESH_PROCESS_LOCK:
+        _ACTIVE_REFRESH_PROCESS = process
+    timed_out = False
+    try:
+        try:
+            return_code = process.wait(timeout=timeout_seconds)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            process.terminate()
+            try:
+                process.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=1.0)
+            return_code = process.returncode
+    finally:
+        _remove_refresh_lock_owned_by(process.pid)
+        with _ACTIVE_REFRESH_PROCESS_LOCK:
+            if _ACTIVE_REFRESH_PROCESS is process:
+                _ACTIVE_REFRESH_PROCESS = None
+    payload = load_intraday_runtime() or {}
+    if timed_out:
+        return _mark_refresh_process_failure(
+            payload,
+            reason="refresh_total_timeout",
+            elapsed_seconds=time.monotonic() - started,
+        )
+    if return_code != 0:
+        return _mark_refresh_process_failure(
+            payload,
+            reason="refresh_worker_failed",
+            elapsed_seconds=time.monotonic() - started,
+        )
+    return payload
+
+
+def stop_intraday_refresh_process() -> None:
+    """Stop only the child refresh process owned by this workspace process."""
+
+    with _ACTIVE_REFRESH_PROCESS_LOCK:
+        process = _ACTIVE_REFRESH_PROCESS
+    if process is None or process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=1.0)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=1.0)
+    _remove_refresh_lock_owned_by(process.pid)
+
+
+def stop_intraday_scheduler() -> None:
+    """Release only a scheduler lock owned by the current workspace process."""
+
+    _remove_lock_owned_by(SCHEDULER_LOCK_PATH, os.getpid())
+
+
+def _remove_refresh_lock_owned_by(process_id: int) -> None:
+    """Remove only the single-flight lock written by the terminated child."""
+
+    _remove_lock_owned_by(REFRESH_LOCK_PATH, process_id)
+
+
+def _remove_lock_owned_by(path: Path, process_id: int) -> None:
+    try:
+        owner = path.read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return
+    if not owner.startswith(f"pid={process_id} "):
+        return
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _mark_refresh_process_failure(
+    payload: Mapping[str, object],
+    *,
+    reason: str,
+    elapsed_seconds: float,
+) -> dict[str, object]:
+    result = dict(payload)
+    raw_gaps = result.get("data_gaps")
+    gaps = [str(item) for item in raw_gaps] if isinstance(raw_gaps, list) else []
+    message = (
+        "总刷新达到硬时限；后台工作进程已终止，页面和既有真实档案继续可用。"
+        if reason == "refresh_total_timeout"
+        else "后台刷新工作进程异常结束；页面和既有真实档案继续可用。"
+    )
+    if message not in gaps:
+        gaps.append(message)
+    raw_progress = result.get("refresh_progress")
+    progress = dict(raw_progress) if isinstance(raw_progress, Mapping) else {}
+    progress.update(
+        {
+            "phase": reason,
+            "status": "failed",
+            "elapsed_seconds": round(elapsed_seconds, 1),
+            "next_action": "保留当前页面；等待下一次有界刷新",
+        }
+    )
+    result.update(
+        {
+            "schema_version": "intraday-runtime/v2",
+            "status": "partial" if result.get("latest_snapshot") else "blocked",
+            "trade_authority": "none",
+            "data_gaps": gaps,
+            "refresh_progress": progress,
+            "refresh_process_status": reason,
+            "network_routes": declared_provider_routes(),
+        }
+    )
+    _atomic_json(RUNTIME_PATH, result)
+    return result
+
+
+def _provider_diagnostic(
+    provider: str,
+    *,
+    elapsed_ms: int,
+    status: str,
+    error_type: str | None,
+    attempt_count: int,
+    circuit_state: str,
+) -> dict[str, object]:
+    policy = provider_policy(provider)
+    return {
+        "provider": provider,
+        "route_policy": policy.proxy_policy,
+        "route_display": policy.display_route,
+        "elapsed_ms": max(0, elapsed_ms),
+        "status": status,
+        "sanitized_error_type": error_type,
+        "attempt_count": attempt_count,
+        "circuit_state": circuit_state,
+        "route_scope": policy.route_scope,
+        "os_tun_bypass_guaranteed": policy.os_tun_bypass_guaranteed,
+    }
+
+
+def _append_provider_diagnostic(
+    provider: str,
+    exc: BaseException,
+    elapsed_ms: int,
+    status: str,
+    attempt_count: int,
+    circuit_state: str,
+) -> None:
+    record = _provider_diagnostic(
+        provider,
+        elapsed_ms=elapsed_ms,
+        status=status,
+        error_type=sanitized_error_type(exc),
+        attempt_count=attempt_count,
+        circuit_state=circuit_state,
+    )
+    record["fetched_at"] = datetime.now().isoformat(timespec="seconds")
+    record["local_error"] = sanitize_diagnostic_text(repr(exc))
+    PROVIDER_DIAGNOSTIC_PATH.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(
+        PROVIDER_DIAGNOSTIC_PATH,
+        os.O_APPEND | os.O_CREAT | os.O_WRONLY,
+        0o600,
+    )
+    try:
+        os.write(
+            descriptor,
+            (json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8"),
+        )
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _failure_summaries(failures: Mapping[str, str]) -> list[str]:
+    counts: dict[str, int] = {}
+    for reason in failures.values():
+        counts[str(reason)] = counts.get(str(reason), 0) + 1
+    result: list[str] = []
+    for reason, count in sorted(counts.items()):
+        if reason == "provider_unavailable_due_to_circuit_breaker":
+            result.append(f"东方财富备用源已熔断；剩余 {count} 个标的不再请求。")
+        elif reason == "refresh_total_timeout":
+            result.append(f"总刷新达到时限；{count} 个标的保留缺失状态。")
+        else:
+            result.append(f"{reason}：{count} 个标的。")
+    return result
+
+
+def _checkpoint_run_status(status: str) -> str:
+    if status in {"shadow", "historical_review", "succeeded"}:
+        return "succeeded"
+    if status == "partial":
+        return "partial"
+    if status in {"blocked", "failed"}:
+        return "failed"
+    return "running" if status == "running" else "scheduled"
 
 
 def next_checkpoint_time(
@@ -411,8 +1114,28 @@ def _completed_checkpoints(runtime: Mapping[str, object] | None, trade_date: str
     return {
         str(item.get("checkpoint"))
         for item in runtime.get("checkpoint_runs", [])
-        if isinstance(item, Mapping) and item.get("trade_date") == trade_date
+        if isinstance(item, Mapping)
+        and item.get("trade_date") == trade_date
+        and item.get("status") in {"succeeded", "partial"}
     }
+
+
+def _exhausted_checkpoints(
+    runtime: Mapping[str, object] | None,
+    trade_date: str,
+    max_attempts: int = 2,
+) -> set[str]:
+    if not isinstance(runtime, Mapping) or runtime.get("trade_date") != trade_date:
+        return set()
+    attempts: dict[str, int] = {}
+    for item in runtime.get("checkpoint_runs", []):
+        if not isinstance(item, Mapping) or item.get("trade_date") != trade_date:
+            continue
+        if item.get("status") != "failed":
+            continue
+        label = str(item.get("checkpoint") or "")
+        attempts[label] = attempts.get(label, 0) + 1
+    return {label for label, count in attempts.items() if label and count >= max_attempts}
 
 
 def _next_scheduler_target(now: datetime, completed: set[str]) -> datetime | None:
@@ -428,10 +1151,7 @@ def _next_scheduler_target(now: datetime, completed: set[str]) -> datetime | Non
 
 def _acquire_scheduler_lock(now: datetime) -> int | None:
     SCHEDULER_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if SCHEDULER_LOCK_PATH.exists():
-        age = now.timestamp() - SCHEDULER_LOCK_PATH.stat().st_mtime
-        if age > 12 * 60 * 60:
-            SCHEDULER_LOCK_PATH.unlink()
+    _remove_dead_owner_lock(SCHEDULER_LOCK_PATH)
     try:
         descriptor = os.open(
             SCHEDULER_LOCK_PATH,
@@ -443,6 +1163,76 @@ def _acquire_scheduler_lock(now: datetime) -> int | None:
     os.write(descriptor, f"pid={os.getpid()} started_at={now.isoformat(timespec='seconds')}\n".encode("utf-8"))
     os.fsync(descriptor)
     return descriptor
+
+
+def _release_scheduler_lock(descriptor: int) -> None:
+    try:
+        os.close(descriptor)
+    except OSError:
+        pass
+    _remove_lock_owned_by(SCHEDULER_LOCK_PATH, os.getpid())
+
+
+def _acquire_refresh_lock(now: datetime) -> int | None:
+    REFRESH_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _remove_dead_owner_lock(REFRESH_LOCK_PATH)
+    try:
+        descriptor = os.open(
+            REFRESH_LOCK_PATH,
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+            0o600,
+        )
+    except FileExistsError:
+        return None
+    os.write(
+        descriptor,
+        f"pid={os.getpid()} started_at={now.isoformat(timespec='seconds')}\n".encode("utf-8"),
+    )
+    os.fsync(descriptor)
+    return descriptor
+
+
+def _remove_dead_owner_lock(path: Path) -> None:
+    try:
+        text = path.read_text(encoding="utf-8")
+        owner = int(text.split(" ", 1)[0].removeprefix("pid="))
+    except (FileNotFoundError, OSError, TypeError, ValueError):
+        return
+    if _process_is_alive(owner):
+        return
+    _remove_lock_owned_by(path, owner)
+
+
+def _process_is_alive(process_id: int) -> bool:
+    if process_id <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+
+        process_query_limited_information = 0x1000
+        still_active = 259
+        handle = ctypes.windll.kernel32.OpenProcess(
+            process_query_limited_information,
+            False,
+            process_id,
+        )
+        if not handle:
+            return False
+        try:
+            exit_code = ctypes.c_ulong()
+            if not ctypes.windll.kernel32.GetExitCodeProcess(
+                handle,
+                ctypes.byref(exit_code),
+            ):
+                return False
+            return exit_code.value == still_active
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+    try:
+        os.kill(process_id, 0)
+    except (OSError, ProcessLookupError):
+        return False
+    return True
 
 
 def _alert_transitions(
@@ -651,10 +1441,51 @@ def load_intraday_runtime(path: Path = RUNTIME_PATH) -> dict[str, object] | None
     return payload if isinstance(payload, dict) else None
 
 
+def persist_execution_guard(
+    *,
+    runtime_path: Path = RUNTIME_PATH,
+    execution_path: Path = DEFAULT_EXECUTION_LEDGER,
+    confirmation_path: Path = DEFAULT_REENTRY_CONFIRMATION_LEDGER,
+    failure_path: Path = DEFAULT_REENTRY_FAILURE_LEDGER,
+) -> dict[str, object]:
+    """Refresh the durable guard immediately after confirmed ledger writes."""
+
+    runtime = load_intraday_runtime(runtime_path) or {
+        "schema_version": "intraday-runtime/v2",
+        "status": "blocked",
+        "data_status": "missing",
+        "freshness_status": "missing",
+        "analysis_authority": "none",
+        "decision_authority": "blocked",
+        "trade_authority": "none",
+    }
+    states = load_reentry_states(
+        execution_path,
+        confirmation_path=confirmation_path,
+        failure_path=failure_path,
+    )
+    guard_rows = [asdict(item) for item in states]
+    runtime["reentry_guard_states"] = guard_rows
+    runtime["execution_guard"] = {
+        "status": "active" if guard_rows else "unknown",
+        "confirmed_sell_count": sum(
+            1 for item in load_executions(execution_path) if item.side == "sell"
+        ),
+        "structure_data_status": (
+            "available" if isinstance(runtime.get("latest_snapshot"), Mapping) else "missing"
+        ),
+        "default_reentry_policy": "structure_confirmation_required",
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    _atomic_json(runtime_path, runtime)
+    return dict(runtime["execution_guard"])
+
+
 def load_reentry_states(
     path: Path = DEFAULT_EXECUTION_LEDGER,
     *,
     confirmation_path: Path | None = None,
+    failure_path: Path | None = None,
 ) -> tuple[ReentryPositionState, ...]:
     """Load optional user-confirmed state; absence never implies that no sale occurred."""
 
@@ -668,26 +1499,36 @@ def load_reentry_states(
             else path.with_name("reentry_confirmation_ledger.jsonl")
         )
         confirmations = load_reentry_confirmations(resolved_confirmation_path)
+        resolved_failure_path = (
+            failure_path
+            if failure_path is not None
+            else DEFAULT_REENTRY_FAILURE_LEDGER
+            if path == DEFAULT_EXECUTION_LEDGER
+            else path.with_name("reentry_failure_ledger.jsonl")
+        )
+        failures = load_reentry_failures(resolved_failure_path)
         result: list[ReentryPositionState] = []
-        latest_sales = {
-            (item.target_id, item.symbol): item
-            for item in executions
-            if item.side == "sell"
-        }
-        for sale in latest_sales.values():
+        sales = [item for item in executions if item.side == "sell"]
+        for sale in sales:
             reentries = [
                 item
                 for item in executions
                 if item.side == "buy"
-                and item.symbol == sale.symbol
-                and item.sold_at == sale.sold_at
+                and item.reference_execution_id == sale.execution_id
             ]
             reentry_ids = {item.execution_id for item in reentries}
+            failure_ids = {
+                item.failure_id
+                for item in failures
+                if item.referenced_buy_execution_id in reentry_ids
+                and item.referenced_sell_execution_id == sale.execution_id
+            }
             second_reentry_confirmed = any(
                 item.symbol == sale.symbol
                 and item.target_id == sale.target_id
                 and item.sold_at == sale.sold_at
                 and item.failed_reentry_execution_id in reentry_ids
+                and item.failure_observation_id in failure_ids
                 for item in confirmations
             )
             result.append(
@@ -704,11 +1545,12 @@ def load_reentry_states(
                     first_reentry_price=(
                         reentries[0].execution_price if reentries else None
                     ),
-                    post_reentry_low_broken=any(item.post_reentry_low_broken for item in reentries),
+                    post_reentry_low_broken=bool(failure_ids),
                     symbol=sale.symbol,
                     quantity=sale.quantity,
                     available_quantity=sale.available_quantity,
                     second_reentry_confirmed=second_reentry_confirmed,
+                    sale_execution_id=sale.execution_id,
                 )
             )
         return tuple(result)

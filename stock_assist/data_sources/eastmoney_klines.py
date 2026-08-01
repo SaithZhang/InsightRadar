@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from datetime import datetime
 import json
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import OpenerDirector, Request
+
+from stock_assist.intraday.network import build_urllib_opener, provider_policy
 
 
 EASTMONEY_KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
@@ -34,7 +36,14 @@ class Candle:
     amount: float
 
 
-def fetch_klines(secid: str, interval: str, limit: int = 500, timeout: int = 15) -> list[Candle]:
+def fetch_klines(
+    secid: str,
+    interval: str,
+    limit: int = 500,
+    timeout: float = 3,
+    *,
+    opener: OpenerDirector | None = None,
+) -> list[Candle]:
     """Fetch unadjusted index K-lines. Raises a readable error on missing data."""
     period = KLINE_PERIODS.get(interval)
     if period is None:
@@ -54,7 +63,8 @@ def fetch_klines(secid: str, interval: str, limit: int = 500, timeout: int = 15)
         f"{EASTMONEY_KLINE_URL}?{urlencode(query)}",
         headers={"User-Agent": "Mozilla/5.0", "Referer": "https://quote.eastmoney.com/"},
     )
-    with urlopen(request, timeout=timeout) as response:
+    direct_opener = opener or build_urllib_opener(provider_policy("eastmoney_push2his"))
+    with direct_opener.open(request, timeout=timeout) as response:
         payload = json.load(response)
     data = payload.get("data") if isinstance(payload, dict) else None
     raw_rows = data.get("klines") if isinstance(data, dict) else None

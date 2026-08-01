@@ -664,16 +664,17 @@ def _data_health_card(workspace: Mapping[str, object]) -> str:
 def _intraday_today_panel(workspace: Mapping[str, object]) -> str:
     runtime = _mapping(workspace.get("intraday_radar"))
     snapshot = _mapping(runtime.get("latest_snapshot"))
+    progress_panel = _intraday_progress_panel(runtime)
     if not snapshot:
         next_check = _intraday_next_check_label(runtime)
-        return f"""<section class="panel section">
+        return progress_panel + f"""<section class="panel section">
           <div class="section-head"><div><div class="eyebrow">盘前 / 盘中 P0</div><h2>今日雷达尚无点时快照</h2>
           <p>source_time {escape(str(runtime.get('source_time') or 'unknown'))} · fetch_time {escape(str(runtime.get('fetch_time') or 'unknown'))} · next {escape(next_check)}</p></div>
           <span class="status blocked">{escape(str(runtime.get('freshness_status') or 'missing'))}</span></div>
           <div class="risk-list">
             <div class="risk-row"><span>data_status</span><strong>{escape(str(runtime.get('data_status') or 'missing'))}</strong></div>
-            <div class="risk-row"><span>decision_authority</span><strong>{escape(str(runtime.get('decision_authority') or 'none'))}</strong></div>
-            <div class="risk-row"><span>状态事件</span><strong>activated / escalated / resolved / invalidation</strong></div>
+            <div class="risk-row"><span>analysis / decision / trade</span><strong>{escape(str(runtime.get('analysis_authority') or 'none'))} / {escape(str(runtime.get('decision_authority') or 'blocked'))} / {escape(str(runtime.get('trade_authority') or 'none'))}</strong></div>
+            <div class="risk-row"><span>状态事件</span><strong>暂无状态事件</strong></div>
           </div>
           <p class="prototype-note">没有新鲜点时数据时只显示缺口或历史状态，不输出 live ready。</p>
         </section>"""
@@ -701,8 +702,8 @@ def _intraday_today_panel(workspace: Mapping[str, object]) -> str:
         f'<strong class="{_severity_class(item.get("severity"))}">'
         f'{escape(str(item.get("event_state") or "activated"))} / {escape(str(item.get("severity") or "info"))}</strong></div>'
         for item in alerts
-    ) or '<div class="risk-row"><span>当前没有规则升级</span><strong>继续等待</strong></div>'
-    return f"""<section class="panel section intraday-primary">
+    ) or '<div class="risk-row"><span>暂无状态事件</span><strong>继续等待</strong></div>'
+    return progress_panel + f"""<section class="panel section intraday-primary">
       <div class="section-head"><div><div class="eyebrow">盘前 / 盘中主工作台</div><h2>账户风险与主题结构</h2>
       <p>source_time {escape(str(runtime.get('source_time') or snapshot.get('timestamp') or 'unknown'))} · fetch_time {escape(str(runtime.get('fetch_time') or 'unknown'))} · next {escape(next_check)}</p></div>
       <span class="status {_status_class(runtime.get('status'))}">{escape(str(runtime.get('status') or 'unknown'))}</span></div>
@@ -711,7 +712,7 @@ def _intraday_today_panel(workspace: Mapping[str, object]) -> str:
         <div class="metric"><small>早盘利润峰值</small><strong>{_value(snapshot.get('account_peak_daily_pnl'))}</strong><em>点时累计</em></div>
         <div class="metric"><small>利润回吐</small><strong>{_ratio(snapshot.get('pnl_giveback_ratio'))}</strong><em>保护预算输入</em></div>
         <div class="metric"><small>科技主题集中</small><strong>{_value(technology, suffix='%')}</strong><em>已知点时市值；缺失不按 0</em></div>
-        <div class="metric"><small>数据 / 新鲜度 / 权限</small><strong>{escape(str(runtime.get('data_status') or 'unknown'))} / {escape(str(runtime.get('freshness_status') or 'unknown'))}</strong><em>{escape(str(runtime.get('decision_authority') or 'none'))}</em></div>
+        <div class="metric"><small>数据 / 新鲜度 / 权限</small><strong>{escape(str(runtime.get('data_status') or 'unknown'))} / {escape(str(runtime.get('freshness_status') or 'unknown'))}</strong><em>{escape(str(runtime.get('analysis_authority') or 'none'))} / {escape(str(runtime.get('decision_authority') or 'blocked'))} / trade {escape(str(runtime.get('trade_authority') or 'none'))}</em></div>
       </div>
       <div class="risk-list">{alert_rows}</div>
       <p class="prototype-note">盘后计划、数据健康、证据链与版本账本继续保留在本页下方，作为解释和审计能力。</p>
@@ -721,14 +722,14 @@ def _intraday_today_panel(workspace: Mapping[str, object]) -> str:
 def _intraday_portfolio_panel(workspace: Mapping[str, object]) -> str:
     runtime = _mapping(workspace.get("intraday_radar"))
     snapshot = _mapping(runtime.get("latest_snapshot"))
-    if not snapshot:
-        return ""
     exposures = _mapping(snapshot.get("exposure_by_theme"))
     exposure_rows = "".join(
         f'<div class="risk-row"><span>{escape(str(theme_id))}</span><strong>{_value(value, suffix="%")}</strong></div>'
         for theme_id, value in sorted(exposures.items(), key=lambda item: float(item[1] or 0), reverse=True)[:8]
     )
-    holdings = _dict_rows(snapshot.get("holding_snapshots"))
+    holdings = _dict_rows(snapshot.get("holding_snapshots")) or _dict_rows(
+        workspace.get("portfolio_positions")
+    )
     holding_options = "".join(
         f'<option value="{escape(str(item.get("symbol") or ""))}" data-theme="{escape(str(item.get("primary_theme_id") or "unknown"))}">'
         f'{escape(str(item.get("symbol") or "unknown"))} · {escape(str(item.get("name") or ""))}</option>'
@@ -757,6 +758,7 @@ def _intraday_portfolio_panel(workspace: Mapping[str, object]) -> str:
           <label>成交前可用数量<input class="input" id="executionAvailable" type="number" min="0" step="0.01" required></label>
           <label>原减仓时间<input class="input" id="executionSoldAt" type="datetime-local" required></label>
           <label>原减仓价格<input class="input" id="executionSalePrice" type="number" min="0.0001" step="0.0001" required></label>
+          <label>引用原 sell（接回必填）<select class="select" id="executionReference"><option value="">sell 时留空；buy 时选择真实 sell</option></select></label>
           <label>本次成交时间（接回必填）<input class="input" id="executionExecutedAt" type="datetime-local"></label>
           <label>本次成交价格（接回必填）<input class="input" id="executionPrice" type="number" min="0.0001" step="0.0001"></label>
           <label>证据来源<input class="input" id="executionSource" value="user_confirmed_broker_execution" required></label>
@@ -765,13 +767,50 @@ def _intraday_portfolio_panel(workspace: Mapping[str, object]) -> str:
         </form>
         <p id="executionStatus" class="prototype-note">只追加用户确认事实；不下单，不把缺失数量改成 0。</p>
         <form id="reentryConfirmationForm" class="form-grid">
-          <label>失败的第一次接回<select class="select" id="failedReentryExecution" required><option value="">先加载已确认 buy 成交</option></select></label>
-          <label>再创新低观察时间<input class="input" id="reentryNewLowAt" type="datetime-local" required></label>
+          <label>真实接回失败 observation<select class="select" id="failedReentryExecution" required><option value="">等待市场 observation 自动形成 failure event</option></select></label>
           <label>确认来源<input class="input" id="reentryConfirmationSource" value="user_confirmed_reentry_override" required></label>
           <label><input id="reentryOverrideConfirmed" type="checkbox" required> 第一次接回已失败并再创新低；我显式确认解除第二次接回复核锁</label>
           <button class="btn" type="submit">追加第二次接回复核确认</button>
         </form>
         <p id="reentryConfirmationStatus" class="prototype-note">确认事件必须引用已发生的第一次 buy，且晚于再创新低；它只解除人工复核锁，不自动买入。</p>
+      </details>
+    </section>"""
+
+
+def _intraday_progress_panel(runtime: Mapping[str, object]) -> str:
+    progress = _mapping(runtime.get("refresh_progress"))
+    phase = str(progress.get("phase") or "waiting")
+    provider = str(progress.get("provider") or "session")
+    route = str(progress.get("route_display") or "自动/未知")
+    trade_date = str(runtime.get("runtime_trade_date") or runtime.get("trade_date") or "unknown")
+    route_rows = "".join(
+        '<div class="risk-row">'
+        f'<span>{escape(str(item.get("provider_id") or "unknown"))}</span>'
+        f'<strong>{escape(str(item.get("display_route") or "自动/未知"))} · '
+        f'{escape(str(item.get("transport") or "unknown"))} · '
+        f'{escape(str(item.get("route_scope") or "unknown"))} · '
+        f'TUN 绕过保证 {"是" if item.get("os_tun_bypass_guaranteed") is True else "否/未知"}</strong>'
+        '</div>'
+        for item in _dict_rows(runtime.get("network_routes"))
+    )
+    if not route_rows:
+        route_rows = (
+            '<div class="risk-row"><span>provider diagnostics</span>'
+            '<strong>自动/未知</strong></div>'
+        )
+    return f"""<section class="panel section intraday-progress" id="intradayProgress">
+      <div class="section-head"><div><div class="eyebrow">后台真实刷新</div><h2 id="intradayProgressPhase">{escape(phase)}</h2>
+      <p id="intradaySessionSummary">{escape(str(runtime.get('session_mode') or 'resolving'))} · 行情日 {escape(trade_date)} · view {escape(str(runtime.get('view_mode') or 'unknown'))}</p></div>
+      <span class="status pending" id="intradayProgressStatus">{escape(str(progress.get('status') or runtime.get('status') or 'waiting'))}</span></div>
+      <div class="risk-list">
+        <div class="risk-row"><span>provider / route</span><strong id="intradayProviderRoute">{escape(provider)} / {escape(route)}</strong></div>
+        <div class="risk-row"><span>批次</span><strong id="intradayBatch">{escape(str(progress.get('batch') or 0))} / {escape(str(progress.get('total_batches') or 0))}</strong></div>
+        <div class="risk-row"><span>处理进度</span><strong id="intradayCounts">{escape(str(progress.get('processed_symbols') or 0))} / {escape(str(progress.get('total_symbols') or 0))} · 成功 {escape(str(progress.get('succeeded_count') or 0))} · 失败 {escape(str(progress.get('failed_count') or 0))} · 缺失 {escape(str(progress.get('missing_count') or 0))}</strong></div>
+        <div class="risk-row"><span>熔断 / 已用时</span><strong id="intradayCircuitElapsed">{escape(str(progress.get('circuit_state') or 'closed'))} / {escape(str(progress.get('elapsed_seconds') or 0))}s</strong></div>
+        <div class="risk-row"><span>最近成功 / 下一步</span><strong id="intradayNextAction">{escape(str(progress.get('last_success_time') or '暂无'))} / {escape(str(progress.get('next_action') or '等待后台刷新'))}</strong></div>
+      </div><details class="response-box"><summary>provider route diagnostics</summary>
+        <div class="risk-list" id="intradayRouteDiagnostics">{route_rows}</div>
+        <p class="prototype-note">国内直连仅表示应用客户端禁用系统代理；无法据此保证绕过操作系统 TUN/VPN。</p>
       </details>
     </section>"""
 
@@ -1563,6 +1602,25 @@ async function getJson(path) {
   if (!response.ok) throw new Error(result.error || "读取本地状态失败");
   return result;
 }
+function renderIntradayProgress(runtime) {
+  const progress = runtime?.refresh_progress || {};
+  const set = (id, value) => { const node = document.getElementById(id); if (node) node.textContent = String(value); };
+  set("intradayProgressPhase", progress.phase || "waiting");
+  set("intradayProgressStatus", progress.status || runtime?.status || "waiting");
+  set("intradaySessionSummary", `${runtime?.session_mode || "resolving"} · 行情日 ${runtime?.runtime_trade_date || runtime?.trade_date || "unknown"} · view ${runtime?.view_mode || "unknown"}`);
+  set("intradayProviderRoute", `${progress.provider || "session"} / ${progress.route_display || "自动/未知"}`);
+  set("intradayBatch", `${progress.batch || 0} / ${progress.total_batches || 0}`);
+  set("intradayCounts", `${progress.processed_symbols || 0} / ${progress.total_symbols || 0} · 成功 ${progress.succeeded_count || 0} · 失败 ${progress.failed_count || 0} · 缺失 ${progress.missing_count || 0}`);
+  set("intradayCircuitElapsed", `${progress.circuit_state || "closed"} / ${progress.elapsed_seconds || 0}s`);
+  set("intradayNextAction", `${progress.last_success_time || "暂无"} / ${progress.next_action || "等待后台刷新"}`);
+}
+if (document.getElementById("intradayProgress")) {
+  const pollIntradayRuntime = () => getJson("/api/intraday/runtime")
+    .then(renderIntradayProgress)
+    .catch(error => captureRuntimeError(`intraday progress: ${error.message}`));
+  pollIntradayRuntime();
+  window.setInterval(pollIntradayRuntime, 1000);
+}
 function refreshRequestId() {
   return globalThis.crypto?.randomUUID?.() || `refresh-${Date.now()}-${Math.random()}`;
 }
@@ -1665,12 +1723,24 @@ const executionForm = document.getElementById("executionForm");
 if (executionForm) {
   const symbol = document.getElementById("executionSymbol");
   const target = document.getElementById("executionTarget");
+  const reference = document.getElementById("executionReference");
   const syncTheme = () => {
     const option = symbol.options[symbol.selectedIndex];
     if (option && option.dataset.theme) target.value = option.dataset.theme;
   };
   symbol.addEventListener("change", syncTheme);
   syncTheme();
+  fetch("/api/executions")
+    .then(response => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
+    .then(payload => {
+      (payload.executions || []).filter(item => item.side === "sell").forEach(item => {
+        const option = document.createElement("option");
+        option.value = item.execution_id;
+        option.textContent = `${item.sold_at || "unknown"} · ${item.symbol} · 剩余以服务端账本校验`;
+        reference.appendChild(option);
+      });
+    })
+    .catch(error => { document.getElementById("executionStatus").textContent = `加载 sell 引用失败：${error.message}`; });
   executionForm.addEventListener("submit", async event => {
     event.preventDefault();
     const status = document.getElementById("executionStatus");
@@ -1685,10 +1755,11 @@ if (executionForm) {
         sale_price:Number(document.getElementById("executionSalePrice").value),
         executed_at:document.getElementById("executionExecutedAt").value || null,
         execution_price:Number(document.getElementById("executionPrice").value) || null,
+        reference_execution_id:reference.value || null,
         source:document.getElementById("executionSource").value,
         user_confirmed:document.getElementById("executionConfirmed").checked,
       });
-      status.textContent = `已追加 ${record.execution_id}；下一次点时刷新将使用 sold_at / sale_price 执行 re-entry guard。`;
+      status.textContent = `已追加 ${record.execution_id}；guard ${record.guard?.status || "unknown"} 已立即持久生效。`;
       showToast("真实成交已追加到本地 ledger。", "success");
     } catch (error) {
       status.textContent = `写入失败：${error.message}`;
@@ -1703,13 +1774,15 @@ if (reentryConfirmationForm) {
   fetch("/api/executions")
     .then(response => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
     .then(payload => {
-      (payload.executions || []).filter(item => item.side === "buy").forEach(item => {
+      const executions = new Map((payload.executions || []).map(item => [item.execution_id, item]));
+      (payload.reentry_failures || []).forEach(item => {
+        const sale = executions.get(item.referenced_sell_execution_id) || {};
         const option = document.createElement("option");
-        option.value = item.execution_id;
+        option.value = item.failure_id;
         option.dataset.symbol = item.symbol;
         option.dataset.target = item.target_id;
-        option.dataset.soldAt = item.sold_at;
-        option.textContent = `${item.executed_at || "unknown"} · ${item.symbol} · ${item.execution_id}`;
+        option.dataset.soldAt = sale.sold_at || "";
+        option.textContent = `${item.source_time || "unknown"} · ${item.symbol} · ${item.failure_id}`;
         failedSelect.appendChild(option);
       });
     })
@@ -1722,8 +1795,7 @@ if (reentryConfirmationForm) {
         symbol:option.dataset.symbol,
         target_id:option.dataset.target,
         sold_at:option.dataset.soldAt,
-        failed_reentry_execution_id:option.value,
-        new_low_observed_at:document.getElementById("reentryNewLowAt").value,
+        failure_observation_id:option.value,
         source:document.getElementById("reentryConfirmationSource").value,
         user_confirmed:document.getElementById("reentryOverrideConfirmed").checked,
       });

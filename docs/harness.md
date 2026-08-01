@@ -425,11 +425,15 @@ Next:
 - User-confirmed executions append to the private execution ledger and retain symbol, side, quantity, available quantity, `sold_at`, `sale_price`, and source. Missing quantities remain missing rather than zero.
 - A second-reentry override is a separate append-only confirmation event that must reference a real first `buy` execution and a later new-low observation. It never creates a synthetic fill or grants automatic execution authority.
 - Re-entry is blocked immediately after a confirmed reduction until at least five minutes without a new low, a higher low, VWAP or rebound-high recovery, and breadth recovery. A failed first re-entry followed by another low locks the second attempt until explicit user confirmation.
-- The double-click entry performs one serial refresh, then schedules the remaining 09:25/09:35/10:00 checks with a single-flight lock. Runtime/UI expose source time, fetch time, next check, missed checks, data/freshness, authority, and explicit activated/escalated/resolved/invalidation events.
+- Every buy references one existing sell execution; symbol/theme/time lineage must match and concurrent cumulative buys cannot exceed that sell quantity. Execution, failure, and override validation+append share a cross-process single-flight lock. Multiple reductions retain distinct guards.
+- The double-click entry starts the loopback page before network work, acquires the checkpoint scheduler lock before the initial refresh, and runs provider work in a terminable child with a 57-second hard boundary. Shutdown wakes and joins the scheduler; restart removes only locks whose recorded owner process is dead.
+- A-share session dates come from the AmazingData calendar, a real local archive date, or a bounded real K-line probe in that order. A non-trading day mounts the latest completed session as `historical_review`; it never pretends that the calendar date is live.
+- Network routes are provider-scoped: domestic HTTP clients bypass environment proxies, foreign Yahoo clients inherit the system proxy, and loopback/Futu remain local-only. Diagnostics expose route policy but redact proxy endpoints/credentials; application-level direct mode does not claim to bypass OS TUN/VPN.
+- Checkpoint states are explicit `scheduled/running/succeeded/partial/failed/missed`; failed runs are not completed and retry at most twice. Runtime/UI expose source time, fetch time, next check, missed checks, data/freshness, authority, and explicit activated/escalated/resolved/invalidation events.
 
 Minimum checks:
 
-- `.venv\Scripts\python -m unittest tests.test_intraday_radar tests.test_one_click_launcher -v`
+- `.venv\Scripts\python -m unittest tests.test_intraday_reliability tests.test_intraday_radar tests.test_one_click_launcher -v`
 - `.venv\Scripts\python -m unittest discover -s tests -v`
 - `.venv\Scripts\python -m compileall stock_assist`
 - `.venv\Scripts\python -m stock_assist.cli architecture-view`

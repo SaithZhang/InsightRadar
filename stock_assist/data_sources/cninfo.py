@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 
-import requests
+from stock_assist.intraday.network import build_requests_session, provider_policy
 
 
 CNINFO_SEARCH_URL = "https://www.cninfo.com.cn/new/hisAnnouncement/query"
@@ -72,7 +72,8 @@ def search_profit_notices(
         "sortType": "",
         "isHLtitle": "true",
     }
-    response = requests.post(CNINFO_SEARCH_URL, data=payload, headers=HEADERS, timeout=30)
+    session = build_requests_session(provider_policy("cninfo"))
+    response = session.post(CNINFO_SEARCH_URL, data=payload, headers=HEADERS, timeout=30)
     response.raise_for_status()
     data = response.json()
     return [_parse_announcement(item) for item in data.get("announcements") or []]
@@ -84,7 +85,8 @@ def latest_profit_notice(code: str, days: int = 14) -> CninfoAnnouncement | None
 
 
 def _stock_param(code: str) -> str:
-    response = requests.get(
+    session = build_requests_session(provider_policy("cninfo"))
+    response = session.get(
         CNINFO_STOCK_URL,
         headers={"User-Agent": HEADERS["User-Agent"], "Referer": "https://www.cninfo.com.cn/"},
         timeout=30,

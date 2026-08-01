@@ -5,9 +5,14 @@ from __future__ import annotations
 from datetime import datetime
 import json
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from stock_assist.data_sources.eastmoney_klines import Candle, fetch_klines as fetch_eastmoney_klines
+from stock_assist.intraday.network import (
+    build_urllib_opener,
+    provider_policy,
+    sanitized_error_type,
+)
 
 
 TENCENT_BASE = "https://ifzq.gtimg.cn/appstock/app"
@@ -35,11 +40,11 @@ def fetch_public_klines(
     try:
         return fetch_tencent_klines(tencent_code, interval, limit), "Tencent public K-line"
     except Exception as exc:
-        errors.append(f"Tencent: {exc}")
+        errors.append(f"Tencent: {sanitized_error_type(exc)}")
     try:
         return fetch_eastmoney_klines(secid, interval, limit), "Eastmoney public K-line fallback"
     except Exception as exc:
-        errors.append(f"Eastmoney: {exc}")
+        errors.append(f"Eastmoney: {sanitized_error_type(exc)}")
     raise RuntimeError("; ".join(errors))
 
 
@@ -58,7 +63,8 @@ def fetch_tencent_klines(code: str, interval: str, limit: int = 500, timeout: in
         f"{endpoint}?{urlencode(query)}",
         headers={"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"},
     )
-    with urlopen(request, timeout=timeout) as response:
+    opener = build_urllib_opener(provider_policy("tencent"))
+    with opener.open(request, timeout=timeout) as response:
         payload = json.load(response)
     block = (payload.get("data") or {}).get(code) if isinstance(payload, dict) else None
     raw_rows = None

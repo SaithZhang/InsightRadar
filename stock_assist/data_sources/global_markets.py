@@ -8,7 +8,11 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Iterable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-import requests
+from stock_assist.intraday.network import (
+    build_requests_session,
+    provider_policy,
+    sanitized_error_type,
+)
 
 
 @dataclass(frozen=True)
@@ -83,7 +87,8 @@ def fetch_yahoo_history(symbol: str, *, range_name: str = "1y", timeout: float =
     """Fetch adjusted-enough daily closes for cross-market regime comparison."""
 
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-    response = requests.get(
+    session = build_requests_session(provider_policy("yahoo"))
+    response = session.get(
         url,
         params={"range": range_name, "interval": "1d", "events": "div,splits"},
         headers={"User-Agent": "InsightRadar/0.1"},
@@ -157,7 +162,8 @@ def _fetch_yahoo_chart(
     params = {"range": "5d", "interval": "1d"}
     headers = {"User-Agent": "InsightRadar/0.1"}
     try:
-        response = requests.get(url, params=params, headers=headers, timeout=timeout)
+        session = build_requests_session(provider_policy("yahoo"))
+        response = session.get(url, params=params, headers=headers, timeout=timeout)
         response.raise_for_status()
         result = response.json()["chart"]["result"][0]
         meta = result.get("meta", {})
@@ -176,7 +182,10 @@ def _fetch_yahoo_chart(
         change_pct = (price / previous - 1) if price is not None and previous not in (None, 0) else None
         return MarketIndexSnapshot(region, symbol, name, price, change_pct)
     except Exception as exc:
-        return MarketIndexSnapshot(region, symbol, name, None, None, error=str(exc))
+        return MarketIndexSnapshot(
+            region, symbol, name, None, None,
+            error=sanitized_error_type(exc),
+        )
 
 
 def _to_float(value: object) -> float | None:
