@@ -1,23 +1,27 @@
 from __future__ import annotations
 
 import json
+import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
 from unittest.mock import patch
 
 import pandas as pd
 
-from stock_assist.portfolio import Holding, Portfolio, load_manual_broker_portfolio, load_portfolio
+from stock_assist.portfolio import (
+    Holding,
+    Portfolio,
+    load_manual_broker_portfolio,
+    load_portfolio,
+)
 from stock_assist.workflows.after_close import (
     _broker_snapshot_lines,
-    _signal_from_broker_snapshot,
-    _signal_for_holding,
     _holding_context_complete,
+    _signal_for_holding,
+    _signal_from_broker_snapshot,
     build_after_close_bundle,
     build_after_close_payload,
 )
-
 
 ACTION_MARKDOWN = """# 盘后持仓操作指引
 
@@ -90,7 +94,7 @@ class AfterCloseReliabilityTests(unittest.TestCase):
         )
 
         self.assertIs(result, payload)
-        self.assertIn('id="today"', html)
+        self.assertIn('id="route-today" data-route-panel="today"', html)
         self.assertIn('data-view="lookup"', html)
         self.assertIn("Rule-first decision intelligence", html)
         self.assertIn("不改变当前计划", html)

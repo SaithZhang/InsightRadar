@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-from datetime import datetime
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from datetime import datetime
+from pathlib import Path
 
+from stock_assist.after_close_workbench_html import render_after_close_workbench
 from stock_assist.decision_workspace import (
     append_plan_response,
     build_decision_workspace,
-    load_plan_versions,
     load_plan_responses,
+    load_plan_versions,
     record_plan_versions,
     restage_workspace,
 )
-from stock_assist.after_close_workbench_html import render_after_close_workbench
 from stock_assist.portfolio import Holding, Portfolio
 
 
@@ -382,9 +382,9 @@ class DecisionWorkspaceTests(unittest.TestCase):
         self.assertEqual(restored["plan_changes"], [])
         self.assertEqual(len(restored["today_plans"]), 1)
         self.assertEqual(restored["runtime_status"], "blocked_waiting")
-        self.assertIn("继续等待", html)
-        self.assertIn("阻断未解除", html)
-        self.assertNotIn("今天没有新的待回应或未解除阻断", html)
+        self.assertIn("判断阻断", html)
+        self.assertIn("不能把本规则变成已确认或提醒候选", html)
+        self.assertIn("blocked_acknowledged", html)
         self.assertNotEqual(recovered["active_plans"][0]["status"], "blocked")
         self.assertEqual(
             recovered["active_plans"][0]["user_response_status"],
@@ -549,6 +549,20 @@ class DecisionWorkspaceTests(unittest.TestCase):
                     ledger_path=Path(temporary) / "responses.jsonl",
                 )
 
+    def test_disabled_response_is_persisted_and_not_monitor_eligible(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            ledger = Path(temporary) / "responses.jsonl"
+            record = append_plan_response(
+                plan_id="holding:000001.SZ",
+                plan_version="v-123",
+                response="disabled",
+                ledger_path=ledger,
+            )
+            rows = load_plan_responses(ledger)
+
+        self.assertEqual(record["response"], "disabled")
+        self.assertEqual(rows[-1]["response"], "disabled")
+
     def test_blocked_plan_rejects_acceptance_and_renders_acknowledgement(self) -> None:
         payload = self._payload()
         payload["unified_decision"]["blocked_actions"] = ["核心数据缺口阻断执行"]
@@ -578,8 +592,8 @@ class DecisionWorkspaceTests(unittest.TestCase):
             )
 
         self.assertIn("确认已知悉阻断", html)
-        self.assertIn("不会进入有效计划或盘中监控", html)
-        self.assertNotIn("采纳为今日计划", html)
+        self.assertIn("任何按钮都不能把本规则变成已确认或提醒候选", html)
+        self.assertIn("暂不启用", html)
         self.assertNotIn('data-plan-response="accepted"', html)
 
     def test_version_display_separates_first_content_and_execution_changes(self) -> None:
@@ -653,12 +667,11 @@ class DecisionWorkspaceTests(unittest.TestCase):
             "",
         )
 
-        self.assertIn("计划内容未变，执行状态变为 blocked", unchanged_html)
-        self.assertNotIn("上一版计划 · v-same", unchanged_html)
-        self.assertIn("首次生成", first_html)
-        self.assertNotIn("上一版计划", first_html)
-        self.assertIn("上一版计划 · v-old", revised_html)
-        self.assertIn("今日建议计划 · v-new", revised_html)
+        self.assertIn('data-plan-version="v-same"', unchanged_html)
+        self.assertIn("核心数据缺口阻断执行", unchanged_html)
+        self.assertIn('data-plan-version="v-first"', first_html)
+        self.assertIn('data-plan-version="v-new"', revised_html)
+        self.assertIn("执行新计划", revised_html)
 
     def test_dispute_is_restored_only_for_the_matching_plan_version(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

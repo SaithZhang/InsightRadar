@@ -7,14 +7,15 @@ plan responses.  It deliberately does not implement intraday monitoring.
 
 from __future__ import annotations
 
-from copy import deepcopy
-from datetime import date, datetime
 import hashlib
 import json
 import os
-from pathlib import Path
 import tempfile
-from typing import Literal, Mapping, TypedDict
+from collections.abc import Mapping
+from copy import deepcopy
+from datetime import date, datetime
+from pathlib import Path
+from typing import Literal, TypedDict
 
 from stock_assist.decision_evidence import (
     build_decision_evidence,
@@ -24,7 +25,6 @@ from stock_assist.paths import DATA_DIR
 from stock_assist.portfolio import Portfolio, portfolio_version
 from stock_assist.signal_outcomes import price_basis_quarantine_reason
 
-
 DataStatus = Literal["ready", "stale", "missing", "blocked", "pending", "failed"]
 PlanStatus = Literal["unchanged", "revised", "voided", "new", "blocked"]
 ResponseStatus = Literal[
@@ -33,6 +33,7 @@ ResponseStatus = Literal[
     "disputed",
     "rejected",
     "deferred",
+    "disabled",
     "blocked_acknowledged",
 ]
 RunStage = Literal["after_close", "morning_recheck"]
@@ -45,6 +46,7 @@ ALLOWED_RESPONSES = {
     "disputed",
     "rejected",
     "deferred",
+    "disabled",
     "blocked_acknowledged",
 }
 
@@ -896,6 +898,7 @@ def _portfolio_positions(
                 "cost": holding.cost,
                 "market_price": holding.market_price,
                 "market_value": holding.market_value,
+                "day_pnl": holding.day_pnl,
                 "weight_pct": holding.weight_pct,
                 "pnl_pct": holding.pnl_pct,
                 "beta_classification": holding.beta_classification or "unknown",

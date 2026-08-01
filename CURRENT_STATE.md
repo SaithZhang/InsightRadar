@@ -22,7 +22,7 @@ The proof goal remains local Core value through real trials, controlled replay, 
 ## Current Product Shape
 
 - Product direction: **Intraday Core pivot under ADR-0012**. ADR-0010 still freezes the four route ids and authority boundary, but its monitoring deferral is superseded by the owner's 2026-08-01 reprioritization.
-- First-level routes remain exactly four: `today` 今日雷达, `portfolio` 持仓风险, `lookup` 机会发现, and `review` 复盘验证.
+- First-level routes remain exactly four: `today` 今日工作台, `portfolio` 组合风险, `lookup` 标的研究, and `review` 复盘账本. The bounded 2026-08-01 Today replacement is an after-close/weekend conclusion layer, not a fifth risk-command route.
 - Canonical workspace: `D:\work\InsightRadar`. All new code, local data, reports, harness state, and Codex project context belong here.
 - Public release: prepare a fresh sanitized GitHub baseline under ADR-0011; legacy history and private runtime data remain local.
 - Core: portfolio decisions, A-share market radar, research/filing evidence, and the outcome-calibration loop.
@@ -56,7 +56,7 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 ## Next Feature
 
 - `IR-002` remains the sole active experiment. P0 truth/authority/scheduling defects are fixed; next evidence is multiple real 09:25/09:35/10:00 shadows, verified external point-time mapping, timing/false-escalation/missed-protection measurement, and notification admission. No notifications are authorized.
-- `feat-058` is parked by explicit owner reprioritization; its after-close plan, data health, evidence chain, and version ledger remain secondary capabilities rather than deleted work.
+- `feat-058` remains outside the sole active experiment slot, but the owner explicitly resumed its bounded Today Workbench replacement on 2026-08-01. The after-close/weekend three-column entry, data health, evidence chain, and version-scoped rule responses remain secondary to IR-002 live calibration and do not authorize notifications or trades.
 - `feat-056` remains pending and the sole queued Harness experiment; no pilot or benchmark run has started.
 - `feat-057` is complete but remains an unpromoted diagnostic layer until adequate independent events, held-out outcomes, stable thresholds, primary-source event evidence, and reliable source coverage exist.
 - `feat-044` and `feat-055` remain pending outside the Harness queue and are not authorized to jump ahead of the Harness program without explicit reprioritization.

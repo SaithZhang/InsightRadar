@@ -262,7 +262,7 @@
       "command": "python -m stock_assist.cli after-close",
       "summary": "把正式/候选评分状态机、技术结构、持仓动作、风险、市场点位、风格轮动和产业证据合并成一个可审计的次日条件计划。",
       "inputs": ["真实持仓与风险对账", "行情与公告", "研报变化", "risk-watch", "market-pulse国家队代理", "market-levels", "style-rotation", "ai-capex-watch"],
-      "outputs": ["after-close JSON/Markdown/HTML", "成本仅作reference_only的技术决策契约", "稳定ID关联的决策证据链", "additive market-matrix contract with bounded 30-session trajectories", "self-contained four-task after-close decision workbench", "评分账单与market_level_state决策权", "首屏操盘条", "四时点时间轴", "100股整数手执行建议", "风格确认矩阵", "修复/风险/继续等待三分支"],
+      "outputs": ["after-close JSON/Markdown/HTML", "成本仅作reference_only的技术决策契约", "稳定ID关联的决策证据链", "additive market-matrix contract with bounded 30-session trajectories", "self-contained four-task after-close decision workbench", "盘后/周末确定性今日工作台", "统一持仓与机会关注项", "规则确认/阻断/观察状态机", "评分账单与market_level_state决策权", "100股整数手执行建议", "风格确认矩阵", "修复/风险/继续等待三分支"],
       "next": ["继续保持条件语言", "用结果账本校准而非凭印象调参"]
     },
     {

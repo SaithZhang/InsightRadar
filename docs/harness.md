@@ -99,7 +99,9 @@ Done means:
 - The after-close HTML preserves the four frozen first-level tasks with `today`, `portfolio`, `lookup`, and `review` routes; market and evidence context stay inside those tasks instead of becoming a fifth route.
 - Holding technical plans treat broker cost as `reference_only`. For identical OHLCV, cost changes cannot alter the technical state or levels. Plans use moving-average plus price-structure evidence, expose available volatility/volume evidence, and provide repair, risk-reduction review, and continue-waiting branches with persistence and invalidation. A greater-than-35% single-bar discontinuity with an undeclared adjustment basis is quarantined; its MA/support/resistance cannot enter decision evidence as ready.
 - Decision evidence uses stable ids and states the claim, change, supported/opposed conclusion, plan impact, counter-evidence, gaps, source time, freshness, and linked plan. Decision evidence and source health use separate drawers.
-- `today` is market-first: conclusion, two-group market matrix, portfolio translation, then holding actions.
+- `today` is the conclusion and action entry layer. In `after_close` and `weekend` phases it renders three columns: deterministic account/market changes, one unified priority list for position and verified-opportunity attention, and rule decisions with fail-closed response controls. It does not duplicate the full Portfolio, Lookup, or Review detail surfaces.
+- `today` account P&L, intraday peak, giveback, attribution, ordering, data-quality state, and monitor eligibility come from typed structured data plus deterministic rules. Natural-language templates and future AI extraction cannot calculate or override them.
+- The four route ids remain `today`, `portfolio`, `lookup`, and `review`; their first-level labels are 今日工作台、组合风险、标的研究、复盘账本. No risk-command or market-summary fifth route is allowed.
 - Matrix cards use explicit states, changes, bounded trajectories, dates, freshness, and diagnostic authority; no uncalibrated 0-100 temperature score is allowed.
 - A holding action playbook appears before price charts or research evidence.
 - Stale, unavailable, and blocked states remain distinct; raw provider exceptions stay out of normal routes.
@@ -127,6 +129,7 @@ Done means:
 Minimum checks:
 
 - `.\.venv\Scripts\python -m compileall stock_assist`
+- `.\.venv\Scripts\python -m unittest -v tests.test_today_workbench tests.test_decision_workspace tests.test_after_close_workbench`
 - `.\.venv\Scripts\python -m stock_assist.cli after-close`
 - Inspect the newest `reports/*-after-close.json`, `reports/*-after-close.md`, and `reports/*-after-close.html`.
 - Inspect the JSON payload for `schema_version`, `summary_cards`, `components`, `sections`, `actions`, `unified_decision`, `unified_decision.market_regime.score_ledger`, `unified_decision.market_level_impact`, `unified_decision.style_rotation`, `unified_decision.holding_execution_plans`, `unified_decision.market_structure`, `reliability`, and `data_gaps`.
