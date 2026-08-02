@@ -244,7 +244,7 @@ class PortfolioManagementTests(unittest.TestCase):
         self.assertIsNone(saved["confirmed_at"])
 
     def test_user_confirmation_cannot_bypass_quarantined_price_data(self) -> None:
-        holding = self._holding(code="588200.SH", name="合成芯片ETF")
+        holding = self._holding(code="900002.SH", name="合成芯片ETF")
         workspace = self._workspace(holding, technical_state="quarantined")
         proposal = workspace["portfolio_management_plans"][0]
         with TemporaryDirectory() as temporary:
@@ -274,7 +274,7 @@ class PortfolioManagementTests(unittest.TestCase):
 
     def test_quarantined_data_never_generates_price_thresholds(self) -> None:
         workspace = self._workspace(
-            self._holding(code="588200.SH", name="合成芯片ETF"),
+            self._holding(code="900002.SH", name="合成芯片ETF"),
             technical_state="quarantined",
         )
         proposal = workspace["portfolio_management_plans"][0]
@@ -294,7 +294,7 @@ class PortfolioManagementTests(unittest.TestCase):
 
     def test_ui_uses_user_language_and_separates_management_from_data_faults(self) -> None:
         workspace = self._workspace(
-            self._holding(code="588200.SH", name="合成芯片ETF"),
+            self._holding(code="900002.SH", name="合成芯片ETF"),
             technical_state="quarantined",
         )
         html = render_after_close_workbench(

@@ -45,6 +45,22 @@ ACTION_MARKDOWN = """# 盘后持仓操作指引
 - 明日优先级：中
 """
 
+SYNTHETIC_ACTION_MARKDOWN = """# 盘后持仓操作指引
+
+## 数据缺口
+- 暂无
+
+## 持仓动作
+### 合成标的甲（600001.SH）
+- 建议动作：持有但不加仓
+- 核心理由：趋势确认不足。
+- 仓位动作：不加仓。
+- 上行条件：站回20日线。
+- 下行条件：破位后减仓复核。
+- 震荡处理：保持仓位等待确认。
+- 明日优先级：中
+"""
+
 
 def _outcome_snapshot() -> dict[str, object]:
     return {
@@ -169,7 +185,7 @@ class AfterCloseReliabilityTests(unittest.TestCase):
             cash=400000,
             holdings=[
                 Holding(
-                    code="300308.SZ",
+                    code="600001.SH",
                     name="合成标的甲",
                     shares=100,
                     cost=900,
@@ -185,7 +201,7 @@ class AfterCloseReliabilityTests(unittest.TestCase):
             risk_reconciliation_status="reconciled",
         )
 
-        payload = build_after_close_payload(ACTION_MARKDOWN, portfolio=portfolio)
+        payload = build_after_close_payload(SYNTHETIC_ACTION_MARKDOWN, portfolio=portfolio)
 
         self.assertEqual(payload["data_gaps"], [])
         self.assertEqual(payload["reliability"]["decision_ready_holdings"], 1)
