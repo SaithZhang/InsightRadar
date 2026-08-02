@@ -29,7 +29,7 @@ def render_after_close_workbench(
 def _document(workspace: Mapping[str, object]) -> str:
     workspace = dict(workspace)
     workspace["today_workbench"] = build_today_workbench(workspace)
-    safe_json = json.dumps(workspace, ensure_ascii=False, default=str).replace("</", "<\\/")
+    safe_json = _browser_workspace_json(workspace)
     positions = _dict_rows(workspace.get("portfolio_positions"))
     plans = _today_plans(workspace)
     source_time = _latest_source_time(workspace)
@@ -82,11 +82,37 @@ def _document(workspace: Mapping[str, object]) -> str:
   </nav>
   {_evidence_drawer(workspace)}
   {_data_drawer(workspace)}
+  {_management_drawer(workspace)}
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script type="application/json" id="workspace-data">{safe_json}</script>
   <script>{_script()}</script>
 </body>
 </html>"""
+
+
+def _browser_workspace_json(workspace: Mapping[str, object]) -> str:
+    """Embed useful read-only evidence without exposing legacy field names."""
+
+    hidden_keys = {"current_risk_line", "review_status"}
+
+    def sanitize(value: object) -> object:
+        if isinstance(value, Mapping):
+            return {
+                str(key): sanitize(item)
+                for key, item in value.items()
+                if str(key) not in hidden_keys
+            }
+        if isinstance(value, list):
+            return [sanitize(item) for item in value]
+        if isinstance(value, tuple):
+            return [sanitize(item) for item in value]
+        if value == "stale_context":
+            return "needs_review"
+        return value
+
+    return json.dumps(sanitize(workspace), ensure_ascii=False, default=str).replace(
+        "</", "<\\/"
+    )
 
 
 def _nav(
@@ -1032,6 +1058,15 @@ def _beta_cell(item: Mapping[str, object]) -> str:
 def _portfolio(workspace: Mapping[str, object]) -> str:
     summary = _mapping(workspace.get("portfolio_summary"))
     positions = _dict_rows(workspace.get("portfolio_positions"))
+    management_plans = _dict_rows(workspace.get("portfolio_management_plans"))
+    pending_management = [
+        item
+        for item in management_plans
+        if item.get("context_status") in {"system_proposed", "stale"}
+    ]
+    data_anomalies = [
+        item for item in management_plans if item.get("data_status") == "data_blocked"
+    ]
     changes = _today_plans(workspace)
     known_exposure = summary.get("known_exposure_pct")
     unknown_weight = sum(item.get("weight_pct") is None for item in positions)
@@ -1049,10 +1084,10 @@ def _portfolio(workspace: Mapping[str, object]) -> str:
         f"<td class=\"pnl {'up' if isinstance(item.get('pnl_pct'), (int, float)) and float(item.get('pnl_pct')) >= 0 else 'down'}\">{_value(item.get('pnl_pct'), suffix='%')}</td>"
         f"<td>{_beta_cell(item)}</td>"
         f"<td><span class='source {_status_class(item.get('data_completeness'))}'>{escape(str(item.get('data_completeness') or 'missing'))}</span></td>"
-        f"<td><span class='source {_status_class(item.get('today_status'))}'>{escape(_plan_status(str(item.get('today_status') or 'blocked')))}</span></td>"
-        f"<td><strong>{escape(str(item.get('current_plan_version') or '暂无'))}</strong>"
-        f"<small>{escape(str(item.get('next_condition') or '等待形成规则计划'))}</small></td>"
-        f"<td><button class='btn small' type='button' data-open-data>打开</button></td></tr>"
+        f"<td><span class='source {_status_class(_mapping(item.get('management_plan')).get('context_status'))}'>{escape(_management_context_label(str(_mapping(item.get('management_plan')).get('context_status') or 'system_proposed')))}</span></td>"
+        f"<td><strong>{escape(str(_mapping(item.get('management_plan')).get('suggestion_name') or '等待系统建议'))}</strong>"
+        f"<small>下次复核：{escape(str(_mapping(item.get('management_plan')).get('next_review_time') or '下一次 after-close'))}</small></td>"
+        f"<td><button class='btn small' type='button' data-open-management='{escape(str(item.get('symbol') or ''))}'>查看并确认</button></td></tr>"
         for item in positions
     )
     if not rows:
@@ -1068,6 +1103,23 @@ def _portfolio(workspace: Mapping[str, object]) -> str:
     )
     complete_width = int(complete / total * 100)
     cash_label = _value(summary.get("cash"))
+    pending_cards = "".join(
+        f'<article class="management-card {"warn" if item.get("context_status") == "stale" else ""}">'
+        f'<div><small>{escape(str(item.get("name") or item.get("symbol") or "持仓"))}</small>'
+        f'<strong>{escape(str(item.get("suggestion_name") or "系统管理建议"))}</strong>'
+        f'<p>{escape(str(item.get("stale_reason") or "系统已基于可信结构化数据生成建议，等待你的确认。"))}</p></div>'
+        f'<button class="btn primary small" type="button" data-open-management="{escape(str(item.get("symbol") or ""))}">查看并确认</button></article>'
+        for item in pending_management
+    ) or '<div class="management-empty">当前持仓管理方案均已处理；基础风险分析始终独立运行。</div>'
+    anomaly_cards = "".join(
+        f'<article class="data-anomaly-card"><div><small>{escape(str(item.get("name") or item.get("symbol") or "持仓"))}</small>'
+        f'<strong>系统行情数据异常，用户无需填写</strong>'
+        f'<p>{escape(str(item.get("data_issue_reason") or "行情未通过数据质量校验。"))}</p>'
+        f'<p><b>已暂停：</b>{escape("、".join(_string_rows(item.get("blocked_capabilities"))) or "技术价格判断")}</p>'
+        f'<p><b>仍可用：</b>{escape("、".join(_string_rows(item.get("available_capabilities"))) or "可信的账户与组合分析")}</p></div>'
+        f'<span class="status blocked">系统修复中</span></article>'
+        for item in data_anomalies
+    ) or '<div class="management-empty">当前没有持仓级行情隔离。</div>'
     return f"""
 <section class="view" id="route-portfolio" data-route-panel="portfolio">
   {_intraday_portfolio_panel(workspace)}
@@ -1098,9 +1150,17 @@ def _portfolio(workspace: Mapping[str, object]) -> str:
       </div>
     </section>
   </div>
+  <section class="panel section management-section">
+    <div class="section-head"><div><div class="eyebrow">A · 个性化跟踪</div><h2>持仓管理方案待确认</h2><p>系统已经生成建议；确认后用于个性化跟踪，不确认不影响基础风险分析。</p></div><span class="status pending">{len(pending_management)} 项待处理</span></div>
+    <div class="management-grid">{pending_cards}</div>
+  </section>
+  <section class="panel section management-section data-anomaly-section">
+    <div class="section-head"><div><div class="eyebrow">B · 数据质量</div><h2>行情数据异常</h2><p>这是系统数据问题；确认持仓方案不会解除暂停，只有数据源真正修复后才恢复技术判断。</p></div><span class="status {'blocked' if data_anomalies else 'ready'}">{len(data_anomalies)} 项隔离</span></div>
+    <div class="management-grid">{anomaly_cards}</div>
+  </section>
   <section class="panel section holdings-section">
     <div class="section-head"><div><h2>持仓与计划</h2><p>计划变化、风险状态和数据完整度优先于浮动盈亏。</p></div><div class="inline"><input id="holdingSearch" class="input" placeholder="代码或名称"/><button id="holdingFilter" class="btn" type="button">筛选</button></div></div>
-    <div class="table-wrap"><table id="holdingsTable"><thead><tr><th>标的</th><th>权重</th><th>浮动盈亏</th><th>风险暴露</th><th>数据状态</th><th>今日状态</th><th>当前计划</th><th></th></tr></thead>
+    <div class="table-wrap"><table id="holdingsTable"><thead><tr><th>标的</th><th>权重</th><th>浮动盈亏</th><th>风险暴露</th><th>账户字段</th><th>管理状态</th><th>系统建议</th><th></th></tr></thead>
     <tbody>{rows}</tbody></table></div>
   </section>
 </section>"""
@@ -1381,6 +1441,75 @@ def _data_drawer(workspace: Mapping[str, object]) -> str:
     </div>"""
 
 
+def _management_drawer(workspace: Mapping[str, object]) -> str:
+    plans = _dict_rows(workspace.get("portfolio_management_plans"))
+    panels: list[str] = []
+    for item in plans:
+        symbol = str(item.get("symbol") or "")
+        status = str(item.get("context_status") or "system_proposed")
+        data_blocked = item.get("data_status") == "data_blocked"
+        basis = "".join(
+            f"<li>{escape(value)}</li>" for value in _string_rows(item.get("decision_basis"))
+        ) or "<li>等待可信结构化依据</li>"
+        blocked_note = (
+            '<div class="management-data-warning"><strong>技术判断仍暂停</strong>'
+            f'<p>{escape(str(item.get("data_issue_reason") or "行情未通过质量校验。"))}</p>'
+            f'<p>暂停：{escape("、".join(_string_rows(item.get("blocked_capabilities"))) or "技术价格判断")}；'
+            f'仍可用：{escape("、".join(_string_rows(item.get("available_capabilities"))) or "账户与组合分析")}。</p></div>'
+            if data_blocked
+            else ""
+        )
+        profit_disabled = "" if item.get("profit_protect_applicable") else " disabled aria-disabled=\"true\""
+        panels.append(
+            f'<article class="management-panel" data-management-panel="{escape(symbol)}" hidden>'
+            f'<div class="management-title"><div><small>{escape(symbol)} · {_management_context_label(status)}</small>'
+            f'<h3>{escape(str(item.get("name") or symbol))} · {escape(str(item.get("suggestion_name") or "系统建议"))}</h3></div>'
+            f'<span class="source {_status_class(status)}">{escape(_management_context_label(status))}</span></div>'
+            f'{blocked_note}'
+            '<div class="management-detail-grid">'
+            f'<div><small>系统建议</small><strong>{escape(str(item.get("suggestion_name") or "继续观察"))}</strong></div>'
+            f'<div><small>数据可信度</small><strong>{escape(str(item.get("data_confidence") or "unknown"))}</strong></div>'
+            f'<div><small>触发条件</small><p>{escape(str(item.get("trigger_condition") or "等待下一次复核"))}</p></div>'
+            f'<div><small>确认窗口 / 持续时间</small><p>{escape(str(item.get("confirmation_window") or "下一次有效复核"))}</p></div>'
+            f'<div><small>触发后动作</small><p>{escape(str(item.get("triggered_action") or "维持当前仓位"))}</p></div>'
+            f'<div><small>失效条件</small><p>{escape(str(item.get("invalidation_condition") or "持仓状态发生变化"))}</p></div>'
+            f'<div><small>下次复核</small><p>{escape(str(item.get("next_review_time") or "下一次 after-close"))}</p></div>'
+            f'<div><small>来源与时间</small><p>{escape(str(item.get("generated_source") or "确定性规则"))} · 数据 {escape(str(item.get("source_time") or "unknown"))} · 生成 {escape(str(item.get("generated_at") or "unknown"))}</p></div>'
+            '</div>'
+            f'<div class="management-basis"><strong>判断依据</strong><ul>{basis}</ul></div>'
+            f'<div class="management-actions" data-management-actions data-symbol="{escape(symbol)}" data-version="{escape(str(item.get("management_plan_version") or ""))}">'
+            '<button class="btn primary" type="button" data-management-response="adopt">采用系统建议</button>'
+            '<button class="btn" type="button" data-management-adjust>调整</button>'
+            '<button class="btn ghost" type="button" data-management-response="uncertain">我不确定，仅按系统规则监控</button>'
+            '<p class="management-feedback" data-management-feedback></p>'
+            '<form class="management-adjust-form" data-management-form hidden>'
+            '<fieldset><legend>选择一种管理方式</legend>'
+            '<label><input type="radio" name="review" value="watch" checked>继续观察</label>'
+            '<label><input type="radio" name="review" value="risk_review">风险复核</label>'
+            f'<label class="{"" if item.get("profit_protect_applicable") else "disabled-option"}"><input type="radio" name="review" value="profit_protect"{profit_disabled}>利润保护</label>'
+            '<label><input type="radio" name="review" value="uncertain">暂不确定</label></fieldset>'
+            f'<label>触发条件<textarea name="trigger_condition">{escape(str(item.get("trigger_condition") or ""))}</textarea></label>'
+            f'<label>持续时间<textarea name="confirmation_window">{escape(str(item.get("confirmation_window") or ""))}</textarea></label>'
+            f'<label>触发后动作<textarea name="triggered_action">{escape(str(item.get("triggered_action") or ""))}</textarea></label>'
+            f'<label>失效条件<textarea name="invalidation_condition">{escape(str(item.get("invalidation_condition") or ""))}</textarea></label>'
+            f'<label>备注（选填）<textarea name="note">{escape(str(item.get("user_note") or ""))}</textarea></label>'
+            '<button class="btn primary" type="submit">保存调整并重新生成</button>'
+            '</form></div></article>'
+        )
+    body = "".join(panels) or _empty(
+        "没有持仓管理方案",
+        "请先生成最新 after-close，系统会基于可信结构化数据形成建议。",
+    )
+    return f"""<div class="drawer-backdrop" id="management-backdrop" hidden>
+      <aside class="drawer evidence-drawer" id="management-drawer" role="dialog" aria-modal="true" aria-labelledby="management-drawer-title" tabindex="-1">
+        <div class="drawer-head"><div><div class="eyebrow">Holding Management</div><h2 id="management-drawer-title">查看并确认持仓管理方案</h2></div>
+        <button class="btn small" id="management-close" type="button" aria-label="关闭持仓管理方案">关闭</button></div>
+        <div class="prototype-note">系统先生成建议，你只需采用、调整或保留不确定。确认不改变系统数据质量状态，也不会自动交易。</div>
+        <div class="management-drawer-body">{body}</div>
+      </aside>
+    </div>"""
+
+
 def _metric(label: str, value: object, suffix: str) -> str:
     shown = "unknown" if value is None or value == "" else f"{value}{suffix}"
     return f'<article class="metric"><span>{escape(label)}</span><b>{escape(str(shown))}</b></article>'
@@ -1431,6 +1560,15 @@ def _plan_status(value: str) -> str:
         "unchanged": "沿用",
         "blocked": "被阻断",
     }.get(value, value)
+
+
+def _management_context_label(value: str) -> str:
+    return {
+        "system_proposed": "系统建议待确认",
+        "user_confirmed": "已采用系统建议",
+        "user_modified": "已按你的调整确认",
+        "stale": "旧方案已失效，待重新确认",
+    }.get(value, "系统建议待确认")
 
 
 def _response_label(value: str) -> str:
@@ -1788,6 +1926,21 @@ function closeEvidenceDrawer() {
   document.body.classList.remove("drawer-open");
   if (lastFocus) lastFocus.focus();
 }
+function openManagementDrawer(symbol) {
+  lastFocus = document.activeElement;
+  const backdrop = document.getElementById("management-backdrop");
+  document.querySelectorAll("[data-management-panel]").forEach(panel => {
+    panel.hidden = panel.dataset.managementPanel !== symbol;
+  });
+  backdrop.hidden = false;
+  document.body.classList.add("drawer-open");
+  document.getElementById("management-drawer").focus();
+}
+function closeManagementDrawer() {
+  document.getElementById("management-backdrop").hidden = true;
+  document.body.classList.remove("drawer-open");
+  if (lastFocus) lastFocus.focus();
+}
 document.getElementById("data-status-open").addEventListener("click", openDataDrawer);
 document.querySelectorAll("[data-open-data]").forEach(button => button.addEventListener("click", openDataDrawer));
 document.getElementById("data-status-close").addEventListener("click", closeDataDrawer);
@@ -1795,9 +1948,13 @@ document.getElementById("data-backdrop").addEventListener("click", event => { if
 document.querySelectorAll("[data-open-evidence]").forEach(button => button.addEventListener("click", openEvidenceDrawer));
 document.getElementById("evidence-close").addEventListener("click", closeEvidenceDrawer);
 document.getElementById("evidence-backdrop").addEventListener("click", event => { if (event.target.id === "evidence-backdrop") closeEvidenceDrawer(); });
+document.querySelectorAll("[data-open-management]").forEach(button => button.addEventListener("click", () => openManagementDrawer(button.dataset.openManagement)));
+document.getElementById("management-close").addEventListener("click", closeManagementDrawer);
+document.getElementById("management-backdrop").addEventListener("click", event => { if (event.target.id === "management-backdrop") closeManagementDrawer(); });
 document.addEventListener("keydown", event => {
   if (event.key !== "Escape") return;
-  if (!document.getElementById("evidence-backdrop").hidden) closeEvidenceDrawer();
+  if (!document.getElementById("management-backdrop").hidden) closeManagementDrawer();
+  else if (!document.getElementById("evidence-backdrop").hidden) closeEvidenceDrawer();
   else if (!document.getElementById("data-backdrop").hidden) closeDataDrawer();
 });
 async function post(path, body) {
@@ -1813,6 +1970,51 @@ async function getJson(path) {
   if (!response.ok) throw new Error(result.error || "读取本地状态失败");
   return result;
 }
+async function saveManagement(container, response, form=null) {
+  const feedback = container.querySelector("[data-management-feedback]");
+  const body = {
+    symbol:container.dataset.symbol,
+    management_plan_version:container.dataset.version,
+    response,
+    request_id:refreshRequestId(),
+  };
+  if (form) {
+    const data = new FormData(form);
+    body.management_choice = data.get("review");
+    body.trigger_condition = data.get("trigger_condition");
+    body.confirmation_window = data.get("confirmation_window");
+    body.triggered_action = data.get("triggered_action");
+    body.invalidation_condition = data.get("invalidation_condition");
+    body.note = data.get("note");
+  }
+  const buttons = [...container.querySelectorAll("button")];
+  buttons.forEach(button => { button.disabled = true; });
+  if (feedback) feedback.textContent = "正在保存到本地私有上下文…";
+  try {
+    const result = await post("/api/portfolio-management", body);
+    if (feedback) feedback.textContent = "保存成功；正在重新生成 after-close。";
+    showToast("管理方案已保存，正在重新生成。", "success");
+    if (result.refresh_job?.run_id) pollRefresh(result.refresh_job.run_id);
+  } catch (error) {
+    if (feedback) feedback.textContent = `保存失败：${error.message}。你的调整仍保留在表单中。`;
+    showToast(`保存失败：${error.message}`, "error");
+  } finally {
+    buttons.forEach(button => { button.disabled = false; });
+  }
+}
+document.querySelectorAll("[data-management-actions]").forEach(container => {
+  const form = container.querySelector("[data-management-form]");
+  container.querySelector("[data-management-adjust]").addEventListener("click", () => {
+    form.hidden = !form.hidden;
+  });
+  container.querySelectorAll("[data-management-response]").forEach(button => button.addEventListener("click", () => {
+    saveManagement(container, button.dataset.managementResponse);
+  }));
+  form.addEventListener("submit", event => {
+    event.preventDefault();
+    saveManagement(container, "modify", form);
+  });
+});
 function renderIntradayProgress(runtime) {
   const progress = runtime?.refresh_progress || {};
   const set = (id, value) => { const node = document.getElementById(id); if (node) node.textContent = String(value); };
@@ -2100,10 +2302,12 @@ def _css() -> str:
 .metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}.metric{padding:15px 16px;border:1px solid var(--line);border-radius:14px;background:rgba(12,27,41,.82)}.metric small{display:block;color:var(--muted)}.metric strong{display:block;margin:5px 0 2px;font-size:22px}.metric em{color:var(--muted);font-size:10px;font-style:normal}.portfolio-layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,.55fr);gap:14px;margin-top:14px}.exposure-list{display:grid;gap:10px}.exposure-item{display:grid;grid-template-columns:130px 1fr 62px;align-items:center;gap:12px}.exposure-item span{color:var(--muted);font-size:11px}.exposure-item b{text-align:right;font-size:11px}.holdings-section,.ledger-section{margin-top:14px}.table-wrap{max-width:100%;overflow:auto;border:1px solid var(--line);border-radius:13px}table{width:100%;border-collapse:collapse;min-width:880px}th,td{padding:12px 13px;border-top:1px solid var(--line);text-align:left;vertical-align:middle}th{border-top:0;color:var(--muted);font-size:9px;letter-spacing:.08em;text-transform:uppercase;background:rgba(255,255,255,.025)}td small{display:block;color:var(--muted)}.pnl.up{color:var(--danger)}.pnl.down{color:var(--good)}
 .form-grid{display:grid;grid-template-columns:minmax(220px,1fr) repeat(3,minmax(150px,.45fr)) auto;gap:8px}.input,.select{min-height:39px;padding:8px 11px;border:1px solid var(--line2);border-radius:10px;color:var(--text);background:rgba(4,13,22,.68)}.lookup-result{display:grid;grid-template-columns:minmax(0,1.18fr) minmax(350px,.72fr);gap:14px;margin-top:14px}.chart-empty{min-height:245px;display:grid;place-content:center;gap:8px;padding:28px;text-align:center;border:1px dashed var(--line2);border-radius:13px;color:var(--muted);background:rgba(4,13,22,.45)}.chart-empty strong{color:var(--text);font-size:16px}.research-metrics{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:12px}.objective-banner{padding:11px 12px;border-left:3px solid var(--blue);color:var(--muted);background:rgba(112,172,228,.065)}.analysis-title{margin:4px 0 11px}.evidence-list{display:grid;gap:8px;margin-top:12px}.evidence-item{padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.018)}.evidence-item strong{display:flex;justify-content:space-between;gap:10px}.evidence-item p{margin:5px 0 0;color:var(--muted);font-size:10px}.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.tab{min-height:31px;padding:6px 10px;border:1px solid var(--line);border-radius:9px;color:var(--muted);background:transparent}.tab.active{color:var(--text);border-color:rgba(112,172,228,.45);background:rgba(112,172,228,.08)}.tab-panel{display:none;margin-top:10px}.tab-panel.active{display:block}.source-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:12px}.source-card{padding:11px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.018)}.source-card small{display:block;color:var(--muted)}.source-card strong{display:block;margin:4px 0}.source-card em{font-size:10px;font-style:normal;color:var(--muted)}
 .review-top{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}.score-card{padding:16px;border:1px solid var(--line);border-radius:14px;background:rgba(12,27,41,.82)}.score-card small{display:block;color:var(--muted)}.score-card strong{display:block;margin-top:5px;font-size:22px}.score-card .date-score{font-size:15px}.ledger{overflow:auto;border:1px solid var(--line);border-radius:13px}.maturity{display:grid;grid-template-columns:repeat(10,1fr);gap:5px;margin:12px 0}.maturity i{height:8px;border-radius:999px;background:rgba(255,255,255,.08)}.maturity i.done{background:var(--blue)}.maturity i.current{background:var(--amber)}
-.drawer-backdrop{position:fixed;inset:0;display:flex;justify-content:flex-end;background:rgba(0,0,0,.58);backdrop-filter:blur(3px);z-index:100}.drawer-backdrop[hidden]{display:none}.drawer{width:min(560px,94vw);height:100%;overflow:auto;padding:24px;border-left:1px solid var(--line2);background:#091724;box-shadow:-20px 0 55px rgba(0,0,0,.35);outline:0}.evidence-drawer{width:min(720px,96vw)}.drawer-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start}.drawer h2{margin:5px 0 0}.timeline,.evidence-chain{display:grid;gap:10px;margin-top:18px}.timeline-item{position:relative;padding:13px 14px 13px 18px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02)}.timeline-item:before{content:"";position:absolute;left:8px;top:18px;width:5px;height:5px;border-radius:50%;background:var(--blue)}.timeline-item small{display:block;color:var(--muted)}.timeline-item strong{display:block;margin-top:4px}.timeline-item p{margin:7px 0 0;color:var(--muted);font-size:10px}.evidence-chain-item{padding:15px 16px;border:1px solid var(--line);border-radius:9px;background:#0a1a28}.evidence-chain-item header{display:flex;justify-content:space-between;gap:12px;color:var(--blue);font-size:10px;text-transform:uppercase}.evidence-chain-item header em{font-style:normal}.evidence-chain-item h3{margin:9px 0;font-size:15px}.evidence-chain-item p{margin:6px 0;color:var(--muted);font-size:11px}.evidence-chain-item p b{color:var(--text)}.evidence-chain-item footer{margin-top:10px;padding-top:9px;border-top:1px solid var(--line);color:#7f93a4;font-size:10px}.toast{position:fixed;right:22px;bottom:22px;z-index:120;transform:translateY(18px);opacity:0;padding:10px 13px;border:1px solid var(--line2);border-radius:11px;background:#102536;box-shadow:var(--shadow);transition:.18s;pointer-events:none}.toast.visible{transform:translateY(0);opacity:1}.toast.success{border-color:rgba(121,184,174,.45)}.toast.error{border-color:rgba(223,116,110,.45)}.mobile-nav{display:none}.prototype-note{margin-top:12px;padding:11px 13px;border:1px dashed rgba(137,169,198,.25);border-radius:12px;color:var(--muted);font-size:10px}.empty-state{min-height:220px;display:grid;place-content:center;padding:22px;text-align:center;border:1px dashed var(--line2);border-radius:var(--radius);color:var(--muted);background:rgba(12,27,41,.6)}.empty-state h2{margin-bottom:6px;color:var(--text)}
+.management-section{margin-top:14px}.management-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.management-card,.data-anomaly-card{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:14px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02)}.management-card.warn{border-color:rgba(229,169,92,.38)}.management-card small,.data-anomaly-card small{display:block;color:var(--muted)}.management-card strong,.data-anomaly-card strong{display:block;margin:4px 0}.management-card p,.data-anomaly-card p{margin:5px 0 0;color:var(--muted);font-size:11px}.management-empty{grid-column:1/-1;padding:18px;border:1px dashed var(--line2);border-radius:12px;color:var(--muted)}.data-anomaly-section{border-color:rgba(223,116,110,.2)}.management-drawer-body{margin-top:18px}.management-title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.management-title small{color:var(--muted)}.management-title h3{margin:5px 0 0;font-size:19px}.management-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:14px}.management-detail-grid>div{padding:12px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.02)}.management-detail-grid small{display:block;color:var(--muted)}.management-detail-grid strong,.management-detail-grid p{display:block;margin:5px 0 0}.management-detail-grid p{color:var(--muted);font-size:11px}.management-basis,.management-data-warning{margin-top:12px;padding:12px 14px;border:1px solid var(--line);border-radius:11px}.management-basis ul{margin:8px 0 0;padding-left:18px;color:var(--muted)}.management-data-warning{border-color:rgba(223,116,110,.42);background:rgba(223,116,110,.06)}.management-data-warning p{margin:6px 0 0;color:var(--muted)}.management-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}.management-actions>.management-feedback{flex-basis:100%;margin:0;color:var(--muted)}.management-adjust-form{flex-basis:100%;display:grid;gap:9px;margin-top:5px;padding:14px;border:1px solid var(--line2);border-radius:12px;background:rgba(4,13,22,.5)}.management-adjust-form[hidden]{display:none}.management-adjust-form fieldset{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0;padding:12px;border:1px solid var(--line);border-radius:10px}.management-adjust-form legend{padding:0 6px;color:var(--muted)}.management-adjust-form label{display:grid;gap:5px;color:var(--muted);font-size:11px}.management-adjust-form fieldset label{display:flex;align-items:center;gap:7px}.management-adjust-form textarea{min-height:68px;resize:vertical;padding:9px;border:1px solid var(--line2);border-radius:9px;color:var(--text);background:rgba(4,13,22,.68)}.disabled-option{opacity:.45}.drawer-backdrop{position:fixed;inset:0;display:flex;justify-content:flex-end;background:rgba(0,0,0,.58);backdrop-filter:blur(3px);z-index:100}.drawer-backdrop[hidden]{display:none}.drawer{width:min(560px,94vw);height:100%;overflow:auto;padding:24px;border-left:1px solid var(--line2);background:#091724;box-shadow:-20px 0 55px rgba(0,0,0,.35);outline:0}.evidence-drawer{width:min(720px,96vw)}.drawer-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start}.drawer h2{margin:5px 0 0}.timeline,.evidence-chain{display:grid;gap:10px;margin-top:18px}.timeline-item{position:relative;padding:13px 14px 13px 18px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02)}.timeline-item:before{content:"";position:absolute;left:8px;top:18px;width:5px;height:5px;border-radius:50%;background:var(--blue)}.timeline-item small{display:block;color:var(--muted)}.timeline-item strong{display:block;margin-top:4px}.timeline-item p{margin:7px 0 0;color:var(--muted);font-size:10px}.evidence-chain-item{padding:15px 16px;border:1px solid var(--line);border-radius:9px;background:#0a1a28}.evidence-chain-item header{display:flex;justify-content:space-between;gap:12px;color:var(--blue);font-size:10px;text-transform:uppercase}.evidence-chain-item header em{font-style:normal}.evidence-chain-item h3{margin:9px 0;font-size:15px}.evidence-chain-item p{margin:6px 0;color:var(--muted);font-size:11px}.evidence-chain-item p b{color:var(--text)}.evidence-chain-item footer{margin-top:10px;padding-top:9px;border-top:1px solid var(--line);color:#7f93a4;font-size:10px}.toast{position:fixed;right:22px;bottom:22px;z-index:120;transform:translateY(18px);opacity:0;padding:10px 13px;border:1px solid var(--line2);border-radius:11px;background:#102536;box-shadow:var(--shadow);transition:.18s;pointer-events:none}.toast.visible{transform:translateY(0);opacity:1}.toast.success{border-color:rgba(121,184,174,.45)}.toast.error{border-color:rgba(223,116,110,.45)}.mobile-nav{display:none}.prototype-note{margin-top:12px;padding:11px 13px;border:1px dashed rgba(137,169,198,.25);border-radius:12px;color:var(--muted);font-size:10px}.empty-state{min-height:220px;display:grid;place-content:center;padding:22px;text-align:center;border:1px dashed var(--line2);border-radius:var(--radius);color:var(--muted);background:rgba(12,27,41,.6)}.empty-state h2{margin-bottom:6px;color:var(--text)}
 @media(max-width:1120px){.today-workbench-grid,.today-layout,.portfolio-layout,.lookup-result,.decision-support,.review-evidence-grid,.decision-conclusion{grid-template-columns:1fr}.today-workbench-grid{gap:14px}.conclusion-invalid{grid-column:1}.side-stack{grid-template-columns:repeat(3,minmax(0,1fr))}.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.form-grid .btn{grid-column:1/-1}.review-top{grid-template-columns:repeat(3,minmax(0,1fr))}.authority-chain-new{grid-template-columns:repeat(2,minmax(0,1fr))}.authority-step:nth-child(3){border-left:0;border-top:1px solid var(--line)}.authority-step:nth-child(4){border-top:1px solid var(--line)}.review-value-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.review-value-summary>div:nth-child(3),.review-value-summary>div:nth-child(5){border-top:1px solid var(--line)}.review-value-summary>div:nth-child(3),.review-value-summary>div:nth-child(5){border-left:0}.review-data-state{grid-column:1/-1}.review-chart-blocked{grid-template-columns:1fr;min-height:420px}.review-attribution-blocked{grid-template-columns:120px minmax(0,1fr)}.review-attribution-blocked>p{grid-column:1/-1;padding-top:10px;border-top:1px solid var(--line)}}
 @media(max-width:820px){.app{display:block}.sidebar{display:none}.content{padding:16px 12px 90px}.topbar{display:block;margin-bottom:14px}.top-actions{margin-top:10px}.runtime-strip,.market-gate{grid-template-columns:repeat(2,minmax(0,1fr))}.runtime-cell:first-child,.market-gate>div:first-child{grid-column:1/-1}.runtime-cell:nth-child(2),.market-gate>div:nth-child(2){border-left:0}.theme-line{grid-template-columns:1fr}.decision-stage-rail{display:flex;overflow-x:auto}.stage-node{flex:0 0 142px}.action-command{min-height:0;padding:23px 18px 19px;display:grid;gap:22px}.action-command-controls{width:100%;display:grid}.authority-chain-new{display:block}.authority-step{width:100%;min-height:75px;border-top:1px solid var(--line);border-left:0}.authority-step:first-child{border-top:0}.holding-impact-strip{padding:16px;display:block}.holding-impact-strip h3{margin-bottom:12px}.holding-impact-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.holding-impact{padding:0;border-left:0}.evidence-command-panel,.risk-exit-panel{padding:18px 16px}.rules,.provenance,.source-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.rule-item:nth-child(3),.prov:nth-child(3){border-left:0}.queue-item{grid-template-columns:34px 1fr}.queue-item>:nth-child(3),.queue-actions,.queue-detail{grid-column:2}.queue-actions{justify-content:flex-start}.side-stack{grid-template-columns:1fr}.metrics,.review-top{grid-template-columns:repeat(2,minmax(0,1fr))}.decision-trust-summary{padding:12px 14px;flex-wrap:wrap;gap:7px 14px}.decision-trust-summary .trust-summary-kicker{flex-basis:100%}.decision-trust-summary em{margin-left:0}.review-inline-meta{justify-content:flex-start}.review-inline-meta span:first-child{flex-basis:100%;margin-right:0;padding-left:0}.review-controls{display:grid}.review-periods{margin-left:0;overflow:auto}.review-chart-blocked{padding:28px 20px}.review-attribution-blocked{display:block;overflow:auto}.review-attribution-blocked>div:first-child{padding:0 0 10px;border-right:0;border-bottom:1px solid var(--line)}.attribution-unknowns{min-width:700px;margin-top:12px}.review-attribution-blocked>p{min-width:330px;margin-top:12px}.mobile-nav{position:fixed;right:0;bottom:0;left:0;z-index:80;display:grid;grid-template-columns:repeat(4,1fr);padding:7px 8px calc(7px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:#06111c}.mobile-nav button{display:block;min-height:43px;border:0;border-radius:9px;color:var(--muted);background:transparent;text-align:center}.mobile-nav button.active{color:var(--text);background:#132a3e}.mobile-nav button span{display:inline}.card-footer,.response-box{display:block}.card-actions{margin-top:10px}}
 @media(max-width:520px){.runtime-strip,.market-gate,.rules,.provenance,.source-grid,.metrics,.review-top,.form-grid,.research-metrics,.review-value-summary{display:block}.runtime-cell,.market-gate>div,.rule-item,.prov,.source-card,.metric,.score-card,.review-value-summary>div{border-left:0;border-top:1px solid var(--line);margin-top:7px}.runtime-cell:first-child,.market-gate>div:first-child,.rule-item:first-child,.review-value-summary>div:first-child{border-top:0}.action-command h2{font-size:28px}.holding-impact-list{grid-template-columns:1fr}.evidence-command-panel>header,.risk-exit-panel>header{display:block}.evidence-command-panel>header .btn{margin-top:10px}.evidence-delta{grid-template-columns:56px minmax(0,1fr)}.evidence-delta em{grid-column:2}.risk-facts,.exit-conditions>div,.risk-next{grid-template-columns:1fr}.risk-facts>div{padding:9px 0;border-top:1px solid var(--line);border-left:0}.risk-facts>div:first-child{border-top:0}.review-chart-head{display:grid;padding:10px}.review-chart-blocked{padding:24px 14px}.review-chart-blocked li{display:grid}.review-value-summary>div{margin-top:0}.diff-grid{grid-template-columns:1fr}.diff-arrow{transform:rotate(90deg)}.card-footer,.section-head{display:block}.card-actions,.section-head>.inline{margin-top:10px}.change-title h2{font-size:21px}.content{padding-left:10px;padding-right:10px}.top-actions .chip:first-child{display:none}.btn,.input,.select{min-height:44px}}
 @media(max-width:820px){.today-phase-banner{align-items:flex-start;flex-wrap:wrap}.today-phase-banner em{margin-left:0}.today-column-head{min-height:0}.today-data-details>div{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.today-column-head{padding:15px;display:block}.today-column-head>.source,.today-column-head>.status{margin-top:10px}.today-column-head h2{font-size:20px}.account-pnl{padding:15px}.account-metric-grid{margin:10px 15px;grid-template-columns:1fr}.attention-stack,.decision-stack{padding:8px}.today-rule-actions{grid-template-columns:1fr}.decision-card-title{display:block}.decision-card-title .source{margin-top:6px}.today-data-details>div{grid-template-columns:1fr}}
+@media(max-width:1120px){.management-grid{grid-template-columns:1fr}}
+@media(max-width:620px){.management-detail-grid,.management-adjust-form fieldset{grid-template-columns:1fr}.management-card,.data-anomaly-card{align-items:flex-start;flex-direction:column}}
 """

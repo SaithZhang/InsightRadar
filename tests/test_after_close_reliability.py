@@ -164,6 +164,36 @@ class AfterCloseReliabilityTests(unittest.TestCase):
         self.assertFalse(_historical_context_complete(holding))
 
     @patch("stock_assist.workflows.after_close.load_outcome_snapshot", side_effect=_outcome_snapshot)
+    def test_missing_user_context_does_not_block_base_after_close_analysis(self, _mock) -> None:
+        portfolio = Portfolio(
+            cash=400000,
+            holdings=[
+                Holding(
+                    code="300308.SZ",
+                    name="合成标的甲",
+                    shares=100,
+                    cost=900,
+                    market_price=950,
+                    pnl_pct=5.5,
+                    market_value=95000,
+                    weight_pct=19,
+                    review_status="needs_context",
+                )
+            ],
+            source=Path("fixture-portfolio.json"),
+            as_of="2026-07-31",
+            risk_reconciliation_status="reconciled",
+        )
+
+        payload = build_after_close_payload(ACTION_MARKDOWN, portfolio=portfolio)
+
+        self.assertEqual(payload["data_gaps"], [])
+        self.assertEqual(payload["reliability"]["decision_ready_holdings"], 1)
+        management = payload["decision_workspace"]["portfolio_management_plans"][0]
+        self.assertEqual(management["context_status"], "system_proposed")
+        self.assertTrue(management["base_analysis_available"])
+
+    @patch("stock_assist.workflows.after_close.load_outcome_snapshot", side_effect=_outcome_snapshot)
     def test_unknown_entry_history_is_a_review_gap_not_a_decision_blocker(self, _mock) -> None:
         portfolio = Portfolio(
             cash=400000,

@@ -6,13 +6,14 @@ state-changing requests.  It never accepts or emits trade orders.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
+import secrets
 from collections.abc import Mapping
 from dataclasses import asdict
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import hashlib
-import json
-import secrets
 from threading import Event, Thread
 
 from stock_assist.after_close_workbench_html import render_after_close_workbench
@@ -23,24 +24,33 @@ from stock_assist.decision_workspace import (
     restage_workspace,
     write_runtime_state,
 )
+from stock_assist.intraday.execution import (
+    append_execution,
+    append_reentry_confirmation,
+    load_executions,
+    load_reentry_confirmations,
+    load_reentry_failures,
+)
+from stock_assist.intraday.network import sanitize_diagnostic_text
 from stock_assist.intraday.polling import (
     _shadow_event_mapping,
     load_intraday_runtime,
     persist_execution_guard,
     run_intraday_service,
-    stop_intraday_scheduler,
     stop_intraday_refresh_process,
-)
-from stock_assist.intraday.network import sanitize_diagnostic_text
-from stock_assist.intraday.execution import (
-    append_execution,
-    append_reentry_confirmation,
-    load_executions,
-    load_reentry_failures,
-    load_reentry_confirmations,
+    stop_intraday_scheduler,
 )
 from stock_assist.paths import REPORT_DIR
-from stock_assist.portfolio_import import apply_portfolio_import, preview_portfolio_import
+from stock_assist.portfolio import (
+    DEFAULT_PORTFOLIO_CONTEXT_PATH,
+    Portfolio,
+    load_portfolio,
+    save_portfolio_management_context,
+)
+from stock_assist.portfolio_import import (
+    apply_portfolio_import,
+    preview_portfolio_import,
+)
 from stock_assist.portfolio_import_web import (
     render_portfolio_import_page as _page,
 )
@@ -158,6 +168,31 @@ def serve_portfolio_import(
                     )
                     coordinator.record_user_response(record)
                     self._send_json(record)
+                    return
+                if self.path == "/api/portfolio-management":
+                    workspace = _latest_workspace()
+                    if workspace is None:
+                        raise ValueError("尚未生成 after-close workspace")
+                    saved = apply_portfolio_management_response(
+                        workspace,
+                        load_portfolio(),
+                        body,
+                    )
+                    job = coordinator.start(
+                        mode="after_close",
+                        idempotency_key=str(
+                            body.get("request_id")
+                            or f"portfolio-management:{saved['code']}:{saved['updated_at']}"
+                        ),
+                    )
+                    self._send_json(
+                        {
+                            "saved": True,
+                            "record": saved,
+                            "refresh_job": job,
+                        },
+                        status=202,
+                    )
                     return
                 if self.path == "/api/morning-recheck":
                     workspace = _latest_workspace()
@@ -294,6 +329,125 @@ def serve_portfolio_import(
                 intraday_thread.join(timeout=3.0)
             stop_intraday_scheduler()
         server.server_close()
+
+
+_PRICE_RULE_MARKERS = re.compile(
+    r"(?:\d+(?:\.\d+)?\s*(?:元|块)|均线|支撑位?|压力位?|价格阈值|MA\d+)",
+    re.IGNORECASE,
+)
+
+
+def apply_portfolio_management_response(
+    workspace: Mapping[str, object],
+    portfolio: Portfolio,
+    body: Mapping[str, object],
+    *,
+    context_path=DEFAULT_PORTFOLIO_CONTEXT_PATH,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Validate a local management response and persist the compatible context."""
+
+    code = str(body.get("symbol") or "").strip()
+    response = str(body.get("response") or "").strip()
+    version = str(body.get("management_plan_version") or "").strip()
+    if response not in {"adopt", "modify", "uncertain"}:
+        raise ValueError("不支持的方案操作")
+    holding = next((item for item in portfolio.holdings if item.code == code), None)
+    if holding is None:
+        raise ValueError("持仓不存在或已退出，请刷新后重试")
+    raw_plans = workspace.get("portfolio_management_plans")
+    plans = raw_plans if isinstance(raw_plans, list) else []
+    proposal = next(
+        (
+            item
+            for item in plans
+            if isinstance(item, Mapping)
+            if str(item.get("symbol") or "") == code
+            and str(item.get("management_plan_version") or "") == version
+        ),
+        None,
+    )
+    if proposal is None:
+        raise ValueError("管理方案不存在或版本已过期，请刷新后重试")
+
+    if response == "adopt":
+        review_status = str(proposal.get("review_status") or "watch")
+        context_status = "user_confirmed"
+        context_source = "system_proposal_confirmed"
+        user_disposition = "adopted"
+    elif response == "uncertain":
+        review_status = "uncertain"
+        context_status = "system_proposed"
+        context_source = "user_uncertain"
+        user_disposition = "uncertain"
+    else:
+        review_status = str(
+            body.get("management_choice") or body.get("review_status") or ""
+        ).strip()
+        if review_status == "uncertain":
+            context_status = "system_proposed"
+            context_source = "user_uncertain"
+            user_disposition = "uncertain"
+        else:
+            context_status = "user_modified"
+            context_source = "user_modified"
+            user_disposition = "modified"
+    if review_status == "profit_protect" and not (
+        holding.pnl_pct is not None and holding.pnl_pct > 0
+    ):
+        raise ValueError("当前持仓不适用利润保护，请选择继续观察或风险复核")
+
+    fields = {
+        "management_name": str(body.get("suggestion_name") or proposal.get("suggestion_name") or "").strip(),
+        "management_trigger": str(body.get("trigger_condition") or proposal.get("trigger_condition") or "").strip(),
+        "management_persistence": str(body.get("confirmation_window") or proposal.get("confirmation_window") or "").strip(),
+        "management_action": str(body.get("triggered_action") or proposal.get("triggered_action") or "").strip(),
+        "management_invalidation": str(body.get("invalidation_condition") or proposal.get("invalidation_condition") or "").strip(),
+    }
+    if proposal.get("data_status") == "data_blocked":
+        proposal_fields = {
+            "management_trigger": str(proposal.get("trigger_condition") or "").strip(),
+            "management_persistence": str(proposal.get("confirmation_window") or "").strip(),
+            "management_action": str(proposal.get("triggered_action") or "").strip(),
+            "management_invalidation": str(proposal.get("invalidation_condition") or "").strip(),
+        }
+        changed_text = " ".join(
+            value
+            for key, value in fields.items()
+            if key in proposal_fields and value != proposal_fields[key]
+        )
+        if changed_text and _PRICE_RULE_MARKERS.search(changed_text):
+            raise ValueError("行情异常期间不能新增均线、支撑位或价格阈值规则")
+    current_risk_line = (
+        f"触发：{fields['management_trigger']}；"
+        f"持续：{fields['management_persistence']}；"
+        f"动作：{fields['management_action']}；"
+        f"失效：{fields['management_invalidation']}"
+    )
+    saved = save_portfolio_management_context(
+        code=code,
+        context_status=context_status,
+        review_status=review_status,
+        current_risk_line=current_risk_line,
+        management_plan_version=version,
+        context_source=context_source,
+        based_on_report=str(proposal.get("based_on_report") or ""),
+        management_name=fields["management_name"],
+        management_trigger=fields["management_trigger"],
+        management_persistence=fields["management_persistence"],
+        management_action=fields["management_action"],
+        management_invalidation=fields["management_invalidation"],
+        next_review_date=str(proposal.get("next_review_time") or ""),
+        user_note=str(body.get("note") or ""),
+        user_disposition=user_disposition,
+        confirmed_at=now,
+        path=context_path,
+    )
+    return {
+        **saved,
+        "code": code,
+        "updated_at": str(saved.get("updated_at") or (now or datetime.now()).isoformat(timespec="seconds")),
+    }
 
 
 def _latest_after_close_html():

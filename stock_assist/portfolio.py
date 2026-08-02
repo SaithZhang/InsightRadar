@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import tempfile
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
@@ -88,6 +93,18 @@ class Holding:
     observation_window: str = ""
     next_review_date: str = ""
     adjustment_records: tuple[AdjustmentRecord, ...] = ()
+    context_status: str = ""
+    context_source: str = ""
+    confirmed_at: str = ""
+    based_on_report: str = ""
+    management_plan_version: str = ""
+    management_name: str = ""
+    management_trigger: str = ""
+    management_persistence: str = ""
+    management_action: str = ""
+    management_invalidation: str = ""
+    user_note: str = ""
+    user_disposition: str = ""
 
 
 @dataclass(frozen=True)
@@ -179,6 +196,18 @@ def _load_json_portfolio(path: Path) -> Portfolio:
             observation_window=str(item.get("observation_window", "")),
             next_review_date=str(item.get("next_review_date", "")),
             adjustment_records=_parse_adjustment_records(item.get("adjustments", [])),
+            context_status=str(item.get("context_status", "")),
+            context_source=str(item.get("context_source", "")),
+            confirmed_at=str(item.get("confirmed_at", "")),
+            based_on_report=str(item.get("based_on_report", "")),
+            management_plan_version=str(item.get("management_plan_version", "")),
+            management_name=str(item.get("management_name", "")),
+            management_trigger=str(item.get("management_trigger", "")),
+            management_persistence=str(item.get("management_persistence", "")),
+            management_action=str(item.get("management_action", "")),
+            management_invalidation=str(item.get("management_invalidation", "")),
+            user_note=str(item.get("user_note", "")),
+            user_disposition=str(item.get("user_disposition", "")),
         )
         for item in payload.get("holdings", [])
     ]
@@ -408,6 +437,22 @@ def _merge_holding_context(holding: Holding, context: dict[str, Any]) -> Holding
             else str(context.get("next_review_date") or holding.next_review_date)
         ),
         adjustment_records=_parse_adjustment_records(context.get("adjustments", holding.adjustment_records)),
+        context_status=(
+            "stale"
+            if context_conflict
+            else str(context.get("context_status") or "user_confirmed")
+        ),
+        context_source=str(context.get("context_source") or "legacy_context"),
+        confirmed_at=str(context.get("confirmed_at") or ""),
+        based_on_report=str(context.get("based_on_report") or ""),
+        management_plan_version=str(context.get("management_plan_version") or ""),
+        management_name=str(context.get("management_name") or ""),
+        management_trigger=str(context.get("management_trigger") or ""),
+        management_persistence=str(context.get("management_persistence") or ""),
+        management_action=str(context.get("management_action") or ""),
+        management_invalidation=str(context.get("management_invalidation") or ""),
+        user_note=str(context.get("user_note") or ""),
+        user_disposition=str(context.get("user_disposition") or ""),
     )
 
 
@@ -540,9 +585,149 @@ def _fill_missing_weights(holdings: list[Holding]) -> list[Holding]:
             observation_window=holding.observation_window,
             next_review_date=holding.next_review_date,
             adjustment_records=holding.adjustment_records,
+            context_status=holding.context_status,
+            context_source=holding.context_source,
+            confirmed_at=holding.confirmed_at,
+            based_on_report=holding.based_on_report,
+            management_plan_version=holding.management_plan_version,
+            management_name=holding.management_name,
+            management_trigger=holding.management_trigger,
+            management_persistence=holding.management_persistence,
+            management_action=holding.management_action,
+            management_invalidation=holding.management_invalidation,
+            user_note=holding.user_note,
+            user_disposition=holding.user_disposition,
         )
         for holding in holdings
     ]
+
+
+ALLOWED_MANAGEMENT_REVIEW_STATUSES = frozenset(
+    {"watch", "risk_review", "profit_protect", "uncertain"}
+)
+ALLOWED_MANAGEMENT_CONTEXT_STATUSES = frozenset(
+    {"system_proposed", "user_confirmed", "user_modified"}
+)
+
+
+def save_portfolio_management_context(
+    *,
+    code: str,
+    context_status: str,
+    review_status: str,
+    current_risk_line: str,
+    management_plan_version: str,
+    context_source: str,
+    based_on_report: str,
+    management_name: str,
+    management_trigger: str,
+    management_persistence: str,
+    management_action: str,
+    management_invalidation: str,
+    next_review_date: str,
+    user_note: str = "",
+    user_disposition: str = "",
+    confirmed_at: datetime | None = None,
+    path: Path = DEFAULT_PORTFOLIO_CONTEXT_PATH,
+) -> dict[str, Any]:
+    """Validate and atomically persist one private holding management decision."""
+
+    clean_code = code.strip()
+    if not clean_code:
+        raise ValueError("持仓代码不能为空")
+    if context_status not in ALLOWED_MANAGEMENT_CONTEXT_STATUSES:
+        raise ValueError(f"不支持的方案状态：{context_status}")
+    if review_status not in ALLOWED_MANAGEMENT_REVIEW_STATUSES:
+        raise ValueError(f"不支持的管理方式：{review_status}")
+    required_text = {
+        "当前管理规则": current_risk_line,
+        "方案版本": management_plan_version,
+        "方案来源": context_source,
+        "依据报告": based_on_report,
+        "建议名称": management_name,
+        "触发条件": management_trigger,
+        "持续条件": management_persistence,
+        "触发后动作": management_action,
+        "失效条件": management_invalidation,
+        "下次复核时间": next_review_date,
+    }
+    missing = [label for label, value in required_text.items() if not str(value).strip()]
+    if missing:
+        raise ValueError("保存字段缺失：" + "、".join(missing))
+    if any(
+        marker in current_risk_line
+        for marker in ("未知价格", "价格阈值 0", "均线 0", "支撑位 0")
+    ):
+        raise ValueError("管理规则不得用 0 或未知价格补齐阈值")
+
+    payload: dict[str, Any]
+    if path.exists():
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            payload = dict(raw)
+        elif isinstance(raw, list):
+            payload = {"positions": raw}
+        else:
+            raise ValueError("持仓上下文文件结构无效")
+    else:
+        payload = {"schema_version": "insightradar-portfolio-context/v2", "positions": []}
+    raw_positions = payload.get("positions")
+    if not isinstance(raw_positions, list):
+        raise ValueError("持仓上下文 positions 必须是数组")
+    positions = [dict(item) for item in raw_positions if isinstance(item, dict)]
+    saved_at = (confirmed_at or datetime.now()).isoformat(timespec="seconds")
+    record = next((item for item in positions if str(item.get("code")) == clean_code), None)
+    if record is None:
+        record = {"code": clean_code}
+        positions.append(record)
+    record.update(
+        {
+            "current_risk_line": current_risk_line.strip(),
+            "review_status": review_status,
+            "context_status": context_status,
+            "context_source": context_source.strip(),
+            "confirmed_at": saved_at if context_status != "system_proposed" else None,
+            "based_on_report": based_on_report.strip(),
+            "management_plan_version": management_plan_version.strip(),
+            "management_name": management_name.strip(),
+            "management_trigger": management_trigger.strip(),
+            "management_persistence": management_persistence.strip(),
+            "management_action": management_action.strip(),
+            "management_invalidation": management_invalidation.strip(),
+            "next_review_date": next_review_date.strip(),
+            "user_note": user_note.strip(),
+            "user_disposition": user_disposition.strip(),
+            "updated_at": saved_at,
+        }
+    )
+    payload["schema_version"] = "insightradar-portfolio-context/v2"
+    payload["updated_at"] = saved_at
+    payload["positions"] = positions
+    _atomic_write_json_with_backup(path, payload)
+    return dict(record)
+
+
+def _atomic_write_json_with_backup(path: Path, payload: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    backup = path.with_suffix(path.suffix + ".bak")
+    if path.exists():
+        shutil.copy2(path, backup)
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent)
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_name, path)
+    except Exception:
+        try:
+            os.unlink(temporary_name)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def parse_galaxy_position_table(text: str) -> list[dict[str, str]]:  # type: ignore[no-redef]  # noqa: F811

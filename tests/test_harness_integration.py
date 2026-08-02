@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
 from io import StringIO
+from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
 from unittest.mock import patch
 
 from stock_assist.cli import main
+from stock_assist.harness_eval.smoke import run_contract_smoke
 from stock_assist.product import FILES, command_for
 from stock_assist.workflows.architecture_view import build_architecture_view
-from stock_assist.harness_eval.smoke import run_contract_smoke
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -100,7 +99,7 @@ class HarnessIntegrationTests(unittest.TestCase):
     def test_macro_shadow_remains_closed_under_intraday_activation(self) -> None:
         current_state = (PROJECT_ROOT / "CURRENT_STATE.md").read_text(encoding="utf-8")
         self.assertRegex(current_state, r'"updated_at": "\d{4}-\d{2}-\d{2}"')
-        self.assertIn('"next_feature_id": "IR-002"', current_state)
+        self.assertIn('"next_feature_id": "feat-058"', current_state)
 
         feature_payload = json.loads((PROJECT_ROOT / "feature_list.json").read_text(encoding="utf-8"))
         feature_status = {item["id"]: item["status"] for item in feature_payload["features"]}
@@ -462,7 +461,7 @@ class HarnessIntegrationTests(unittest.TestCase):
 
     def test_restart_snapshot_activates_intraday_acceptance(self) -> None:
         current_state = (PROJECT_ROOT / "CURRENT_STATE.md").read_text(encoding="utf-8")
-        self.assertIn('"next_feature_id": "IR-002"', current_state)
+        self.assertIn('"next_feature_id": "feat-058"', current_state)
 
         feature_payload = json.loads(
             (PROJECT_ROOT / "feature_list.json").read_text(encoding="utf-8")
@@ -472,7 +471,7 @@ class HarnessIntegrationTests(unittest.TestCase):
             for item in feature_payload["features"]
         }
         self.assertEqual(feature_status["feat-056"], "pending")
-        self.assertEqual(feature_status["feat-058"], "pending")
+        self.assertEqual(feature_status["feat-058"], "in_progress")
         self.assertEqual(feature_status["IR-001"], "pass")
         self.assertEqual(feature_status["IR-002"], "in_progress")
 

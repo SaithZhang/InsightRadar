@@ -1,4 +1,6 @@
 {
+  "schema_version": "insightradar-portfolio-context/v2",
+  "updated_at": "2026-08-02T10:00:00",
   "positions": [
     {
       "code": "000001.SZ",
@@ -8,6 +10,18 @@
       "current_risk_line": "示例：复盘后更新的当前风控线。",
       "horizon": "swing",
       "review_status": "watch",
+      "context_status": "user_confirmed",
+      "context_source": "system_proposal_confirmed",
+      "confirmed_at": "2026-08-02T10:00:00",
+      "based_on_report": "2026-08-02T09:58:00",
+      "management_plan_version": "mp-synthetic-example",
+      "management_name": "继续观察",
+      "management_trigger": "示例：可信行情与组合风险条件满足时触发。",
+      "management_persistence": "示例：持续到下一次有效收盘复核。",
+      "management_action": "示例：维持仓位，任何调整仍需用户确认。",
+      "management_invalidation": "示例：持仓状态或风险预算发生实质变化。",
+      "user_note": "",
+      "user_disposition": "adopted",
       "catalysts": [
         "示例：未来1-4周可能验证买入假设的事件或数据。"
       ],

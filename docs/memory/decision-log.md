@@ -19,6 +19,7 @@ This file is the bounded decision index. Full context, alternatives, and consequ
 - [ADR-0013: Derive Portfolio Beta from Deterministic Market Evidence](decisions/0013-deterministic-portfolio-beta.md)
 - [ADR-0014: Separate Current Risk Context from Historical Entry Context](decisions/0014-separate-current-and-historical-position-context.md)
 - [ADR-0015: Conclude the V3.0 Scope Freeze and Open Sequential V3.1 Iteration](decisions/0015-open-sequential-v3-1-iteration.md)
+- [ADR-0016: Separate Holding-Management Consent from Data Quality](decisions/0016-separate-management-consent-from-data-quality.md)
 
 ## 2026-07-14 - Repository memory, not chat history
 
@@ -122,6 +123,12 @@ This file is the bounded decision index. Full context, alternatives, and consequ
 - Decision: retain V3.0 as the immutable historical baseline and authorize V3.1 as the active incremental development line.
 - Reason: the owner explicitly ended the frozen-baseline phase and chose version-by-version iteration; bounded product work had already moved beyond the original defect-only pilot gate.
 - Consequence: `IR-002` remains the single active increment, the incomplete ten-run trial is not reported as passed, and V3.2 or a parallel redesign remains unauthorized. Four routes, truthful data states, privacy, human confirmation, and no automatic trading remain guardrails. See ADR-0015.
+
+## 2026-08-02 - Holding-management consent is separate from data quality
+
+- Decision: generate deterministic holding-management proposals when context is missing or stale, and track user consent independently from account/market data quality.
+- Reason: user uncertainty is a personalization state, not missing market evidence; the old read-only context path incorrectly blocked the whole report and offered no UI repair flow.
+- Consequence: confirmation never clears a quarantine, per-capability data faults remain fail closed, compatible private context is written atomically through the loopback UI, and only after-close is regenerated. See ADR-0016.
 
 ## Existing durable decisions
 

@@ -107,6 +107,7 @@ class DecisionPlan(TypedDict):
     branches: list[dict[str, object]]
     technical_snapshot: dict[str, object]
     cost_reference: dict[str, object]
+    data_status: str
     change_reasons: list[str]
     created_at: str
     effective_after_user_confirmation: bool
@@ -136,6 +137,14 @@ def build_decision_workspace(
     previous_plans = _latest_plan_versions(raw_plan_history)
     plan_history = _annotate_plan_history(raw_plan_history, portfolio)
     plans = _plans(decision, reliability, now, latest_by_plan, previous_plans)
+    management_plans = _management_plans(
+        portfolio,
+        plans,
+        reliability,
+        decision,
+        now,
+        based_on_report=str(payload.get("generated_at") or now.isoformat(timespec="seconds")),
+    )
     gaps = _string_list(payload.get("data_gaps"))
     data_health = _data_health(decision, gaps, now)
     decision_evidence = build_decision_evidence(
@@ -145,7 +154,7 @@ def build_decision_workspace(
     )
     link_evidence_to_plans(plans, decision_evidence)
     market_gate = _market_gate(decision, data_health)
-    positions = _portfolio_positions(portfolio, plans, reliability)
+    positions = _portfolio_positions(portfolio, plans, reliability, management_plans)
     actionable = [plan for plan in plans if _requires_user_action(plan)]
     today_plans = [plan for plan in plans if _requires_today_attention(plan)]
     unresolved_blocked = [plan for plan in plans if plan["status"] == "blocked"]
@@ -182,6 +191,18 @@ def build_decision_workspace(
         "theme_observations": _theme_observations(market_matrix),
         "portfolio_summary": _portfolio_summary(portfolio, reliability),
         "portfolio_positions": positions,
+        "portfolio_management_plans": management_plans,
+        "management_attention_summary": {
+            "pending_count": sum(
+                item.get("context_status") in {"system_proposed", "stale"}
+                for item in management_plans
+            ),
+            "data_blocked_count": sum(
+                item.get("data_status") == "data_blocked"
+                for item in management_plans
+            ),
+            "confirmation_blocks_base_analysis": False,
+        },
         "plan_changes": actionable,
         "today_plans": today_plans,
         "attention_summary": {
@@ -200,8 +221,10 @@ def build_decision_workspace(
         "monitor_handoffs": [
             {
                 "status": "blocked",
-                "reason": "P2 才接入真实 5 分钟盘中监控；未确认计划不会进入监控。",
-                "eligible_plan_ids": [item["plan_id"] for item in accepted],
+                "reason": "P2 才接入真实 5 分钟盘中监控；方案确认只影响个性化跟踪，不影响规则级基础监控。",
+                "eligible_plan_ids": [
+                    item["plan_id"] for item in plans if item["status"] != "blocked"
+                ],
                 "implemented": False,
             }
         ],
@@ -630,6 +653,12 @@ def _plans(
                 "branches": list(contract_branches.values()),
                 "technical_snapshot": _mapping(contract.get("technical")),
                 "cost_reference": _mapping(contract.get("cost_reference")),
+                "data_status": (
+                    "data_blocked"
+                    if str(_mapping(contract.get("technical")).get("state") or "")
+                    in {"unknown", "quarantined"}
+                    else "ready"
+                ),
                 "change_reasons": (
                     ["首次形成可审核计划"]
                     if status == "new"
@@ -654,6 +683,255 @@ def _plans(
             plan["symbol"],
         ),
     )
+
+
+def _management_plans(
+    portfolio: Portfolio,
+    plans: list[DecisionPlan],
+    reliability: Mapping[str, object],
+    decision: Mapping[str, object],
+    now: datetime,
+    *,
+    based_on_report: str,
+) -> list[dict[str, object]]:
+    """Build deterministic per-holding proposals without turning consent into data."""
+
+    by_symbol = {item["symbol"]: item for item in plans}
+    reliability_by_symbol = {
+        str(item.get("code")): item
+        for item in (
+            reliability.get("holdings")
+            if isinstance(reliability.get("holdings"), list)
+            else []
+        )
+        if isinstance(item, Mapping) and item.get("code")
+    }
+    result: list[dict[str, object]] = []
+    next_review = str(decision.get("plan_date") or "下一次 after-close")
+    for holding in portfolio.holdings:
+        plan = by_symbol.get(holding.code)
+        reliability_row = reliability_by_symbol.get(holding.code, {})
+        technical = _mapping(plan.get("technical_snapshot") if plan else None)
+        technical_state = str(
+            reliability_row.get("technical_state")
+            or technical.get("state")
+            or "not_evaluated"
+        )
+        data_status = str(
+            reliability_row.get("data_status")
+            or ("data_blocked" if technical_state in {"unknown", "quarantined"} else "ready")
+        )
+        stale = holding.review_status == "stale_context" or holding.context_status == "stale"
+        if stale:
+            context_status = "stale"
+        elif holding.context_status in {"user_confirmed", "user_modified"}:
+            context_status = holding.context_status
+        elif holding.context_status == "system_proposed":
+            context_status = "system_proposed"
+        elif reliability_row.get("current_context_complete") is True:
+            context_status = "user_confirmed"
+        else:
+            context_status = "system_proposed"
+
+        proposal = _system_management_proposal(
+            holding,
+            plan,
+            data_status=data_status,
+            next_review=next_review,
+        )
+        use_saved = context_status in {"user_confirmed", "user_modified"}
+        name = holding.management_name if use_saved and holding.management_name else proposal["name"]
+        trigger = holding.management_trigger if use_saved and holding.management_trigger else proposal["trigger"]
+        persistence = (
+            holding.management_persistence
+            if use_saved and holding.management_persistence
+            else proposal["persistence"]
+        )
+        action = holding.management_action if use_saved and holding.management_action else proposal["action"]
+        invalidation = (
+            holding.management_invalidation
+            if use_saved and holding.management_invalidation
+            else proposal["invalidation"]
+        )
+        review_status = (
+            holding.review_status
+            if use_saved and holding.review_status in {"watch", "risk_review", "profit_protect"}
+            else str(proposal["review_status"])
+        )
+        rule = (
+            holding.risk_line
+            if use_saved and holding.risk_line
+            else _management_rule_text(trigger, persistence, action, invalidation)
+        )
+        version_content = {
+            "symbol": holding.code,
+            "review_status": review_status,
+            "name": name,
+            "trigger": trigger,
+            "persistence": persistence,
+            "action": action,
+            "invalidation": invalidation,
+            "next_review": holding.next_review_date if use_saved and holding.next_review_date else next_review,
+            "data_status": data_status,
+        }
+        generated_version = "mp-" + hashlib.sha256(
+            json.dumps(version_content, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()[:12]
+        blocked_capabilities = _string_list(reliability_row.get("blocked_capabilities"))
+        available_capabilities = _string_list(reliability_row.get("available_capabilities"))
+        basis = _management_basis(holding, plan, data_status)
+        source_time = (
+            str(technical.get("as_of") or "")
+            if data_status == "ready"
+            else portfolio.as_of
+        ) or portfolio.as_of or None
+        result.append(
+            {
+                "symbol": holding.code,
+                "name": holding.name or holding.code,
+                "context_status": context_status,
+                "context_source": holding.context_source or (
+                    "deterministic_rule_v1" if not use_saved else "legacy_context"
+                ),
+                "review_status": review_status,
+                "suggestion_name": name,
+                "trigger_condition": trigger,
+                "confirmation_window": persistence,
+                "triggered_action": action,
+                "invalidation_condition": invalidation,
+                "next_review_time": (
+                    holding.next_review_date
+                    if use_saved and holding.next_review_date
+                    else next_review
+                ),
+                "current_risk_line": rule,
+                "management_plan_version": (
+                    holding.management_plan_version
+                    if use_saved and holding.management_plan_version
+                    else generated_version
+                ),
+                "system_proposal_version": generated_version,
+                "based_on_report": holding.based_on_report if use_saved and holding.based_on_report else based_on_report,
+                "confirmed_at": holding.confirmed_at or None,
+                "generated_source": "deterministic_rule_v1",
+                "source_time": source_time,
+                "generated_at": now.isoformat(timespec="seconds"),
+                "decision_basis": basis,
+                "data_status": data_status,
+                "technical_state": technical_state,
+                "data_confidence": "部分可用" if data_status == "data_blocked" else "可信",
+                "data_issue_reason": (
+                    "行情复权或标的映射口径未通过校验；系统不会使用该价格序列生成阈值。"
+                    if data_status == "data_blocked"
+                    else None
+                ),
+                "blocked_capabilities": blocked_capabilities,
+                "available_capabilities": available_capabilities,
+                "requires_confirmation": context_status in {"system_proposed", "stale"},
+                "stale_reason": (
+                    "原方案所依据的盈亏状态已与最新持仓快照冲突，已停用并生成替代建议。"
+                    if stale
+                    else None
+                ),
+                "profit_protect_applicable": bool(
+                    holding.pnl_pct is not None and holding.pnl_pct > 0
+                ),
+                "user_note": holding.user_note,
+                "user_disposition": holding.user_disposition,
+                "base_analysis_available": bool(
+                    reliability_row.get("base_analysis_ready", reliability_row.get("decision_ready"))
+                ),
+            }
+        )
+    return result
+
+
+def _system_management_proposal(
+    holding: object,
+    plan: DecisionPlan | None,
+    *,
+    data_status: str,
+    next_review: str,
+) -> dict[str, str]:
+    weight = getattr(holding, "weight_pct", None)
+    pnl_pct = getattr(holding, "pnl_pct", None)
+    if data_status == "data_blocked":
+        review_status = "risk_review" if isinstance(weight, (int, float)) and weight >= 40 else "watch"
+        return {
+            "review_status": review_status,
+            "name": "组合层保守观察" if review_status == "watch" else "组合集中度复核",
+            "trigger": "组合仓位、风险预算或账户盈亏状态发生实质变化，或异常行情完成同口径修复。",
+            "persistence": "行情异常持续期间，每次 after-close 仅复核可信的账户与组合字段。",
+            "action": "维持组合层风险监控，不补仓；需要调整仓位时仍由用户确认。",
+            "invalidation": "可靠行情恢复后，用同标的、同复权口径重新生成技术方案。",
+            "next_review": next_review,
+        }
+    branch = str(plan.get("current_branch") or "") if plan else ""
+    action_text = str(plan.get("current_action") or "") if plan else ""
+    technical_state = str(
+        _mapping(plan.get("technical_snapshot") if plan else None).get("state") or ""
+    )
+    if (
+        branch == "risk_reduce_review"
+        or technical_state == "weak"
+        or (isinstance(weight, (int, float)) and weight >= 40)
+    ):
+        review_status = "risk_review"
+        name = "风险复核"
+    elif (
+        isinstance(pnl_pct, (int, float))
+        and pnl_pct > 0
+        and "保护" in action_text
+    ):
+        review_status = "profit_protect"
+        name = "利润保护"
+    else:
+        review_status = "watch"
+        name = "继续观察"
+    return {
+        "review_status": review_status,
+        "name": name,
+        "trigger": str(plan.get("if_condition") or "下一次有效收盘重新评估结构") if plan else "下一次 after-close 重新评估",
+        "persistence": str(plan.get("until_condition") or "持续到下一次有效复核") if plan else "持续到下一次有效复核",
+        "action": str(plan.get("then_action") or plan.get("current_action") or "维持当前仓位并等待复核") if plan else "维持当前仓位并等待复核",
+        "invalidation": str(plan.get("invalid_condition") or "持仓或组合风险预算发生实质变化") if plan else "持仓或组合风险预算发生实质变化",
+        "next_review": next_review,
+    }
+
+
+def _management_rule_text(
+    trigger: str,
+    persistence: str,
+    action: str,
+    invalidation: str,
+) -> str:
+    return (
+        f"触发：{trigger}；持续：{persistence}；"
+        f"动作：{action}；失效：{invalidation}"
+    )
+
+
+def _management_basis(
+    holding: object,
+    plan: DecisionPlan | None,
+    data_status: str,
+) -> list[str]:
+    result: list[str] = []
+    for label, value, suffix in (
+        ("持仓数量", getattr(holding, "shares", None), ""),
+        ("成本", getattr(holding, "cost", None), ""),
+        ("仓位占比", getattr(holding, "weight_pct", None), "%"),
+        ("持仓盈亏", getattr(holding, "pnl_pct", None), "%"),
+    ):
+        if isinstance(value, (int, float)):
+            result.append(f"{label} {value:.2f}{suffix}")
+    if plan:
+        result.append(f"组合规则：{plan.get('market_permission') or '等待确认'}")
+    if data_status == "data_blocked":
+        result.append("技术行情已隔离，未用于价格阈值")
+    elif plan and plan.get("technical_snapshot"):
+        result.append("技术行情已通过数据质量校验")
+    return result
 
 
 def _current_plan_state(
@@ -745,19 +1023,12 @@ def _plan_blockers(
             blockers.append(
                 "持仓快照缺少字段：" + "、".join(missing_fields[:4]) + "。"
             )
-        current_context_complete = matching.get("current_context_complete")
-        if current_context_complete is None:
-            current_context_complete = matching.get("context_complete")
-        if current_context_complete is False:
-            missing_context = _string_list(
-                matching.get("missing_current_context_fields")
-            )
+        if matching.get("data_status") == "data_blocked":
+            blocked_capabilities = _string_list(matching.get("blocked_capabilities"))
             blockers.append(
-                "当前风险上下文缺少："
-                + "、".join(missing_context[:4])
-                + "。"
-                if missing_context
-                else "当前风险上下文未补全，需先恢复当前风险规则。"
+                "该持仓行情数据异常，已暂停"
+                + "、".join(blocked_capabilities or ["技术价格判断"])
+                + "；用户确认不能解除该隔离。"
             )
         holding_reconciliation = str(
             matching.get("risk_reconciliation_status") or ""
@@ -867,7 +1138,7 @@ def _data_health(
                 "error_code": "CORE_DATA_GAP",
                 "gap_reason": "；".join(gaps[:3]),
                 "evidence": "after-close.data_gaps",
-                "repair_action": "补齐命中的持仓上下文或账户字段后，重新生成 after-close。",
+                "repair_action": "修复命中的账户字段或系统数据源后，重新生成 after-close；用户确认不能替代数据修复。",
                 "owner": "portfolio / after-close",
                 "next_check": "字段补齐并重新生成计划版本后",
             }
@@ -899,10 +1170,14 @@ def _portfolio_positions(
     portfolio: Portfolio,
     plans: list[DecisionPlan],
     reliability: Mapping[str, object],
+    management_plans: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     by_symbol = {item["symbol"]: item for item in plans}
     reliability_rows = reliability.get("holdings")
     context_by_symbol: dict[str, Mapping[str, object]] = {}
+    management_by_symbol = {
+        str(item.get("symbol")): item for item in management_plans
+    }
     for item in reliability_rows if isinstance(reliability_rows, list) else []:
         if isinstance(item, Mapping) and item.get("code"):
             context_by_symbol[str(item.get("code"))] = item
@@ -910,6 +1185,7 @@ def _portfolio_positions(
     for holding in portfolio.holdings:
         plan = by_symbol.get(holding.code)
         context = context_by_symbol.get(holding.code, {})
+        management = management_by_symbol.get(holding.code, {})
         current_context_complete = context.get("current_context_complete")
         if current_context_complete is None:
             current_context_complete = context.get("context_complete")
@@ -963,6 +1239,9 @@ def _portfolio_positions(
                 "current_plan_version": plan["plan_version"] if plan else None,
                 "today_status": plan["status"] if plan else "blocked",
                 "next_condition": plan["if_condition"] if plan else "等待形成规则计划",
+                "management_context_status": management.get("context_status", "system_proposed"),
+                "management_data_status": management.get("data_status", "ready"),
+                "management_plan": management,
             }
         )
     return result

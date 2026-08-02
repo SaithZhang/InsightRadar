@@ -35,7 +35,7 @@ V3.1 已获准按增量逐项开发；一次只推进一个已准入增量，未
 本地工作台固定保留四个一级任务：
 
 - **今日工作台**：盘后/周末结论、市场约束、统一关注队列和人工响应；
-- **组合风险**：已知/未知仓位、自动 beta 证据、数据完整度、严格就绪、风险阻塞和持仓计划；
+- **组合风险**：已知/未知仓位、自动 beta 证据、基础分析就绪度、系统生成的持仓管理建议、用户确认/调整，以及独立的行情能力隔离；
 - **标的研究**：按意图建立研究任务并查看已有证据；真实技术图与 P1 研究编排尚未实现；
 - **复盘账本**：计划版本、用户响应和 T+1/T+5/T+20 后验成熟度；真实成交执行流水尚未接入。
 
@@ -314,7 +314,7 @@ InsightRadar 把文件分成四类：
 ### Replayable portfolio context
 
 - `data/portfolio.manual.tsv`: easiest manual holdings input. Copy broker position rows into this tab-separated file using the same header as `data/portfolio.manual.example.tsv`. InsightRadar uses `当前持仓` as the true current position and ignores rows where `当前持仓` is 0, so same-day sells or frozen historical balances do not become false holdings.
-- `data/portfolio_context.json`: real local position context. Copy `data/portfolio_context.example.json`, then maintain the current risk rule/review state and, when genuinely known, the original entry thesis/invalidation and adjustment history. Unknown entry history stays explicit and limits Review quality without blocking a current risk plan. This file is intentionally separate from broker snapshots so Galaxy data can refresh without deleting research memory.
+- `data/portfolio_context.json`: private local position context written by the loopback Portfolio UI. The system generates a deterministic management proposal first; users adopt, adjust, or leave it uncertain without editing JSON. The file retains compatible `current_risk_line` / `review_status` fields plus confirmation/source/version metadata. User confirmation affects personalization only and cannot clear an account or market-data quarantine. Unknown entry history stays explicit and limits Review quality without blocking base analysis.
 
 ## 开发验证
 

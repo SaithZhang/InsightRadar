@@ -62,8 +62,8 @@ class RefreshCoordinator:
         data_health: Iterable[Mapping[str, object]] = (),
         idempotency_key: str | None = None,
     ) -> dict[str, object]:
-        if mode not in {"stale", "full"}:
-            raise ValueError("refresh mode must be stale or full")
+        if mode not in {"stale", "full", "after_close"}:
+            raise ValueError("refresh mode must be stale, full, or after_close")
         workflows = select_refresh_workflows(mode, data_health)
         key = idempotency_key or f"{mode}:{','.join(workflows)}"
         current_portfolio = (
@@ -679,6 +679,8 @@ def select_refresh_workflows(
 ) -> tuple[str, ...]:
     if mode == "full":
         return tuple(REQUIRED_RERUN_WORKFLOWS)
+    if mode == "after_close":
+        return ("after-close",)
     stale_sources = {
         str(item.get("source_name") or item.get("id") or "").replace("_", "-")
         for item in data_health

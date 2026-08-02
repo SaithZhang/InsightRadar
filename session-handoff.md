@@ -1413,3 +1413,11 @@ Completion update:
 - Do not open V3.2 or a parallel redesign without a later owner acceptance decision. Do not add a fifth first-level route.
 - Permanent guardrails are unchanged: truthful real/synthetic/unknown states, provenance/freshness/gaps, local private runtime data, rule-first authority, explicit human confirmation, and no automatic trading.
 - The version transition is documentation/governance only; no runtime capability, notification, order path, or trade authority was added. Preserve the user's untracked `docs/product-prototypes/` directory.
+
+## 2026-08-02 Handoff - holding-management closure ready for owner acceptance
+
+- `feat-058` is the owner-selected active V3.1 increment; `IR-002` live calibration is parked, not deleted. Keep exactly the existing four route ids and no automatic trading.
+- `portfolio_management_plans` is the user-facing derived contract. `context_status` tracks system proposal, confirmation, modification, or stale consent; `data_status` independently tracks capability-level data readiness. Missing/stale consent never blocks base analysis, and no response can clear account, mapping, adjustment-basis, or quarantined-price faults.
+- The loopback `POST /api/portfolio-management` flow validates adopt/modify/uncertain responses, atomically updates the compatible ignored context store, and launches an after-close-only refresh. `current_risk_line` and `review_status` remain compatibility fields, not a second fact source.
+- The Portfolio page and drawer are browser-verified against the real private runtime. No confirmation/save button was submitted during QA; private holdings, values, reports, and screenshots remain outside public Git scope.
+- Final gates are green: 374/374 tests, compileall, focused Ruff F/I, scoped Mypy for clean seams, JSON/diff checks, project-memory validation, real loopback DOM/interaction inspection, and empty browser diagnostics. The working tree is intentionally uncommitted and unpublished pending owner review.

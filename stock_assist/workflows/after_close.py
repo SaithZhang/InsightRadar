@@ -155,19 +155,12 @@ def build_after_close_report(
     if market_gap_lines:
         gaps.extend(market_gap_lines)
 
-    if portfolio.holdings and portfolio.context_missing:
-        gaps.append(f"未找到组合上下文文件：{portfolio.context_source}，买入逻辑、初始风控线、调仓记录和复盘状态待补。")
+    management_attention = [
+        holding.name or holding.code
+        for holding in portfolio.holdings
+        if not _current_decision_context_complete(holding)
+    ]
     if portfolio.holdings and not portfolio.context_missing:
-        missing_current_context = [
-            holding.name or holding.code
-            for holding in portfolio.holdings
-            if not _current_decision_context_complete(holding)
-        ]
-        if missing_current_context:
-            gaps.append(
-                "部分持仓当前风险上下文未补全："
-                + ", ".join(missing_current_context)
-            )
         missing_historical_context = [
             holding.name or holding.code
             for holding in portfolio.holdings
@@ -208,9 +201,11 @@ def build_after_close_report(
         gaps.append(f"信号后验刷新失败：{exc}")
         outcome_snapshot = load_outcome_snapshot()
 
-    for signal in signals:
-        if signal.data_gap:
-            gaps.append(f"{signal.holding.name or signal.holding.code}：{signal.data_gap}")
+    holding_data_issues = [
+        f"{signal.holding.name or signal.holding.code}（{signal.holding.code}）：{signal.data_gap}"
+        for signal in signals
+        if signal.data_gap
+    ]
 
     lines = [
         "# 盘后持仓操作指引",
@@ -220,6 +215,12 @@ def build_after_close_report(
         "",
         "## Core可靠性",
         "__CORE_RELIABILITY__",
+        "",
+        "## 持仓管理方案待确认",
+        "__MANAGEMENT_ATTENTION__",
+        "",
+        "## 行情数据异常",
+        "__HOLDING_DATA_ISSUES__",
         "",
         "## 可选扩展缺口",
         "__OPTIONAL_EXTENSION_GAPS__",
@@ -350,6 +351,7 @@ def build_after_close_report(
                 "upside_trigger": signal.upside_trigger,
                 "downside_trigger": signal.downside_trigger,
                 "flat_trigger": signal.flat_trigger,
+                "decision_contract": signal.decision_contract,
             }
             for signal in signals
         ],
@@ -361,6 +363,18 @@ def build_after_close_report(
         "\n".join(lines)
         .replace("__CORE_DATA_GAPS__", bullet(gaps))
         .replace("__CORE_RELIABILITY__", bullet(_core_reliability_lines(reliability)))
+        .replace(
+            "__MANAGEMENT_ATTENTION__",
+            bullet(
+                [
+                    "系统将基于可信结构化数据生成建议；用户未确认不影响基础风险分析："
+                    + ", ".join(management_attention)
+                ]
+                if management_attention
+                else []
+            ),
+        )
+        .replace("__HOLDING_DATA_ISSUES__", bullet(holding_data_issues))
         .replace("__OPTIONAL_EXTENSION_GAPS__", bullet(optional_gaps))
     )
 
@@ -411,6 +425,9 @@ def build_after_close_payload(
         section_items(sections, ("数据缺口", "鏁版嵁缂哄彛"), fallback_first=True)
     )
     optional_gaps = _meaningful_data_gaps(section_items(sections, ("可选扩展缺口",)))
+    holding_data_issues = _meaningful_data_gaps(
+        section_items(sections, ("行情数据异常",))
+    )
     action_lines = _payload_action_lines(markdown)
     outcome_snapshot = load_outcome_snapshot()
     reliability = _build_core_reliability(
@@ -467,7 +484,7 @@ def build_after_close_payload(
                 "label": "Decision-ready",
                 "value": f"{int(reliability['decision_ready_holdings'])}/{int(reliability['holding_count'])}",
                 "tone": "ok" if reliability["decision_ready_coverage"] == 1.0 else "warn",
-                "note": "Strict coverage requires current holdings, complete snapshot fields, current risk context, action branches, and evaluated market data; unknown entry history limits review only.",
+                "note": "Base analysis readiness depends on trusted account and portfolio fields, not user confirmation. Capability-level market-data faults remain isolated and fail closed.",
             },
             {
                 "id": "sections",
@@ -515,6 +532,7 @@ def build_after_close_payload(
         reliability=reliability,
         signal_outcomes=outcome_snapshot,
         data_gaps=data_gaps,
+        holding_data_issues=holding_data_issues,
         renderers={
             "markdown": "reports/*-after-close.md",
             "html": "reports/*-after-close.html",
@@ -658,11 +676,22 @@ def _build_core_reliability(
             current_context_ready += 1
         if historical_context_complete:
             historical_context_ready += 1
+        contract = action.get("decision_contract")
+        technical = (
+            contract.get("technical")
+            if isinstance(contract, dict) and isinstance(contract.get("technical"), dict)
+            else {}
+        )
+        technical_state = str(technical.get("state") or "not_evaluated")
+        data_status = (
+            "data_blocked"
+            if technical_state in {"unknown", "quarantined"}
+            else "ready"
+        )
         ready = bool(
             action_complete
             and market_as_of
             and portfolio.as_of
-            and current_context_complete
             and not missing_snapshot_fields
             and portfolio.risk_reconciliation_status != "blocked"
         )
@@ -680,6 +709,31 @@ def _build_core_reliability(
                 "missing_historical_context_fields": missing_historical_context_fields,
                 "missing_snapshot_fields": missing_snapshot_fields,
                 "decision_ready": ready,
+                "base_analysis_ready": ready,
+                "context_status": (
+                    "stale"
+                    if holding.review_status == "stale_context"
+                    else holding.context_status or (
+                        "user_confirmed" if current_context_complete else "system_proposed"
+                    )
+                ),
+                "data_status": data_status,
+                "technical_state": technical_state,
+                "blocked_capabilities": (
+                    ["均线判断", "支撑/压力判断", "价格阈值判断"]
+                    if data_status == "data_blocked"
+                    else []
+                ),
+                "available_capabilities": [
+                    label
+                    for label, available in (
+                        ("持仓数量", holding.shares is not None),
+                        ("成本参考", holding.cost is not None),
+                        ("仓位占比", holding.weight_pct is not None),
+                        ("组合暴露", holding.market_value is not None or holding.weight_pct is not None),
+                    )
+                    if available
+                ],
                 "risk_reconciliation_status": portfolio.risk_reconciliation_status,
             }
         )
@@ -702,7 +756,9 @@ def _build_core_reliability(
         "optional_extension_gaps": _dedupe_text(effective_optional_gaps),
         "definition": (
             "严格就绪要求当前持仓快照有as_of、股数/成本/市价/盈亏或仓位字段，"
-            "当前风险规则与复盘状态可用，行情已评估，且动作包含仓位、上行、下行和震荡分支。"
+            "账户与风险预算可信，且动作包含仓位、上行、下行和震荡分支。"
+            "管理方案未确认或过期只降低个性化跟踪状态，不阻断基础风险分析。"
+            "异常行情按持仓隔离，仅暂停依赖该行情的均线、支撑和价格阈值能力。"
             "原始买入逻辑和初始失效条件缺失只影响历史复盘质量，不阻断当前风险计划。"
             "显式标记为blocked的持仓/风险预算对账会阻断严格就绪。"
         ),
@@ -723,7 +779,7 @@ def _core_reliability_lines(reliability: dict[str, object]) -> list[str]:
     )
     lines = [
         f"结构化动作覆盖 {structural}/{count}；严格决策就绪 {ready}/{count}。",
-        f"当前风险上下文 {current_context}/{count}；历史买入上下文 {historical_context}/{count}（仅影响复盘）。",
+        f"已确认管理方案 {current_context}/{count}；历史买入上下文 {historical_context}/{count}（仅影响复盘）。",
         f"持仓快照：{reliability.get('portfolio_source')}；截至 {reliability.get('portfolio_as_of') or '未标注'}。",
         f"行情评估截至：{reliability.get('market_as_of_trade_date') or '未取得有效交易日'}。",
         f"持仓/风险预算对账：{reliability.get('risk_reconciliation_status') or 'unverified'}。",
@@ -1649,7 +1705,7 @@ def _legacy_signal_for_holding(holding: Holding, frame: pd.DataFrame) -> Holding
             "",
             "不加仓；等重新站回20日线后再提高信心。",
             f"若放量站回20日线 {ma20:.2f} 上方，继续持有观察。",
-            f"若跌破前20日技术支撑或板块明显转弱，先降1/4仓位。",
+            "若跌破前20日技术支撑或板块明显转弱，先降1/4仓位。",
             "若围绕20日线下方震荡，保持仓位不动，等待确认。",
             "中",
         )
