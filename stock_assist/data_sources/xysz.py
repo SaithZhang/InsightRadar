@@ -10,7 +10,7 @@ import os
 import socket
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -325,32 +325,49 @@ def normalise_daily_kline_result(
     requested_codes: Iterable[str],
     fetched_at: datetime | None = None,
     expected_trade_date: date | None = None,
+    source_time: datetime | None = None,
 ) -> ProviderResult[dict[str, pd.DataFrame]]:
-    """Turn the AmazingData dict/DataFrame response into canonical OHLCV."""
+    """Turn the AmazingData response into canonical OHLCV.
+
+    ``source_time`` is reserved for an explicit provider response timestamp.
+    Daily bar dates remain in ``trade_date`` and do not imply a source time.
+    """
 
     fetched = _aware_shanghai(fetched_at or datetime.now(tz=SHANGHAI_TZ))
+    explicit_source_time = (
+        _aware_shanghai(source_time) if source_time is not None else None
+    )
     codes = tuple(dict.fromkeys(str(code) for code in requested_codes))
     frames: dict[str, pd.DataFrame] = {}
     gaps: list[str] = []
     errors: list[str] = []
     trade_dates: list[date] = []
 
-    for code in codes:
-        provider_frame = _provider_frame_for_code(raw, code)
-        if provider_frame.empty:
-            frames[code] = _empty_daily_frame()
-            gaps.append(f"{code}:missing_series")
-            continue
-        frame, frame_gaps, frame_errors = _normalise_daily_frame(
-            provider_frame,
-            code=code,
-            expected_trade_date=expected_trade_date,
-        )
-        frames[code] = frame
-        gaps.extend(frame_gaps)
-        errors.extend(frame_errors)
-        if not frame.empty:
-            trade_dates.append(frame["trade_date"].iloc[-1].date())
+    ambiguous_frame = (
+        isinstance(raw, pd.DataFrame)
+        and len(codes) > 1
+        and "code" not in raw.columns
+    )
+    if ambiguous_frame:
+        errors.append("request:ambiguous_frame_without_code")
+        frames.update({code: _empty_daily_frame() for code in codes})
+    else:
+        for code in codes:
+            provider_frame = _provider_frame_for_code(raw, code)
+            if provider_frame.empty:
+                frames[code] = _empty_daily_frame()
+                gaps.append(f"{code}:missing_series")
+                continue
+            frame, frame_gaps, frame_errors = _normalise_daily_frame(
+                provider_frame,
+                code=code,
+                expected_trade_date=expected_trade_date,
+            )
+            frames[code] = frame
+            gaps.extend(frame_gaps)
+            errors.extend(frame_errors)
+            if not frame.empty:
+                trade_dates.append(frame["trade_date"].iloc[-1].date())
 
     if not codes:
         errors.append("request:missing_codes")
@@ -359,14 +376,16 @@ def normalise_daily_kline_result(
             "batch:trade_date_mismatch:"
             + ",".join(sorted(value.isoformat() for value in set(trade_dates)))
         )
+    if explicit_source_time is not None and explicit_source_time > fetched:
+        errors.append("request:source_time_after_fetched_at")
+        explicit_source_time = None
 
     latest_trade_date = max(trade_dates) if trade_dates else None
-    source_time = _market_close_time(latest_trade_date)
     status = _provider_status(frames, gaps, errors)
     return ProviderResult(
         provider="amazingdata",
         schema_version=DAILY_KLINE_SCHEMA_VERSION,
-        source_time=source_time,
+        source_time=explicit_source_time,
         fetched_at=fetched,
         trade_date=latest_trade_date,
         status=status,
@@ -387,6 +406,15 @@ def daily_kline_result_for_code(
     prefixes = (f"{code}:", "batch:", "request:")
     gaps = tuple(item for item in result.gaps if item.startswith(prefixes))
     errors = tuple(item for item in result.errors if item.startswith(prefixes))
+    fetched_at = _aware_shanghai(result.fetched_at)
+    source_time = (
+        _aware_shanghai(result.source_time)
+        if result.source_time is not None
+        else None
+    )
+    if source_time is not None and source_time > fetched_at:
+        errors += ("request:source_time_after_fetched_at",)
+        source_time = None
     trade_date = (
         frame["trade_date"].iloc[-1].date()
         if not frame.empty
@@ -405,8 +433,8 @@ def daily_kline_result_for_code(
     return ProviderResult(
         provider=result.provider,
         schema_version=result.schema_version,
-        source_time=_market_close_time(trade_date),
-        fetched_at=result.fetched_at,
+        source_time=source_time,
+        fetched_at=fetched_at,
         trade_date=trade_date,
         status=status,
         gaps=gaps,
@@ -418,14 +446,17 @@ def daily_kline_result_for_code(
 
 def _provider_frame_for_code(raw: object, code: str) -> pd.DataFrame:
     if isinstance(raw, dict):
-        value = raw.get(code)
-        if value is None:
-            value = raw.get(code.replace(".", "_"))
+        value = next(
+            (raw[alias] for alias in _code_aliases(code) if alias in raw),
+            None,
+        )
         return value.copy() if isinstance(value, pd.DataFrame) else pd.DataFrame()
     if isinstance(raw, pd.DataFrame):
         if "code" not in raw.columns:
             return raw.copy()
-        return raw[raw["code"].astype(str) == code].copy()
+        expected = _canonical_code(code)
+        matches = raw["code"].map(_canonical_code) == expected
+        return raw.loc[matches].copy()
     return pd.DataFrame()
 
 
@@ -437,6 +468,12 @@ def _normalise_daily_frame(
 ) -> tuple[pd.DataFrame, list[str], list[str]]:
     gaps: list[str] = []
     errors: list[str] = []
+    expected_code = _canonical_code(code)
+    if "code" in frame.columns:
+        inner_codes = frame["code"].map(_canonical_code)
+        if inner_codes.isna().any() or set(inner_codes) != {expected_code}:
+            errors.append(f"{code}:code_mismatch")
+            return _empty_daily_frame(), gaps, errors
     required = ("kline_time", "open", "high", "low", "close")
     missing = [column for column in required if column not in frame.columns]
     if missing:
@@ -446,9 +483,7 @@ def _normalise_daily_frame(
     result = pd.DataFrame(
         {
             "code": (
-                frame["code"].astype(str)
-                if "code" in frame.columns
-                else pd.Series(code, index=frame.index, dtype="object")
+                pd.Series(expected_code, index=frame.index, dtype="object")
             ),
             "trade_date": pd.to_datetime(frame["kline_time"], errors="coerce"),
             "open": pd.to_numeric(frame["open"], errors="coerce"),
@@ -535,12 +570,13 @@ def _aware_shanghai(value: datetime) -> datetime:
     return value.astimezone(SHANGHAI_TZ)
 
 
-def _market_close_time(value: date | None) -> datetime | None:
-    return (
-        datetime.combine(value, time(15, 0), tzinfo=SHANGHAI_TZ)
-        if value is not None
-        else None
-    )
+def _canonical_code(value: object) -> str:
+    return str(value).strip().upper().replace("_", ".")
+
+
+def _code_aliases(code: str) -> tuple[str, ...]:
+    canonical = _canonical_code(code)
+    return tuple(dict.fromkeys((code, canonical, canonical.replace(".", "_"))))
 
 
 def _date_from_yyyymmdd(value: int) -> date:

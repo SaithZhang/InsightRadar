@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import unittest
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import pandas as pd
 
+from stock_assist.data_sources.contracts import ProviderResult
 from stock_assist.portfolio import (
     Holding,
     Portfolio,
@@ -50,6 +52,21 @@ def _outcome_snapshot() -> dict[str, object]:
         "horizons": {"1d": {"matured": 2, "hit_rate": 0.5}},
         "latest": [],
     }
+
+
+def _daily_result(frame: pd.DataFrame) -> ProviderResult[pd.DataFrame]:
+    return ProviderResult(
+        provider="synthetic",
+        schema_version="daily-ohlcv/v1",
+        source_time=None,
+        fetched_at=datetime.fromisoformat("2026-07-31T15:05:00+08:00"),
+        trade_date=None,
+        status="ok",
+        gaps=(),
+        errors=(),
+        price_basis="unadjusted",
+        data=frame,
+    )
 
 
 class AfterCloseReliabilityTests(unittest.TestCase):
@@ -310,7 +327,7 @@ class AfterCloseReliabilityTests(unittest.TestCase):
         )
         frame = pd.DataFrame({"close": [3.2 + index * 0.01 for index in range(20)]})
 
-        signal = _signal_for_holding(holding, frame)
+        signal = _signal_for_holding(holding, _daily_result(frame))
 
         self.assertEqual(signal.action, "等待数据，不做主动交易")
         self.assertIn("复权或标的映射口径不一致", signal.reason)

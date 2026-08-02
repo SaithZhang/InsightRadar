@@ -81,27 +81,30 @@ class HoldingDecision:
 
 def build_holding_decision(
     holding: Holding,
-    observation: pd.DataFrame | ProviderResult[pd.DataFrame],
+    observation: ProviderResult[pd.DataFrame],
 ) -> HoldingDecision:
     """Build a holding plan without using cost to synthesize technical levels."""
 
-    result = observation if isinstance(observation, ProviderResult) else None
-    frame = result.data if result is not None else observation
-    prepared = _prepare_frame(frame)
-    if result is not None:
-        prepared.attrs["adjustment_basis"] = result.price_basis
-        if result.status == "invalid":
-            return _unknown_decision(
-                holding,
-                "日线行情未通过 ProviderResult 数据不变量，技术结构不可用。",
-                "；".join(result.errors) or "日线行情契约状态为 invalid。",
-            )
-        if any(":stale_trade_date:" in gap for gap in result.gaps):
-            return _unknown_decision(
-                holding,
-                "日线行情未达到要求交易日，技术结构不可用。",
-                "；".join(result.gaps),
-            )
+    if not isinstance(observation, ProviderResult):
+        raise TypeError("observation must be ProviderResult[pd.DataFrame]")
+    if not isinstance(observation.data, pd.DataFrame):
+        raise TypeError("ProviderResult.data must be a pandas DataFrame")
+
+    result = observation
+    prepared = _prepare_frame(result.data)
+    prepared.attrs["adjustment_basis"] = result.price_basis
+    if result.status == "invalid":
+        return _unknown_decision(
+            holding,
+            "日线行情未通过 ProviderResult 数据不变量，技术结构不可用。",
+            "；".join(result.errors) or "日线行情契约状态为 invalid。",
+        )
+    if any(":stale_trade_date:" in gap for gap in result.gaps):
+        return _unknown_decision(
+            holding,
+            "日线行情未达到要求交易日，技术结构不可用。",
+            "；".join(result.gaps),
+        )
     if prepared.empty:
         return _unknown_decision(
             holding,
@@ -147,21 +150,13 @@ def build_holding_decision(
                 "偏差超过35%，疑似复权或标的映射口径不一致。"
             ),
         )
-    adjustment_basis = (
-        result.price_basis
-        if result is not None
-        else str(
-            prepared.attrs.get("adjustment_basis")
-            or prepared.attrs.get("adjust")
-            or "provider_output_unspecified"
-        )
-    )
+    adjustment_basis = result.price_basis
     largest_gap = float(closes.pct_change().abs().dropna().max())
     if (
-        (result is not None and result.status == "quarantined")
+        result.status == "quarantined"
         or (
             largest_gap > 0.35
-            and adjustment_basis == "provider_output_unspecified"
+            and adjustment_basis in {"unadjusted", "unknown"}
         )
     ):
         technical = _technical_snapshot(
@@ -373,7 +368,7 @@ def _technical_snapshot(
         adjustment_basis=str(
             frame.attrs.get("adjustment_basis")
             or frame.attrs.get("adjust")
-            or "provider_output_unspecified"
+            or "unknown"
         ),
         close=round(last, 4),
         ma20=round(ma20, 4),

@@ -26,6 +26,26 @@ def _load_fixture() -> tuple[dict[str, pd.DataFrame], dict[str, object]]:
     return raw, payload
 
 
+def _healthy_raw(code: str = "900001.SH") -> dict[str, pd.DataFrame]:
+    trade_dates = pd.bdate_range(end="2026-07-31", periods=25)
+    closes = [10.0 + index * 0.05 for index in range(len(trade_dates))]
+    return {
+        code: pd.DataFrame(
+            {
+                "code": [code] * len(trade_dates),
+                "kline_time": trade_dates,
+                "open": [value - 0.02 for value in closes],
+                "high": [value + 0.08 for value in closes],
+                "low": [value - 0.08 for value in closes],
+                "close": closes,
+                "volume": [1000 + index * 10 for index in range(len(closes))],
+                "amount": [10000 + index * 100 for index in range(len(closes))],
+                "provider_debug": ["not-for-downstream"] * len(closes),
+            }
+        )
+    }
+
+
 class _FixtureClient:
     def __init__(self, raw: dict[str, pd.DataFrame]) -> None:
         self.calendar = [20260703, 20260731]
@@ -93,9 +113,7 @@ class DailyKlineContractTests(unittest.TestCase):
             list(result.data["900002.SH"].columns),
             ["code", "trade_date", "open", "high", "low", "close", "volume", "amount"],
         )
-        self.assertIsNotNone(result.source_time)
-        assert result.source_time is not None
-        self.assertEqual(result.source_time.isoformat(), "2026-07-31T15:00:00+08:00")
+        self.assertIsNone(result.source_time)
         self.assertEqual(result.fetched_at.isoformat(), "2026-07-31T15:05:00+08:00")
 
     def test_invalid_ohlc_fails_closed_before_holding_rules(self) -> None:
@@ -135,6 +153,96 @@ class DailyKlineContractTests(unittest.TestCase):
         self.assertEqual(result.status, "partial")
         self.assertTrue(any("timestamps_reordered" in gap for gap in result.gaps))
         self.assertTrue(result.data["900002.SH"]["trade_date"].is_monotonic_increasing)
+
+    def test_multi_code_dataframe_without_code_is_invalid(self) -> None:
+        raw = _healthy_raw()["900001.SH"].drop(columns="code")
+
+        result = xysz.normalise_daily_kline_result(
+            raw,
+            requested_codes=["900001.SH", "900002.SH"],
+            fetched_at=datetime.fromisoformat("2026-07-31T15:05:00+08:00"),
+            expected_trade_date=date(2026, 7, 31),
+        )
+
+        self.assertEqual(result.status, "invalid")
+        self.assertIn("request:ambiguous_frame_without_code", result.errors)
+        self.assertTrue(all(frame.empty for frame in result.data.values()))
+
+    def test_single_code_dataframe_without_code_uses_unique_request_code(self) -> None:
+        raw = _healthy_raw()["900001.SH"].drop(columns="code")
+
+        result = xysz.normalise_daily_kline_result(
+            raw,
+            requested_codes=["900001.SH"],
+            fetched_at=datetime.fromisoformat("2026-07-31T15:05:00+08:00"),
+            expected_trade_date=date(2026, 7, 31),
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(set(result.data["900001.SH"]["code"]), {"900001.SH"})
+
+    def test_dict_key_and_inner_code_mismatch_is_invalid(self) -> None:
+        raw = _healthy_raw("900002.SH")
+
+        result = xysz.normalise_daily_kline_result(
+            {"900001.SH": raw["900002.SH"]},
+            requested_codes=["900001.SH"],
+            fetched_at=datetime.fromisoformat("2026-07-31T15:05:00+08:00"),
+            expected_trade_date=date(2026, 7, 31),
+        )
+
+        self.assertEqual(result.status, "invalid")
+        self.assertIn("900001.SH:code_mismatch", result.errors)
+        self.assertTrue(result.data["900001.SH"].empty)
+
+    def test_point_underscore_alias_remains_compatible(self) -> None:
+        raw = _healthy_raw("900001_SH")
+
+        result = xysz.normalise_daily_kline_result(
+            raw,
+            requested_codes=["900001.SH"],
+            fetched_at=datetime.fromisoformat("2026-07-31T15:05:00+08:00"),
+            expected_trade_date=date(2026, 7, 31),
+        )
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(set(result.data["900001.SH"]["code"]), {"900001.SH"})
+
+    def test_explicit_source_time_after_fetch_is_invalid(self) -> None:
+        result = xysz.normalise_daily_kline_result(
+            _healthy_raw(),
+            requested_codes=["900001.SH"],
+            fetched_at=datetime.fromisoformat("2026-07-31T15:05:00+08:00"),
+            expected_trade_date=date(2026, 7, 31),
+            source_time=datetime.fromisoformat("2026-07-31T15:06:00+08:00"),
+        )
+
+        self.assertEqual(result.status, "invalid")
+        self.assertIsNone(result.source_time)
+        self.assertIn("request:source_time_after_fetched_at", result.errors)
+
+    def test_healthy_daily_series_reaches_usable_holding_technical_state(self) -> None:
+        client = _FixtureClient(_healthy_raw())
+
+        result = client.query_daily_kline_result(
+            ["900001.SH"],
+            20260626,
+            20260731,
+        )
+        signal = _build_signals(
+            client,  # type: ignore[arg-type]
+            [Holding(code="900001.SH", name="合成标的甲", market_price=11.2)],
+            lookback_days=60,
+        )[0]
+
+        technical = signal.decision_contract["technical"]
+        narrowed = xysz.daily_kline_result_for_code(result, "900001.SH")
+        self.assertEqual(result.status, "ok")
+        self.assertIsNone(result.source_time)
+        self.assertIsNone(narrowed.source_time)
+        self.assertNotIn(technical["state"], {"unknown", "quarantined"})
+        self.assertEqual(technical["adjustment_basis"], "unadjusted")
+        self.assertNotIn("provider_debug", result.data["900001.SH"].columns)
 
 
 if __name__ == "__main__":

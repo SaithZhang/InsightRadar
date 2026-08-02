@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import replace
+from datetime import date, datetime
 
 import pandas as pd
 
+from stock_assist.data_sources.contracts import (
+    PriceBasis,
+    ProviderResult,
+    ProviderStatus,
+)
 from stock_assist.holding_decision import build_holding_decision
 from stock_assist.portfolio import Holding, _merge_holding_context
 
@@ -53,6 +59,31 @@ class HoldingDecisionTests(unittest.TestCase):
             }
         )
 
+    def _result(
+        self,
+        frame: pd.DataFrame,
+        *,
+        status: ProviderStatus = "ok",
+        gaps: tuple[str, ...] = (),
+        errors: tuple[str, ...] = (),
+        price_basis: PriceBasis = "unadjusted",
+    ) -> ProviderResult[pd.DataFrame]:
+        trade_date: date | None = None
+        if not frame.empty and "trade_date" in frame.columns:
+            trade_date = pd.to_datetime(frame["trade_date"].iloc[-1]).date()
+        return ProviderResult(
+            provider="synthetic",
+            schema_version="daily-ohlcv/v1",
+            source_time=None,
+            fetched_at=datetime.fromisoformat("2026-07-18T15:05:00+08:00"),
+            trade_date=trade_date,
+            status=status,
+            gaps=gaps,
+            errors=errors,
+            price_basis=price_basis,
+            data=frame,
+        )
+
     def test_cost_changes_do_not_change_technical_state_or_levels(self) -> None:
         holding = Holding(
             code="900001.SH",
@@ -64,8 +95,11 @@ class HoldingDecisionTests(unittest.TestCase):
         )
         low_cost = replace(holding, cost=80.0)
 
-        original = build_holding_decision(holding, self._frame())
-        changed_cost = build_holding_decision(low_cost, self._frame())
+        original = build_holding_decision(holding, self._result(self._frame()))
+        changed_cost = build_holding_decision(
+            low_cost,
+            self._result(self._frame()),
+        )
 
         self.assertEqual(original.technical, changed_cost.technical)
         self.assertEqual(original.action, changed_cost.action)
@@ -92,7 +126,7 @@ class HoldingDecisionTests(unittest.TestCase):
             weight_pct=25.0,
         )
 
-        decision = build_holding_decision(holding, self._frame())
+        decision = build_holding_decision(holding, self._result(self._frame()))
 
         self.assertEqual(
             [item.branch_id for item in decision.branches],
@@ -131,7 +165,7 @@ class HoldingDecisionTests(unittest.TestCase):
         frame.loc[frame.index[-20:-1], "high"] = 121.0
         frame.loc[frame.index[-20:-1], "low"] = 119.0
 
-        decision = build_holding_decision(holding, frame)
+        decision = build_holding_decision(holding, self._result(frame))
 
         repair = decision.branch("repair_observe")
         self.assertTrue(repair.reachability.startswith("multi_session_min_"))
@@ -142,7 +176,7 @@ class HoldingDecisionTests(unittest.TestCase):
 
         decision = build_holding_decision(
             Holding(code="900001.SH", name="合成标的甲", market_price=96.0),
-            frame,
+            self._result(frame),
         )
 
         self.assertEqual(decision.technical.as_of, "2026-07-18")
@@ -159,7 +193,11 @@ class HoldingDecisionTests(unittest.TestCase):
                 name="合成标的乙",
                 market_price=1.1,
             ),
-            frame,
+            self._result(
+                frame,
+                status="quarantined",
+                gaps=("900002.SH:price_discontinuity:0.700000",),
+            ),
         )
 
         self.assertEqual(decision.technical.state, "quarantined")
@@ -170,13 +208,24 @@ class HoldingDecisionTests(unittest.TestCase):
     def test_missing_prices_block_model_levels_instead_of_using_zero(self) -> None:
         decision = build_holding_decision(
             Holding(code="900001.SH", cost=130.0, market_price=96.0),
-            pd.DataFrame({"volume": [1, 2, 3]}),
+            self._result(
+                pd.DataFrame({"volume": [1, 2, 3]}),
+                status="invalid",
+                errors=("900001.SH:missing_fields:kline_time,open,high,low,close",),
+            ),
         )
 
         self.assertEqual(decision.technical.state, "unknown")
         self.assertIsNone(decision.technical.close)
         self.assertIsNone(decision.branch("repair_observe").threshold)
         self.assertEqual(decision.action, "等待数据，不做主动交易")
+
+    def test_bare_dataframe_is_rejected(self) -> None:
+        with self.assertRaisesRegex(TypeError, "ProviderResult"):
+            build_holding_decision(
+                Holding(code="900001.SH", market_price=96.0),
+                self._frame(),  # type: ignore[arg-type]
+            )
 
     def test_new_loss_snapshot_invalidates_old_profit_protection_context(self) -> None:
         holding = Holding(

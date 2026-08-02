@@ -1669,7 +1669,7 @@ def _legacy_signal_for_holding(holding: Holding, frame: pd.DataFrame) -> Holding
 
 def _signal_for_holding(
     holding: Holding,
-    frame: pd.DataFrame | ProviderResult[pd.DataFrame],
+    frame: ProviderResult[pd.DataFrame],
 ) -> HoldingSignal:  # type: ignore[no-redef]
     decision = build_holding_decision(holding, frame)
     return _decision_to_signal(holding, decision)
@@ -1753,7 +1753,32 @@ def _signal_from_broker_snapshot(holding: Holding) -> HoldingSignal:  # type: ig
 
     return _decision_to_signal(
         holding,
-        build_holding_decision(holding, pd.DataFrame()),
+        build_holding_decision(
+            holding,
+            ProviderResult(
+                provider="amazingdata",
+                schema_version="daily-ohlcv/v1",
+                source_time=None,
+                fetched_at=datetime.now().astimezone(),
+                trade_date=None,
+                status="empty",
+                gaps=(f"{holding.code}:missing_series",),
+                errors=(),
+                price_basis="unknown",
+                data=pd.DataFrame(
+                    columns=[
+                        "code",
+                        "trade_date",
+                        "open",
+                        "high",
+                        "low",
+                        "close",
+                        "volume",
+                        "amount",
+                    ]
+                ),
+            ),
+        ),
     )
 
 
