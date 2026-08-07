@@ -75,13 +75,13 @@
       "title": "盘前盘中风险与机会雷达",
       "type": "workflow",
       "lane": "decision",
-      "status": "ir002_weekend_usable_shadow_calibration_pending",
-      "commands": ["intraday-replay", "intraday-poll", "portfolio-import"],
-      "command": "python -m stock_assist.cli intraday-replay; python -m stock_assist.cli intraday-poll; python -m stock_assist.cli portfolio-import --serve --intraday",
-      "summary": "页面先启动，后台以provider级直连/系统代理/本地路由解析真实交易日并有界刷新；周末展示最近完成交易日，09:25/09:35/10:00由预注册单飞调度器驱动。IR-002固定shadow_only，硬超时不超过60秒，不下单也不输出仓位动作。",
-      "inputs": ["私有持仓快照", "用户确认execution ledger", "真实reentry failure observation与复核ledger", "20-30主题宇宙", "AmazingData分钟线/竞价快照与交易日历", "东方财富逐标的fallback", "provider级network policy", "本地不可变行情日期", "点时外部映射"],
-      "outputs": ["IntradaySnapshot/ThemeSnapshot/IntradayAlert", "内容寻址observation档案", "追加式alert档案", "execution/reentry failure/reentry confirmation ledgers", "IR-001 JSON/Markdown/HTML", "intraday-runtime/v2与实时progress", "current/latest/history session views", "脱敏provider route diagnostics"],
-      "next": ["实盘影子验证09:25/09:35/10:00", "接入可核验外部映射", "校准失败checkpoint与进程睡眠恢复", "状态变化通知与阈值校准"]
+      "status": "read_only_evidence_live_ir002_shadow_calibration_pending",
+      "commands": ["intraday-evidence", "intraday-replay", "intraday-poll", "portfolio-import"],
+      "command": "python -m stock_assist.cli intraday-evidence get 588200 --date YYYY-MM-DD; python -m stock_assist.cli intraday-replay; python -m stock_assist.cli intraday-poll; python -m stock_assist.cli portfolio-import --serve --intraday",
+      "summary": "统一ProviderResult行情契约现已向JSON CLI和四个只读MCP工具提供分时、相对强弱、两市同时点成交额和用户成交复盘；Eastmoney主源与Tencent fallback不跨源拼分钟，冲突、陈旧和缺失显式。既有页面仍先于有界provider工作启动，IR-002固定shadow_only，不下单也不输出确定性仓位动作。",
+      "inputs": ["私有持仓快照", "私有用户成交JSON", "用户确认execution ledger", "真实reentry failure observation与复核ledger", "20-30主题宇宙", "AmazingData分钟线/竞价快照与交易日历", "Eastmoney trends2", "Tencent minute/day fallback", "provider级network policy", "本地不可变行情日期", "点时外部映射"],
+      "outputs": ["EvidenceEnvelope/IntradayTape/TradeReview", "四个只读MCP tools", "结构化JSON CLI", "IntradaySnapshot/ThemeSnapshot/IntradayAlert", "内容寻址observation档案", "追加式alert档案", "execution/reentry failure/reentry confirmation ledgers", "IR-001 JSON/Markdown/HTML", "intraday-runtime/v2与实时progress", "current/latest/history session views", "脱敏provider route diagnostics"],
+      "next": ["完成Secure MCP Tunnel或受审HTTPS远端部署", "实盘影子验证09:25/09:35/10:00", "接入可核验外部映射", "状态变化通知与阈值校准"]
     },
     {
       "id": "research_monitor",

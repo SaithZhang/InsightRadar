@@ -69,6 +69,15 @@ MODULES: tuple[ProductModule, ...] = (
 
 COMMANDS: tuple[ProductCommand, ...] = (
     ProductCommand(
+        name="intraday-evidence",
+        module_key="market",
+        help="query normalized read-only intraday tape and trade-review evidence as JSON",
+        run_hint="Use get, compare, amount, or review; every response preserves provider provenance and trade_authority=none.",
+        inputs=("Eastmoney trends2", "Tencent minute/day fallback", "optional private trades JSON"),
+        outputs=("structured JSON on stdout",),
+        retry="Inspect status, reason, gaps, and provenance; never interpret no_data as zero activity.",
+    ),
+    ProductCommand(
         name="intraday-replay",
         module_key="portfolio",
         help="replay the private IR-001 acceptance case without future-data leakage",

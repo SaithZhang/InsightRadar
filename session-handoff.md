@@ -1421,3 +1421,12 @@ Completion update:
 - The loopback `POST /api/portfolio-management` flow validates adopt/modify/uncertain responses, atomically updates the compatible ignored context store, and launches an after-close-only refresh. `current_risk_line` and `review_status` remain compatibility fields, not a second fact source.
 - The Portfolio page and drawer are browser-verified against the real private runtime. No confirmation/save button was submitted during QA; private holdings, values, reports, and screenshots remain outside public Git scope.
 - Final gates are green: 374/374 tests, compileall, focused Ruff F/I, scoped Mypy for clean seams, JSON/diff checks, project-memory validation, real loopback DOM/interaction inspection, and empty browser diagnostics. The working tree is intentionally uncommitted and unpublished pending owner review.
+
+## 2026-08-07 Handoff - feat-059 local implementation and acceptance complete
+
+- Branch: `codex/intraday-evidence-mcp`. The deep module is `stock_assist/intraday/evidence.py`; callers should use the JSON CLI or exactly four MCP tools and must not consume Eastmoney/Tencent raw fields directly.
+- Eastmoney remains primary and Tencent fallback remains degraded, provider-owned, and non-merged. Preserve explicit `source_time`, `fetched_at`, units, provenance, gaps, conflict, freshness, and `trade_authority=none` on later edits.
+- Private acceptance input lives under ignored `data/intraday/` and passed; do not copy symbols, execution times, quantities, prices, or detailed review output into tracked files. Public tests/docs use synthetic trade examples.
+- Restart checks: `.venv\Scripts\python -m stock_assist.cli intraday-evidence --help`; `.venv\Scripts\python -m stock_assist.intraday.mcp_server --transport stdio`; or loopback Streamable HTTP on `127.0.0.1:8766/mcp`.
+- Verified gates: 425 full tests (one opt-in live skip), live provider smoke, compileall, focused Ruff/Mypy, CLI subprocess, stdio and HTTP MCP subprocesses, architecture regeneration, JSON/diff checks, and project-memory validation. Repository-wide Ruff retains 417 unrelated baseline findings.
+- Remaining boundary: open the Draft PR and obtain owner acceptance. ChatGPT Web cannot call localhost directly; tunnel/remote authentication and current plan/workspace eligibility are deliberately outside this feature. `feat-058` visual acceptance and IR-002 live calibration remain parked, not erased.

@@ -6,6 +6,25 @@
   },
   "active_experiments": [
     {
+      "feature_id": "feat-059",
+      "problem": "AI-assisted intraday trade review lacks normalized minute tape, same-time market amount, benchmark-relative strength, and explicit execution evidence.",
+      "loop_stage": "verify",
+      "baseline": "Provider-neutral Eastmoney-primary and Tencent-fallback adapters, a typed evidence service, JSON CLI, and four read-only MCP tools are implemented locally and awaiting bounded verification and review.",
+      "outcome_metric": "A private owner-supplied acceptance sample returns no-lookahead decision context and factual 5/15/30-minute outcomes with explicit freshness, provenance, gaps, and no trade authority.",
+      "smallest_experiment": "Verify the 2026-08-07 private sample plus deterministic offline fixtures, CLI and MCP transports; stop at a Draft PR.",
+      "safety_boundaries": [
+        "Read-only evidence and user-confirmed trade review only",
+        "No broker connection, order placement, cancellation, or automatic recommendation",
+        "No cross-provider minute merging; fallback and conflicts stay explicit",
+        "Missing, stale, blocked, and no-data states cannot be converted to zero or authority",
+        "Private executions and live artifacts remain ignored and local"
+      ],
+      "kill_criterion": "Stop if real minute evidence cannot be reproduced, no-lookahead fails, private executions enter tracked artifacts, or MCP exposes any write/trade capability.",
+      "review_date": "2026-08-07"
+    }
+  ],
+  "queued_experiments": [
+    {
       "feature_id": "IR-002",
       "problem": "IR-001 passes one offline case, but the local poller and thresholds have no multi-session 09:25/09:35/10:00 shadow evidence and external mapping is still a scenario input.",
       "loop_stage": "decide",
@@ -22,19 +41,6 @@
       ],
       "kill_criterion": "Stop or recalibrate if alerts arrive after the decision window, false escalation dominates, provider gaps mask state, or opportunity confirmation encourages added risk after the account protection floor breaks.",
       "review_date": "2026-08-14"
-    }
-  ],
-  "queued_experiments": [
-    {
-      "feature_id": "feat-058",
-      "problem": "The V3.0 ten-run after-close/morning pilot ended before completion when the owner opened V3.1 iteration; its audit capability remains useful but is not the active increment.",
-      "loop_stage": "verify",
-      "baseline": "P0 passed and owner re-review was pending before the intraday pivot.",
-      "outcome_metric": "Resume only if intraday evidence shows a specific audit or remembered-plan gap.",
-      "smallest_experiment": "Keep the current implementation parked until it is explicitly selected as a V3.1 increment.",
-      "safety_boundaries": ["Preserve four routes", "Keep human trade authority", "Do not compete with IR-002 live shadow"],
-      "kill_criterion": "Do not resume for visual polish alone.",
-      "review_date": "2026-09-01"
     },
     {
       "feature_id": "feat-056",

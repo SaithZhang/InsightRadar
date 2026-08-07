@@ -5,8 +5,8 @@ This is the bounded startup snapshot. Read it after `PROJECT_MEMORY.md`; load ch
 <!-- current-state-manifest
 {
   "schema_version": "insight-radar-current-state/v1",
-  "updated_at": "2026-08-02",
-  "next_feature_id": "feat-058",
+  "updated_at": "2026-08-07",
+  "next_feature_id": "feat-059",
   "product_charter": "docs/product-charter.md",
   "architecture_source": "configs/architecture.json",
   "decision_index": "docs/memory/decision-log.md"
@@ -36,16 +36,11 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Verified Baseline
 
+- `feat-059` is the active owner-admitted increment under verification: a provider-neutral read-only evidence service now exposes Eastmoney-primary/Tencent-fallback minute tape, benchmark comparison, same-time Shanghai+Shenzhen amount, and user-confirmed trade review through JSON CLI and four MCP tools. Fallback never cross-source merges minutes; status/provenance/freshness are explicit, decision context is no-lookahead, and trade authority remains none.
 - `IR-001` passed: 36,060 private minute bars, 25 auction snapshots, 255 no-lookahead snapshots, and 15 transitions reproduced the bounded case. Private results beat full hold on profit protection; account values stay local and improvement versus actual remains unknown.
 - `IR-002` P0 is weekend-usable but still uncalibrated: the page opens before bounded provider work; explicit domestic/foreign/local routes, real exchange/runtime/display dates, latest-completed historical review, a pre-registered restart-safe scheduler, and a terminable sub-60-second refresh are live. Runtime v2 remains `shadow_only`; per-component freshness and unknowns fail closed. Confirmed executions and real re-entry-failure observations retain per-sell lineage under single-flight ledger writes. No notification or trade authority is admitted.
 
-- `feat-054` passed after ultimate independent read-only review at `d115e2e` returned PASS with no findings. The bootstrap now provides bounded governance, exact read-only agent contracts, executable manifests, PUBLIC-only traces, goal-bound checkpoints, fail-closed public privacy, and deterministic smoke evidence. This proves structural contracts only, not model-performance benefit or trade authority.
-- `feat-053` passed: the guarded Iwencai completed-close IF/IH/IC/IM adapter aligns spot/contract dates, selects active positive-open-interest contracts, exposes basis and positioning, and falls back serially. It never invents a four-minute change or grants decision authority.
-- `feat-036` passed and ownership transferred: the Windows reminder is independently built and running from `D:\work\reminder`; Task Scheduler points there, the main-repo source/export artifacts were retired, and historical logs were migrated.
-- `feat-041` passed: `risk-watch` produces a read-only cross-market/portfolio budget with no-lookahead replay, multi-family confirmation, red re-entry lock, Korea circuit-breaker gating, and 16:20 workday automation. The verified replay first confirmed yellow on 05-19, orange on 06-03, and red on 06-09.
-- `feat-042` passed: `risk-watch` now exposes an Iwencai A-share turnover-concentration snapshot and generalized volatility-normalized shock gates for S&P 500, QQQ, SOX, Nikkei, and cross-region US/Asia concurrence. Concentration remains diagnostic until at least 20 archived daily samples support percentile calibration; community narrative telemetry remains observation-only.
-- `feat-043` passed: `ai-capex-watch` separates hyperscaler CapEx, optical-network transmission, and supplier realization; sparse or missing evidence stays explicit and cannot override `risk-watch` or authorize trades.
-- `feat-047` passed: `after-close` consumes risk, state-team ETF, and AI-capex evidence into one fail-closed next-session plan; missing or stale gates cannot authorize added exposure.
+- Older passed Core and governance increments remain recorded in `feature_list.json` and scoped memory topics; this bounded snapshot does not duplicate their full evidence.
 - `feat-048/050` passed: the next-session guide consumes market levels and unbacktested gauges; the bear-bull score is a persisted close-finalized state machine with rule/veto ledger, hysteresis, daily ±1 cap, and fail-closed market-level authority.
 - `feat-051` passed: loopback portfolio import is preview/approval gated, null-preserving, atomic, reversible, and serially refreshed; incomplete weight/beta blocks risk reconciliation. ADR-0016 supersedes the old consent gate: missing/stale management context now generates a deterministic proposal and does not block base analysis.
 - `feat-052` passed: fixed style proxies use 5/20/60-session strength, breadth, approximate turnover, persistence, conflicts, and coverage; insufficient persistence/earnings evidence cannot authorize a style switch.
@@ -56,7 +51,8 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Next Feature
 
-- `feat-058` is the owner-selected active V3.1 increment. The holding-management closure is under verification/visual acceptance: deterministic proposals, adopt/adjust/uncertain persistence, after-close-only regeneration, and independent capability-level data quarantine. No AI proposal or trade authority was added.
+- `feat-059` is the owner-selected active V3.1 increment. Complete full verification, documentation/state evidence, private owner acceptance, and Draft PR for the read-only Intraday Evidence Layer; local MCP does not imply ChatGPT Web reachability.
+- `feat-058` retains its implemented holding-management closure and remains `parked_by_owner` outside the experiment queue pending final visual acceptance; it is not superseded or falsely marked complete.
 - `IR-002` P0 remains intact but its live calibration is parked for this bounded increment. When resumed, next evidence is multiple real 09:25/09:35/10:00 shadows, verified external point-time mapping, timing/false-escalation/missed-protection measurement, and notification admission. No notifications are authorized.
 - `feat-056` remains pending and the sole queued Harness experiment; no pilot or benchmark run has started.
 - `feat-057` is complete but remains an unpromoted diagnostic layer until adequate independent events, held-out outcomes, stable thresholds, primary-source event evidence, and reliable source coverage exist.
@@ -69,6 +65,8 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Known Gaps
 
+- The local MCP server supports stdio and loopback Streamable HTTP only. ChatGPT Web cannot call localhost directly; Secure MCP Tunnel or a separately reviewed authenticated remote HTTPS deployment remains outside `feat-059`.
+- Eastmoney/Tencent application endpoints are non-official and have no SLA. The current evidence layer supports only a bounded recent minute window and fixed benchmark registry; sector-relative strength and old-history backfill remain explicit gaps.
 - IR-001 external-mapping returns are explicit acceptance-case inputs, not verified external price observations. Live `catalyst_failure` remains unavailable until a point-in-time external mapping source is wired.
 - Actual 2026-07-31 broker executions are unavailable, so `improvement_vs_actual` remains `unknown`; no proxy strategy is labelled as actual behavior.
 - The live poller has no open-session IR-002 calibration sample yet. The 2026-08-01 Saturday smoke resolved the real 2026-07-31 session, loaded 90/90 archived symbols, and exposed historical-only authority; this proves weekend usability, not live timing, profitability, or notification admission.
@@ -92,7 +90,7 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Version Discipline and Parked Expansion
 
-- V3.1 advances one admitted increment at a time; `feat-058` is active and `IR-002` calibration is parked by the owner's 2026-08-02 reprioritization. V3.2 and parallel redesign remain unauthorized.
+- V3.1 advances one admitted increment at a time; `feat-059` is active by the owner's 2026-08-07 reprioritization, while `feat-058` visual acceptance and `IR-002` calibration are parked without losing their state. V3.2 and parallel redesign remain unauthorized.
 - Preserve the four-route information architecture, modular monolith, local-only runtime, and human authority boundary. ADR-0012 authorizes intraday Core behavior inside those routes; it does not authorize a fifth page, cloud deployment, or automatic execution.
 - Windows reminder: extraction and external cutover complete; it is no longer an InsightRadar repository component.
 - Factor Lab: keep available but park new development.
