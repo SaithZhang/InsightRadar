@@ -536,6 +536,7 @@ def _parse_tencent_rows(
     previous_stamp: datetime | None = None
     seen_stamps: set[datetime] = set()
     reversals = 0
+    future_minute_count = 0
     for raw in rows:
         parts = re.split(r"\s+", str(raw).strip())
         if not parts or not re.fullmatch(r"\d{4}", parts[0]):
@@ -544,6 +545,9 @@ def _parse_tencent_rows(
         stamp = _minute_stamp(trade_date, parts[0])
         if stamp is None:
             invalid_rows += 1
+            continue
+        if stamp > fetched_at:
+            future_minute_count += 1
             continue
         if stamp in seen_stamps:
             return ProviderResult(
@@ -638,6 +642,8 @@ def _parse_tencent_rows(
         gaps.append(f"missing_minute_amount:{missing_amount_rows}")
     if parsed_raw and volume_multiplier != 1.0:
         gaps.append("volume_unit_inferred_from_price_consistency")
+    if future_minute_count:
+        gaps.append(f"future_minute_dropped:{future_minute_count}")
     tape = IntradayTape(
         instrument=instrument,
         name=name or instrument.display_name,
@@ -648,26 +654,13 @@ def _parse_tencent_rows(
         volume_unit=volume_unit,
     )
     source_time = minutes[-1].timestamp if minutes else None
-    if source_time is not None and source_time > fetched_at:
-        return ProviderResult(
-            provider="tencent",
-            schema_version="intraday-tape/v1",
-            source_time=source_time,
-            fetched_at=fetched_at,
-            trade_date=trade_date,
-            status="invalid",
-            gaps=("source_time_after_fetched_at",),
-            errors=(),
-            price_basis="unadjusted",
-            data=_empty_tape(instrument, trade_date),
-        )
     return ProviderResult(
         provider="tencent",
         schema_version="intraday-tape/v1",
         source_time=source_time,
         fetched_at=fetched_at,
         trade_date=trade_date,
-        status="partial" if gaps else "ok" if minutes else "empty",
+        status="partial" if minutes and gaps else "ok" if minutes else "empty",
         gaps=tuple(gaps),
         errors=(),
         price_basis="unadjusted",

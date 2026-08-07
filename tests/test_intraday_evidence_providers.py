@@ -79,6 +79,46 @@ class ProviderParserTests(unittest.TestCase):
         self.assertAlmostEqual(result.data.minutes[1].avg_price or 0, 38.869565, places=5)
         self.assertIn("volume_unit_inferred_from_price_consistency", result.gaps)
 
+    def test_tencent_future_labeled_tail_is_dropped_without_losing_completed_minutes(self) -> None:
+        payload = json.loads((FIXTURES / "tencent_minute.json").read_text(encoding="utf-8"))
+
+        result = parse_tencent_minute(
+            payload,
+            instrument=resolve_instrument("002364"),
+            requested_date=date(2026, 8, 7),
+            fetched_at=datetime(2026, 8, 7, 9, 32, 30, tzinfo=SHANGHAI),
+        )
+
+        self.assertEqual(result.status, "partial")
+        self.assertEqual(result.source_time, datetime(2026, 8, 7, 9, 32, tzinfo=SHANGHAI))
+        self.assertEqual(result.data.minutes[-1].timestamp, result.source_time)
+        self.assertIn("future_minute_dropped:1", result.gaps)
+
+    def test_tencent_future_tail_cannot_poison_visible_counters_or_volume_units(self) -> None:
+        fixture = json.loads((FIXTURES / "tencent_minute.json").read_text(encoding="utf-8"))
+        cases = {
+            "counter_reversal": "0933 39.10 10 10",
+            "different_volume_scale": "0933 39.10 58000 2261000",
+        }
+
+        for reason, future_tail in cases.items():
+            with self.subTest(reason=reason):
+                payload = json.loads(json.dumps(fixture))
+                payload["data"]["sz002364"]["data"]["data"][-1] = future_tail
+                result = parse_tencent_minute(
+                    payload,
+                    instrument=resolve_instrument("002364"),
+                    requested_date=date(2026, 8, 7),
+                    fetched_at=datetime(2026, 8, 7, 9, 32, 30, tzinfo=SHANGHAI),
+                )
+
+                self.assertEqual(result.status, "partial")
+                self.assertEqual(
+                    [item.volume for item in result.data.minutes],
+                    [10000.0, 13000.0, 16000.0],
+                )
+                self.assertIn("future_minute_dropped:1", result.gaps)
+
     def test_tencent_counter_reversal_is_quarantined(self) -> None:
         payload = json.loads((FIXTURES / "tencent_minute.json").read_text(encoding="utf-8"))
         payload["data"]["sz002364"]["data"]["data"][2] = "0932 39.00 200 700000"
