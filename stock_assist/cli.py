@@ -22,6 +22,7 @@ from stock_assist.data_sources.nga import (
 )
 from stock_assist.decision_workspace import record_plan_versions
 from stock_assist.harness_eval.smoke import run_contract_smoke
+from stock_assist.intraday.evidence_cli import execute as execute_intraday_evidence
 from stock_assist.intraday.polling import poll_intraday, poll_intraday_checkpoints
 from stock_assist.llm import (
     clear_api_key,
@@ -71,6 +72,12 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("after-close", help=command_for("after-close").help)
+    intraday_evidence = subparsers.add_parser(
+        "intraday-evidence",
+        help=command_for("intraday-evidence").help,
+        add_help=False,
+    )
+    intraday_evidence.add_argument("evidence_args", nargs=argparse.REMAINDER)
     intraday_replay = subparsers.add_parser("intraday-replay", help=command_for("intraday-replay").help)
     intraday_replay.add_argument("--case", type=Path, default=None, help="private IR-001 case JSON; defaults to data/intraday/cases/IR-001.json")
     intraday_replay.add_argument("--refresh-archive", action="store_true", help="refresh and archive point-in-time minute data before replay")
@@ -159,7 +166,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
+    raw_args = list(argv) if argv is not None else sys.argv[1:]
+    if raw_args[:1] == ["intraday-evidence"]:
+        payload = execute_intraday_evidence(raw_args[1:])
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+    args = _build_parser().parse_args(raw_args)
     try:
         if args.command == "after-close":
             payload, md_content, html_content = build_after_close_bundle()
@@ -169,6 +181,12 @@ def main(argv: list[str] | None = None) -> int:
                 html_content = render_after_close_workbench(payload, md_content)
             json_path, md_path, html_path = write_payload_report_triplet("after-close", payload, md_content, html_content)
             path = f"{json_path}\n{md_path}\n{html_path}"
+        elif args.command == "intraday-evidence":
+            path = json.dumps(
+                execute_intraday_evidence(args.evidence_args),
+                ensure_ascii=False,
+                indent=2,
+            )
         elif args.command == "intraday-replay":
             payload, md_content, html_content = build_intraday_replay_bundle(
                 args.case,
