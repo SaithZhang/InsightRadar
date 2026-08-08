@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from stock_assist.after_close_workbench_html import render_after_close_workbench
@@ -850,6 +850,7 @@ class DecisionWorkspaceTests(unittest.TestCase):
             workspace,
             run_stage="morning_recheck",
             now=datetime(2026, 7, 24, 8, 30),
+            latest_completed_trade_date=date(2026, 7, 23),
         )
 
         self.assertEqual(result["run_stage"], "morning_recheck")
@@ -863,6 +864,7 @@ class DecisionWorkspaceTests(unittest.TestCase):
             workspace,
             run_stage="morning_recheck",
             now=datetime(2026, 8, 10, 8, 30),
+            latest_completed_trade_date=date(2026, 8, 7),
         )
 
         self.assertEqual(result["data_health"][0]["status"], "ready")
@@ -874,6 +876,34 @@ class DecisionWorkspaceTests(unittest.TestCase):
             "accepted",
         )
 
+    def test_morning_recheck_blocks_when_current_calendar_is_unavailable(self) -> None:
+        workspace = self._morning_recheck_workspace(source_time="2026-08-07 15:00")
+
+        result = restage_workspace(
+            workspace,
+            run_stage="morning_recheck",
+            now=datetime(2026, 8, 11, 8, 30),
+            latest_completed_trade_date=None,
+        )
+
+        health = result["data_health"][0]
+        self.assertEqual(health["status"], "blocked")
+        self.assertEqual(
+            health["error_code"],
+            "LATEST_COMPLETED_TRADE_DATE_UNAVAILABLE",
+        )
+        self.assertEqual(result["market_gate"]["status"], "blocked")
+        self.assertTrue(result["repair_issues"])
+        self.assertEqual(
+            result["repair_issues"][0]["reason_code"],
+            "LATEST_COMPLETED_TRADE_DATE_UNAVAILABLE",
+        )
+        plan = result["active_plans"][0]
+        self.assertEqual(plan["status"], "blocked")
+        self.assertEqual(plan["authority_state"], "blocked")
+        self.assertFalse(plan["effective_after_user_confirmation"])
+        self.assertNotEqual(plan["user_response_status"], "accepted")
+
     def test_morning_recheck_recomputes_derived_state_for_truly_stale_source(
         self,
     ) -> None:
@@ -883,6 +913,7 @@ class DecisionWorkspaceTests(unittest.TestCase):
             workspace,
             run_stage="morning_recheck",
             now=datetime(2026, 8, 10, 8, 30),
+            latest_completed_trade_date=date(2026, 8, 7),
         )
 
         self.assertEqual(result["data_health"][0]["status"], "stale")

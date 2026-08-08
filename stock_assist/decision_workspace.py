@@ -456,12 +456,14 @@ def restage_workspace(
         if run_stage == "after_close"
         else "晨间增量复核：仅重算现有来源时效；本阶段未接入实时行情刷新。"
     )
-    expected_date = latest_completed_trade_date or _parse_date(
-        result.get("latest_completed_trade_date")
-    )
     if run_stage == "morning_recheck":
+        expected_date = latest_completed_trade_date
         result["latest_completed_trade_date"] = (
             expected_date.isoformat() if expected_date else None
+        )
+    else:
+        expected_date = latest_completed_trade_date or _parse_date(
+            result.get("latest_completed_trade_date")
         )
     health = result.get("data_health")
     if run_stage == "morning_recheck" and isinstance(health, list):
