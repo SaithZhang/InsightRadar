@@ -729,7 +729,7 @@ class IntradayReliabilityTests(unittest.TestCase):
             ),
             patch(
                 "stock_assist.portfolio_import_server._latest_workspace_html",
-                side_effect=lambda token: (
+                side_effect=lambda token, **_kwargs: (
                     '<html><head><meta name="insightradar-session-token" '
                     f'content="{token}"></head><body>ready</body></html>'
                 ),

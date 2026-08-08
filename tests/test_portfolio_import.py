@@ -7,6 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from stock_assist.execution_plans import calculate_executable_trim
+from stock_assist.portfolio import load_portfolio
 from stock_assist.portfolio_import import (
     apply_portfolio_import,
     preview_portfolio_import,
@@ -19,6 +20,48 @@ TSV = f"{HEADER}\n{ROW}\n"
 
 
 class PortfolioImportTests(unittest.TestCase):
+    def test_shanghai_market_label_normalizes_code_for_provider_contract(self) -> None:
+        synthetic_row = (
+            "\tTEST01\t合成沪市ETF\t100\t100\t\t\t\t\t\t\t\t20.00"
+            "\t上海Ａ股\t100\t100"
+        )
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            preview = preview_portfolio_import(
+                f"{HEADER}\n{synthetic_row}\n",
+                portfolio_path=root / "portfolio.json",
+                risk_profile_path=root / "risk.json",
+            )
+
+        code = preview["proposed_portfolio"]["holdings"][0]["code"]
+        security_code, exchange = code.split(".")
+        self.assertEqual(security_code, "TEST01")
+        self.assertEqual(exchange, "SH")
+
+    def test_saved_shanghai_market_label_is_normalized_when_loaded(self) -> None:
+        with TemporaryDirectory() as tmp:
+            portfolio_path = Path(tmp) / "portfolio.json"
+            portfolio_path.write_text(
+                json.dumps(
+                    {
+                        "holdings": [
+                            {
+                                "code": "TEST01",
+                                "name": "合成沪市ETF",
+                                "shares": 100,
+                                "market": "上海Ａ股",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            portfolio = load_portfolio(portfolio_path)
+
+        self.assertEqual(portfolio.holdings[0].code, "TEST01.SH")
+
     def test_galaxy_preview_preserves_nulls_and_shows_old_new_diff(self) -> None:
         sparse_row = "\t300308\t中际旭创\t100\t100\t\t\t\t\t\t\t\t20.00\t深Ａ\t100\t100"
         with TemporaryDirectory() as tmp:

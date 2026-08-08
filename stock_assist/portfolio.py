@@ -171,7 +171,10 @@ def _load_json_portfolio(path: Path) -> Portfolio:
     payload = json.loads(path.read_text(encoding="utf-8"))
     holdings = [
         Holding(
-            code=str(item["code"]),
+            code=_normalize_a_share_code(
+                str(item["code"]),
+                str(item.get("market", "")),
+            ),
             name=str(item.get("name", "")),
             shares=_optional_float(item.get("shares")),
             cost=_optional_float(item.get("cost")),
@@ -542,12 +545,12 @@ def _parse_string_list(value: Any) -> tuple[str, ...]:
 
 
 def _normalize_a_share_code(code: str, market: str) -> str:
-    clean = code.strip()
+    clean = code.strip().upper()
     if "." in clean:
         return clean
-    if market.startswith("沪") or clean.startswith(("6", "9")):
+    if market.startswith(("沪", "上海")) or clean.startswith(("6", "9")):
         return f"{clean}.SH"
-    if market.startswith("深") or clean.startswith(("0", "2", "3")):
+    if market.startswith(("深", "深圳")) or clean.startswith(("0", "2", "3")):
         return f"{clean}.SZ"
     return clean
 
@@ -773,11 +776,11 @@ def _broker_float(row: dict[str, str], key: str) -> float | None:
 
 
 def _normalize_a_share_code(code: str, market: str) -> str:  # type: ignore[no-redef]
-    clean = code.strip()
+    clean = code.strip().upper()
     if "." in clean:
         return clean
-    if market.startswith("沪") or clean.startswith(("6", "9")):
+    if market.startswith(("沪", "上海")) or clean.startswith(("6", "9")):
         return f"{clean}.SH"
-    if market.startswith("深") or clean.startswith(("0", "2", "3")):
+    if market.startswith(("深", "深圳")) or clean.startswith(("0", "2", "3")):
         return f"{clean}.SZ"
     return clean

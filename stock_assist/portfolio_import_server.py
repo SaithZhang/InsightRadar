@@ -11,6 +11,7 @@ import json
 import re
 import secrets
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import asdict
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -51,6 +52,7 @@ from stock_assist.portfolio import (
     DEFAULT_PORTFOLIO_CONTEXT_PATH,
     Portfolio,
     load_portfolio,
+    portfolio_version,
     save_portfolio_management_context,
 )
 from stock_assist.portfolio_import import (
@@ -76,7 +78,10 @@ def serve_portfolio_import(
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
             if self.path in {"/", "/index.html", "/report"}:
-                content = _latest_workspace_html(token)
+                content = _latest_workspace_html(
+                    token,
+                    refresh_snapshot=coordinator.latest(),
+                )
                 if content is None:
                     self._send_html(_empty_workspace_page(token))
                     return
@@ -86,7 +91,9 @@ def serve_portfolio_import(
                 self._send_html(_page(token))
                 return
             if self.path == "/api/workspace":
-                workspace = _latest_workspace()
+                workspace = _latest_workspace(
+                    refresh_snapshot=coordinator.latest(),
+                )
                 if workspace is None:
                     self._send_json({"error": "尚未生成 after-close workspace"}, status=404)
                     return
@@ -148,9 +155,15 @@ def serve_portfolio_import(
                     Thread(target=server.shutdown, daemon=True).start()
                     return
                 if self.path == "/api/plan-response":
-                    workspace = _latest_workspace()
+                    workspace = _latest_workspace(
+                        refresh_snapshot=coordinator.latest(),
+                    )
                     if workspace is None:
                         raise ValueError("尚未生成 after-close workspace")
+                    _require_current_workspace_authority(
+                        workspace,
+                        load_portfolio(),
+                    )
                     plan_id = str(body.get("plan_id") or "")
                     plan_version = str(body.get("plan_version") or "")
                     current_plan = next(
@@ -568,7 +581,11 @@ def _latest_after_close_json():
     return reports[0] if reports else None
 
 
-def _latest_workspace() -> dict[str, object] | None:
+def _latest_workspace(
+    *,
+    current_portfolio: Portfolio | None = None,
+    refresh_snapshot: Mapping[str, object] | None = None,
+) -> dict[str, object] | None:
     json_path = _latest_after_close_json()
     if json_path is None:
         return None
@@ -602,7 +619,141 @@ def _latest_workspace() -> dict[str, object] | None:
     replay = _latest_intraday_replay()
     if replay is not None:
         selected["intraday_replay"] = replay
-    return selected
+    return _apply_workspace_validity(
+        selected,
+        current_portfolio=current_portfolio or load_portfolio(),
+        refresh_snapshot=refresh_snapshot,
+    )
+
+
+def _apply_workspace_validity(
+    workspace: Mapping[str, object],
+    *,
+    current_portfolio: Portfolio,
+    refresh_snapshot: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    """Bind current authority to the exact saved portfolio version."""
+
+    result = deepcopy(dict(workspace))
+    current_version = portfolio_version(current_portfolio)
+    workspace_version = str(result.get("portfolio_version") or "")
+    superseded = workspace_version != current_version
+    validity: dict[str, object] = {
+        "status": "superseded" if superseded else "current",
+        "reason_code": (
+            "PORTFOLIO_VERSION_SUPERSEDED" if superseded else None
+        ),
+        "current_decision_authority": (
+            "blocked" if superseded else "current"
+        ),
+        "current_portfolio_version": current_version,
+        "workspace_portfolio_version": workspace_version or None,
+        "current_portfolio_as_of": current_portfolio.as_of or None,
+        "workspace_effective_market_date": result.get("effective_market_date"),
+    }
+    refresh = _safe_refresh_summary(refresh_snapshot)
+    if refresh is not None:
+        validity["latest_refresh"] = refresh
+    result["workspace_validity"] = validity
+    if not superseded:
+        return result
+
+    blocker = "当前持仓版本已变化；该计划仅作为历史快照，不具有当前授权。"
+    result["runtime_status"] = "superseded"
+    result["view_mode"] = "historical_snapshot"
+    result["decision_authority"] = "historical_snapshot_only"
+    result["authority_state"] = "blocked"
+    result["effective_after_user_confirmation"] = False
+    result["trade_authority"] = "none"
+    gate = dict(result.get("market_gate")) if isinstance(result.get("market_gate"), Mapping) else {}
+    gate.update(
+        {
+            "status": "blocked",
+            "permission": "blocked",
+            "reason": blocker,
+        }
+    )
+    result["market_gate"] = gate
+    for key in ("plan_changes", "today_plans", "active_plans"):
+        rows = result.get(key)
+        if not isinstance(rows, list):
+            continue
+        for plan in rows:
+            if not isinstance(plan, dict):
+                continue
+            plan["status"] = "blocked"
+            plan["authority_state"] = "blocked"
+            plan["effective_after_user_confirmation"] = False
+            reasons = plan.get("blocking_reasons")
+            values = [str(item) for item in reasons] if isinstance(reasons, list) else []
+            if blocker not in values:
+                values.append(blocker)
+            plan["blocking_reasons"] = values
+            if plan.get("user_response_status") == "accepted":
+                plan["user_response_status"] = "pending"
+                plan["user_response_note"] = (
+                    "当前持仓版本变化已撤销旧 accepted 的当前授权；"
+                    "刷新成功并生成新计划后需重新确认。"
+                )
+                plan["user_response_at"] = None
+    positions = result.get("portfolio_positions")
+    if isinstance(positions, list):
+        for position in positions:
+            if isinstance(position, dict):
+                position["today_status"] = "blocked"
+    return result
+
+
+def _safe_refresh_summary(
+    snapshot: Mapping[str, object] | None,
+) -> dict[str, object] | None:
+    if not isinstance(snapshot, Mapping):
+        return None
+    summary = {
+        key: snapshot.get(key)
+        for key in (
+            "status",
+            "failed_step",
+            "current_step",
+            "requested_at",
+            "started_at",
+            "finished_at",
+        )
+        if snapshot.get(key) not in (None, "")
+    }
+    if snapshot.get("error") not in (None, ""):
+        error = sanitize_diagnostic_text(str(snapshot.get("error")))
+        error = re.sub(r"\b\d{6}\.(?:SH|SZ)\b", "<SYMBOL>", error)
+        error = re.sub(r"[A-Za-z]:\\[^\r\n]+", "<LOCAL_PATH>", error)
+        summary["error"] = error[:500]
+    return summary or None
+
+
+def _require_current_workspace_authority(
+    workspace: Mapping[str, object],
+    current_portfolio: Portfolio,
+) -> None:
+    validity = workspace.get("workspace_validity")
+    validity_status = (
+        str(validity.get("status") or "")
+        if isinstance(validity, Mapping)
+        else ""
+    )
+    current_authority = (
+        str(validity.get("current_decision_authority") or "")
+        if isinstance(validity, Mapping)
+        else ""
+    )
+    if (
+        validity_status != "current"
+        or current_authority != "current"
+        or str(workspace.get("portfolio_version") or "")
+        != portfolio_version(current_portfolio)
+    ):
+        raise ValueError(
+            "当前持仓已更新，这个计划属于旧组合版本。"
+            "请完成刷新并生成新计划后重新确认。"
+        )
 
 
 def _resolve_latest_completed_trade_date(current: datetime) -> date | None:
@@ -757,7 +908,11 @@ def _latest_intraday_replay() -> dict[str, object] | None:
     return payload if isinstance(payload, dict) else None
 
 
-def _latest_workspace_html(token: str) -> str | None:
+def _latest_workspace_html(
+    token: str,
+    *,
+    refresh_snapshot: Mapping[str, object] | None = None,
+) -> str | None:
     json_path = _latest_after_close_json()
     if json_path is None:
         latest_html = _latest_after_close_html()
@@ -774,7 +929,7 @@ def _latest_workspace_html(token: str) -> str | None:
         return None
     if not isinstance(payload, dict):
         return None
-    workspace = _latest_workspace()
+    workspace = _latest_workspace(refresh_snapshot=refresh_snapshot)
     if workspace is not None:
         payload["decision_workspace"] = workspace
     md_path = json_path.with_suffix(".md")

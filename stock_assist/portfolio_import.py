@@ -441,9 +441,9 @@ def _normalize_code(code: str, market: str) -> str:
     clean = code.strip().upper()
     if "." in clean:
         return clean
-    if market.startswith("沪") or clean.startswith(("6", "9")):
+    if market.startswith(("沪", "上海")) or clean.startswith(("6", "9")):
         return f"{clean}.SH"
-    if market.startswith("深") or clean.startswith(("0", "2", "3")):
+    if market.startswith(("深", "深圳")) or clean.startswith(("0", "2", "3")):
         return f"{clean}.SZ"
     return clean
 

@@ -1,14 +1,23 @@
 from __future__ import annotations
 
 import json
+import socket
+import threading
+import time
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
+from stock_assist.after_close_workbench_html import render_after_close_workbench
+from stock_assist.portfolio import Holding, Portfolio, portfolio_version
 from stock_assist.portfolio_import_server import (
+    _latest_workspace,
     _latest_workspace_html,
     _page,
+    _require_current_workspace_authority,
     serve_portfolio_import,
 )
 from stock_assist.reports import portfolio_import_html_parts
@@ -17,6 +26,45 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class OneClickLauncherTests(unittest.TestCase):
+    def _workspace(self, version: str) -> dict[str, object]:
+        plan = {
+            "plan_id": "holding:TEST01.SZ",
+            "symbol": "TEST01.SZ",
+            "name": "合成标的甲",
+            "plan_version": "plan-v1",
+            "status": "unchanged",
+            "authority_state": "effective",
+            "effective_after_user_confirmation": True,
+            "user_response_status": "accepted",
+            "blocking_reasons": [],
+            "risk_constraints": [],
+            "change_reasons": [],
+        }
+        return {
+            "portfolio_version": version,
+            "effective_market_date": "2026-08-07",
+            "generated_at": "2026-08-08T08:00:00",
+            "source_generated_at": "2026-08-08T08:00:00",
+            "run_stage": "after_close",
+            "runtime_status": "reviewed",
+            "market_gate": {"status": "ready"},
+            "data_health": [],
+            "portfolio_summary": {"holding_count": 1},
+            "portfolio_positions": [
+                {
+                    "symbol": "TEST01.SZ",
+                    "current_plan_id": plan["plan_id"],
+                    "today_status": plan["status"],
+                }
+            ],
+            "plan_changes": [plan],
+            "active_plans": [plan],
+            "research_tasks": [],
+            "user_responses": [],
+            "monitor_handoffs": [],
+            "outcome_summary": {},
+        }
+
     def test_root_contains_clickable_product_and_task_launchers(self) -> None:
         expected = [
             ROOT / "InsightRadar.cmd",
@@ -153,6 +201,211 @@ class OneClickLauncherTests(unittest.TestCase):
         self.assertIsNotNone(html)
         self.assertEqual(html.count("local-test-token"), 1)
         self.assertIn('token === "__LOCAL_SESSION_TOKEN__"', html)
+
+    def test_old_workspace_is_superseded_after_saved_portfolio_changes(self) -> None:
+        current = Portfolio(
+            cash=None,
+            holdings=[Holding(code="TEST02.SZ", name="合成标的乙")],
+            source=Path("data/portfolio.json"),
+            as_of="2026-08-08",
+        )
+        old_workspace = self._workspace("portfolio-old-version")
+        failed_refresh = {
+            "status": "failed",
+            "failed_step": "after-close",
+            "error": "synthetic after-close failure",
+        }
+        with TemporaryDirectory() as temporary:
+            report_dir = Path(temporary)
+            report = report_dir / "20260808-080000-after-close.json"
+            report.write_text(
+                json.dumps({"decision_workspace": old_workspace}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            with patch(
+                "stock_assist.portfolio_import_server.REPORT_DIR",
+                report_dir,
+            ):
+                selected = _latest_workspace(
+                    current_portfolio=current,
+                    refresh_snapshot=failed_refresh,
+                )
+
+            self.assertTrue(report.exists())
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected["workspace_validity"]["status"], "superseded")
+        self.assertEqual(selected["runtime_status"], "superseded")
+        plan = selected["active_plans"][0]
+        self.assertEqual(plan["status"], "blocked")
+        self.assertEqual(plan["authority_state"], "blocked")
+        self.assertFalse(plan["effective_after_user_confirmation"])
+        self.assertNotEqual(plan["user_response_status"], "accepted")
+
+    def test_matching_workspace_restores_current_authority_and_keeps_history(self) -> None:
+        current = Portfolio(
+            cash=None,
+            holdings=[Holding(code="TEST02.SZ", name="合成标的乙")],
+            source=Path("data/portfolio.json"),
+            as_of="2026-08-08",
+        )
+        current_version = portfolio_version(current)
+        with TemporaryDirectory() as temporary:
+            report_dir = Path(temporary)
+            old_report = report_dir / "20260808-080000-after-close.json"
+            old_report.write_text(
+                json.dumps(
+                    {"decision_workspace": self._workspace("portfolio-old-version")},
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            new_report = report_dir / "20260808-090000-after-close.json"
+            new_report.write_text(
+                json.dumps(
+                    {"decision_workspace": self._workspace(current_version)},
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            old_report.touch()
+            time.sleep(0.01)
+            new_report.touch()
+            with patch(
+                "stock_assist.portfolio_import_server.REPORT_DIR",
+                report_dir,
+            ):
+                selected = _latest_workspace(current_portfolio=current)
+
+            self.assertTrue(old_report.exists())
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected["workspace_validity"]["status"], "current")
+        self.assertEqual(selected["active_plans"][0]["authority_state"], "effective")
+        self.assertTrue(
+            selected["active_plans"][0]["effective_after_user_confirmation"]
+        )
+        _require_current_workspace_authority(selected, current)
+
+    def test_superseded_workspace_renders_history_only_without_plan_actions(self) -> None:
+        workspace = self._workspace("portfolio-old-version")
+        workspace["workspace_validity"] = {
+            "status": "superseded",
+            "reason_code": "PORTFOLIO_VERSION_SUPERSEDED",
+            "current_portfolio_version": "portfolio-current-version",
+            "workspace_portfolio_version": "portfolio-old-version",
+            "current_portfolio_as_of": "2026-08-08",
+            "workspace_effective_market_date": "2026-08-07",
+            "latest_refresh": {
+                "status": "failed",
+                "failed_step": "after-close",
+                "error": "synthetic after-close failure",
+            },
+        }
+
+        html = render_after_close_workbench(
+            {"decision_workspace": workspace},
+            "# synthetic fixture",
+        )
+
+        self.assertIn("当前持仓已更新，但决策工作台刷新失败", html)
+        self.assertIn("历史快照 · 仅供回看", html)
+        self.assertIn("after-close", html)
+        self.assertIn('id="refresh-all-data"', html)
+        self.assertNotIn('data-plan-response="', html)
+
+    def test_plan_response_endpoint_rejects_superseded_workspace(self) -> None:
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        workspace = self._workspace("portfolio-old-version")
+        workspace["workspace_validity"] = {
+            "status": "superseded",
+            "current_decision_authority": "blocked",
+        }
+        current = Portfolio(
+            cash=None,
+            holdings=[Holding(code="TEST02.SZ", name="合成标的乙")],
+            source=Path("data/portfolio.json"),
+            as_of="2026-08-08",
+        )
+        coordinator = MagicMock()
+        append_response = MagicMock(return_value={"response": "accepted"})
+        token = "synthetic-local-token"
+        with (
+            patch(
+                "stock_assist.portfolio_import_server.secrets.token_urlsafe",
+                return_value=token,
+            ),
+            patch(
+                "stock_assist.portfolio_import_server._latest_workspace_html",
+                return_value="<html><body>ready</body></html>",
+            ),
+            patch(
+                "stock_assist.portfolio_import_server._latest_workspace",
+                return_value=workspace,
+            ),
+            patch(
+                "stock_assist.portfolio_import_server.load_portfolio",
+                return_value=current,
+            ),
+            patch(
+                "stock_assist.portfolio_import_server.append_plan_response",
+                append_response,
+            ),
+        ):
+            server_thread = threading.Thread(
+                target=serve_portfolio_import,
+                kwargs={
+                    "port": port,
+                    "open_browser": False,
+                    "refresh_coordinator": coordinator,
+                },
+                daemon=True,
+            )
+            server_thread.start()
+            for _ in range(50):
+                try:
+                    with urlopen(f"http://127.0.0.1:{port}/", timeout=0.2):
+                        break
+                except OSError:
+                    time.sleep(0.02)
+            request = Request(
+                f"http://127.0.0.1:{port}/api/plan-response",
+                data=json.dumps(
+                    {
+                        "plan_id": "holding:TEST01.SZ",
+                        "plan_version": "plan-v1",
+                        "response": "accepted",
+                    }
+                ).encode("utf-8"),
+                method="POST",
+                headers={
+                    "Content-Type": "application/json",
+                    "X-InsightRadar-Token": token,
+                },
+            )
+            try:
+                with self.assertRaises(HTTPError) as rejected:
+                    urlopen(request, timeout=1)
+                body = json.loads(rejected.exception.read().decode("utf-8"))
+                self.assertIn("当前持仓已更新", body["error"])
+            finally:
+                shutdown = Request(
+                    f"http://127.0.0.1:{port}/api/shutdown",
+                    data=b"{}",
+                    method="POST",
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-InsightRadar-Token": token,
+                    },
+                )
+                with urlopen(shutdown, timeout=1):
+                    pass
+                server_thread.join(timeout=2)
+
+        append_response.assert_not_called()
+        coordinator.record_user_response.assert_not_called()
 
     def test_import_service_binds_loopback_opens_browser_and_closes(self) -> None:
         state: dict[str, object] = {}

@@ -25,6 +25,7 @@ from stock_assist.workflows.after_close import (
     _signal_from_broker_snapshot,
     build_after_close_bundle,
     build_after_close_payload,
+    build_after_close_report,
 )
 
 ACTION_MARKDOWN = """# 盘后持仓操作指引
@@ -87,6 +88,91 @@ def _daily_result(frame: pd.DataFrame) -> ProviderResult[pd.DataFrame]:
 
 
 class AfterCloseReliabilityTests(unittest.TestCase):
+    def test_loaded_shanghai_etf_completes_after_close_report_contract(self) -> None:
+        class ContractClient:
+            def __init__(self) -> None:
+                sessions = pd.bdate_range("2026-05-18", "2026-08-07")
+                self.calendar = [int(value.strftime("%Y%m%d")) for value in sessions]
+                self.requested_codes: list[str] = []
+
+            def query_daily_kline_result(
+                self,
+                codes: object,
+                _begin_date: int,
+                _end_date: int,
+            ) -> ProviderResult[dict[str, pd.DataFrame]]:
+                self.requested_codes = list(codes)  # type: ignore[arg-type]
+                for code in self.requested_codes:
+                    security_code, exchange = code.split(".")
+                    self.assert_provider_code(security_code, exchange)
+                sessions = pd.bdate_range("2026-05-18", "2026-08-07")
+                frame = pd.DataFrame(
+                    {
+                        "trade_date": sessions,
+                        "open": [10.0 + index * 0.01 for index in range(len(sessions))],
+                        "high": [10.2 + index * 0.01 for index in range(len(sessions))],
+                        "low": [9.8 + index * 0.01 for index in range(len(sessions))],
+                        "close": [10.1 + index * 0.01 for index in range(len(sessions))],
+                        "volume": [1000 + index for index in range(len(sessions))],
+                    }
+                )
+                return ProviderResult(
+                    provider="synthetic",
+                    schema_version="daily-ohlcv/v1",
+                    source_time=datetime.fromisoformat("2026-08-07T15:00:00+08:00"),
+                    fetched_at=datetime.fromisoformat("2026-08-07T15:05:00+08:00"),
+                    trade_date=datetime.fromisoformat("2026-08-07T00:00:00").date(),
+                    status="ok",
+                    gaps=(),
+                    errors=(),
+                    price_basis="unadjusted",
+                    data={code: frame.copy() for code in self.requested_codes},
+                )
+
+            @staticmethod
+            def assert_provider_code(security_code: str, exchange: str) -> None:
+                if not security_code or exchange not in {"SH", "SZ"}:
+                    raise ValueError("provider code contract invalid")
+
+        with TemporaryDirectory() as tmp:
+            portfolio_path = Path(tmp) / "portfolio.json"
+            portfolio_path.write_text(
+                json.dumps(
+                    {
+                        "as_of": "2026-08-08",
+                        "holdings": [
+                            {
+                                "code": "TEST01",
+                                "name": "合成沪市ETF",
+                                "shares": 100,
+                                "market": "上海Ａ股",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            portfolio = load_portfolio(portfolio_path)
+            client = ContractClient()
+            with (
+                patch("stock_assist.workflows.after_close.load_observations", return_value=[]),
+                patch("stock_assist.workflows.after_close.load_thread_sentiments", return_value=[]),
+                patch("stock_assist.workflows.after_close.fetch_global_market_groups", return_value={}),
+                patch("stock_assist.workflows.after_close.refresh_signal_outcomes", return_value=_outcome_snapshot()),
+                patch("stock_assist.workflows.after_close._load_event_calendar", return_value=({}, [])),
+                patch("stock_assist.workflows.after_close._peer_comparison_lines", return_value=[]),
+                patch("stock_assist.workflows.after_close._profit_notice_peer_lines", return_value=[]),
+                patch("stock_assist.workflows.after_close._fresh_cninfo_filing_lines", return_value=[]),
+                patch("stock_assist.workflows.after_close._external_view_lines", return_value=[]),
+                patch("stock_assist.workflows.after_close.load_daily_kline_repairs", return_value={}),
+            ):
+                markdown = build_after_close_report(client=client, portfolio=portfolio)
+
+        self.assertEqual(client.requested_codes, ["TEST01.SH"])
+        self.assertIn("合成沪市ETF（TEST01.SH）", markdown)
+        self.assertIn("## 持仓动作", markdown)
+
     @patch("stock_assist.workflows.after_close.build_after_close_report")
     @patch("stock_assist.workflows.after_close.build_after_close_payload")
     def test_bundle_uses_payload_driven_workbench_renderer(
