@@ -45,6 +45,19 @@ class TechnicalSnapshot:
 
 
 @dataclass(frozen=True)
+class DataEvidence:
+    provider: str
+    schema_version: str
+    status: str
+    source_time: str | None
+    fetched_at: str
+    trade_date: str | None
+    price_basis: str
+    gaps: tuple[str, ...]
+    errors: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DecisionBranch:
     branch_id: Literal["repair_observe", "risk_reduce_review", "continue_waiting"]
     label: str
@@ -66,6 +79,7 @@ class HoldingDecision:
     position_action: str
     priority: str
     technical: TechnicalSnapshot
+    data_evidence: DataEvidence
     cost_reference: dict[str, object]
     branches: tuple[DecisionBranch, DecisionBranch, DecisionBranch]
 
@@ -98,18 +112,21 @@ def build_holding_decision(
             holding,
             "日线行情未通过 ProviderResult 数据不变量，技术结构不可用。",
             "；".join(result.errors) or "日线行情契约状态为 invalid。",
+            evidence=_provider_evidence(result),
         )
     if any(":stale_trade_date:" in gap for gap in result.gaps):
         return _unknown_decision(
             holding,
             "日线行情未达到要求交易日，技术结构不可用。",
             "；".join(result.gaps),
+            evidence=_provider_evidence(result),
         )
     if prepared.empty:
         return _unknown_decision(
             holding,
             "未取到该股票行情，无法判断趋势位置。",
             "补充至少20个已完成交易日的日线行情。",
+            evidence=_provider_evidence(result),
         )
 
     if "close" not in prepared.columns:
@@ -117,6 +134,7 @@ def build_holding_decision(
             holding,
             "行情缺少收盘价字段，不能计算技术结构。",
             "确认日线字段映射并重新刷新。",
+            evidence=_provider_evidence(result),
         )
 
     closes = pd.to_numeric(prepared["close"], errors="coerce")
@@ -128,6 +146,7 @@ def build_holding_decision(
             holding,
             "有效行情不足20个交易日，趋势参考不稳定。",
             "补齐更长历史行情。",
+            evidence=_provider_evidence(result),
         )
 
     last = float(closes.iloc[-1])
@@ -149,6 +168,7 @@ def build_holding_decision(
                 f"日线收盘价 {last:.2f} 与券商快照 {broker_price:.2f} "
                 "偏差超过35%，疑似复权或标的映射口径不一致。"
             ),
+            evidence=_provider_evidence(result),
         )
     adjustment_basis = result.price_basis
     largest_gap = float(closes.pct_change().abs().dropna().max())
@@ -172,6 +192,7 @@ def build_holding_decision(
                 f"price_basis={adjustment_basis}；均线、支撑阻力与波动指标"
                 "暂不进入决策。"
             ),
+            evidence=_provider_evidence(result),
         )
 
     snapshot = _technical_snapshot(prepared, closes)
@@ -310,6 +331,7 @@ def build_holding_decision(
         position_action=position_action,
         priority=priority,
         technical=snapshot,
+        data_evidence=_provider_evidence(result),
         cost_reference=_cost_reference(holding),
         branches=(repair, risk, waiting),
     )
@@ -474,6 +496,8 @@ def _unknown_decision(
     holding: Holding,
     reason: str,
     data_gap: str,
+    *,
+    evidence: DataEvidence,
 ) -> HoldingDecision:
     technical = TechnicalSnapshot(
         state="unknown",
@@ -498,6 +522,7 @@ def _unknown_decision(
         position_action="不加仓；仅保留人工风险监控。",
         priority="高",
         technical=technical,
+        data_evidence=evidence,
         cost_reference=_cost_reference(holding),
         branches=branches,
     )
@@ -507,6 +532,8 @@ def _quarantined_decision(
     holding: Holding,
     technical: TechnicalSnapshot,
     reason: str,
+    *,
+    evidence: DataEvidence,
 ) -> HoldingDecision:
     return HoldingDecision(
         action="等待数据，不做主动交易",
@@ -515,6 +542,7 @@ def _quarantined_decision(
         position_action="不使用当前均线或价格阈值生成仓位动作。",
         priority="高",
         technical=technical,
+        data_evidence=evidence,
         cost_reference=_cost_reference(holding),
         branches=_blocked_branches("同一标的、同一复权口径完成对账。"),
     )
@@ -565,6 +593,20 @@ def _cost_reference(holding: Holding) -> dict[str, object]:
         "pnl_pct": holding.pnl_pct,
         "note": "成本与账户盈亏只用于解释持仓体验，不生成技术触发点。",
     }
+
+
+def _provider_evidence(result: ProviderResult[pd.DataFrame]) -> DataEvidence:
+    return DataEvidence(
+        provider=result.provider,
+        schema_version=result.schema_version,
+        status=result.status,
+        source_time=result.source_time.isoformat() if result.source_time else None,
+        fetched_at=result.fetched_at.isoformat(),
+        trade_date=result.trade_date.isoformat() if result.trade_date else None,
+        price_basis=result.price_basis,
+        gaps=result.gaps,
+        errors=result.errors,
+    )
 
 
 def _pick_column(frame: pd.DataFrame, names: tuple[str, ...]) -> str | None:

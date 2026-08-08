@@ -5,8 +5,8 @@ This is the bounded startup snapshot. Read it after `PROJECT_MEMORY.md`; load ch
 <!-- current-state-manifest
 {
   "schema_version": "insight-radar-current-state/v1",
-  "updated_at": "2026-08-07",
-  "next_feature_id": "feat-059",
+  "updated_at": "2026-08-08",
+  "next_feature_id": "feat-058",
   "product_charter": "docs/product-charter.md",
   "architecture_source": "configs/architecture.json",
   "decision_index": "docs/memory/decision-log.md"
@@ -36,13 +36,14 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Verified Baseline
 
-- `feat-059` is the active owner-admitted increment under verification: a provider-neutral read-only evidence service now exposes Eastmoney-primary/Tencent-fallback minute tape, benchmark comparison, same-time Shanghai+Shenzhen amount, and user-confirmed trade review through JSON CLI and four MCP tools. Fallback never cross-source merges minutes; status/provenance/freshness are explicit, decision context is no-lookahead, and trade authority remains none.
+- `feat-059` is on `main`: four read-only MCP tools expose Eastmoney-primary/Tencent whole-series-fallback tape and trade review with explicit provenance, no-lookahead, no cross-source row merge, and no trade authority.
 - `IR-001` passed: 36,060 private minute bars, 25 auction snapshots, 255 no-lookahead snapshots, and 15 transitions reproduced the bounded case. Private results beat full hold on profit protection; account values stay local and improvement versus actual remains unknown.
 - `IR-002` P0 is weekend-usable but still uncalibrated: the page opens before bounded provider work; explicit domestic/foreign/local routes, real exchange/runtime/display dates, latest-completed historical review, a pre-registered restart-safe scheduler, and a terminable sub-60-second refresh are live. Runtime v2 remains `shadow_only`; per-component freshness and unknowns fail closed. Confirmed executions and real re-entry-failure observations retain per-sell lineage under single-flight ledger writes. No notification or trade authority is admitted.
 
 - Older passed Core and governance increments remain recorded in `feature_list.json` and scoped memory topics; this bounded snapshot does not duplicate their full evidence.
 - `feat-048/050` passed: the next-session guide consumes market levels and unbacktested gauges; the bear-bull score is a persisted close-finalized state machine with rule/veto ledger, hysteresis, daily ±1 cap, and fail-closed market-level authority.
 - `feat-051` passed: loopback portfolio import is preview/approval gated, null-preserving, atomic, reversible, and serially refreshed; incomplete weight/beta blocks risk reconciliation. ADR-0016 supersedes the old consent gate: missing/stale management context now generates a deterministic proposal and does not block base analysis.
+- `feat-058` repair closure is locally verified: ProviderResult lineage reaches the decision workspace; every blocked plan links to structured repair issues; the Portfolio route exposes field/source/time/current-known-value/repair authority; version-bound system retries regenerate after-close and preserve blocked on failure. Daily-series price-basis/mapping faults may use a separately recorded, ignored Tencent forward-adjusted whole-series fallback; rows are never stitched across providers and the primary quarantine remains visible in provenance. Broker field gaps still route through the approved importer, and no user action can clear provider quarantine.
 - `feat-052` passed: fixed style proxies use 5/20/60-session strength, breadth, approximate turnover, persistence, conflicts, and coverage; insufficient persistence/earnings evidence cannot authorize a style switch.
 - `feat-037` passed: fresh post-migration Core workflows now run from `D:\work\InsightRadar`. After-close exposes structural versus strict decision-ready coverage; market-pulse degrades to a bounded explicit-gap report outside live session instead of hanging; market-level synthesis tolerates timeframes without a qualifying support zone.
 - `feat-057` passed: `risk-watch` now exposes independent energy, duration, and Korea macro-transmission states with no-lookahead calibration and `diagnostic_only` authority. The real 2026-07-23 run retained 5/7 macro series after Yahoo SP500/QQQ timeouts, so event count is 0 and calibration is insufficient; the causal thesis is not confirmed and no risk/trade output changes.
@@ -51,8 +52,8 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Next Feature
 
-- `feat-059` is the owner-selected active V3.1 increment. Complete full verification, documentation/state evidence, private owner acceptance, and Draft PR for the read-only Intraday Evidence Layer; local MCP does not imply ChatGPT Web reachability.
-- `feat-058` retains its implemented holding-management closure and remains `parked_by_owner` outside the experiment queue pending final visual acceptance; it is not superseded or falsely marked complete.
+- `feat-058` is the owner-selected active V3.1 increment and is ready for final owner acceptance. The blocked-to-repair vertical chain is implemented and verified; stop here and do not start P1/P2 or another product increment.
+- `feat-059` remains available on `main`; local MCP does not imply ChatGPT Web reachability and no remote tunnel/deployment is admitted by this closure.
 - `IR-002` P0 remains intact but its live calibration is parked for this bounded increment. When resumed, next evidence is multiple real 09:25/09:35/10:00 shadows, verified external point-time mapping, timing/false-escalation/missed-protection measurement, and notification admission. No notifications are authorized.
 - `feat-056` remains pending and the sole queued Harness experiment; no pilot or benchmark run has started.
 - `feat-057` is complete but remains an unpromoted diagnostic layer until adequate independent events, held-out outcomes, stable thresholds, primary-source event evidence, and reliable source coverage exist.
@@ -73,7 +74,7 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 - The workbench can append user-confirmed sell/re-entry evidence and gate re-entry, but no real execution has been supplied; absence remains unknown rather than “no sale”.
 
 - Codex config and the weekday brief target `D:\work\InsightRadar`. The old `%USERPROFILE%\Documents\stock-assist` root remains empty but process-locked; do not force-delete it.
-- The project `.venv` and AmazingData connectivity are restored. The latest private report confirms base analysis remains available while management plans await confirmation. Automatic beta/risk reconciliation is complete for the private snapshot. Historical entry context limits Review only, and one provider series remains independently quarantined until its adjustment basis is reconciled. Exact portfolio counts and values remain local.
+- The project `.venv` and AmazingData connectivity are restored. Private beta/risk reconciliation is complete; historical entry context limits Review only. The bounded repair flow first demonstrated fail-closed retention, then repaired the quarantined daily series through a typed Tencent forward-adjusted whole-series fallback and refreshed all stale decision sources. The final private report has zero repair issues, zero blocked plans, and all current holding decisions ready; pending management proposals affect personalization only. Exact portfolio counts and values remain local.
 - The weekend `market-pulse` now contains eight dated IF/IH/IC/IM 2608/2609 close-basis rows, while Eastmoney index/ETF snapshots still closed connections and realtime AmazingData remains session-gated. Derivative context is valid through 2026-07-17, but the report is still a partial after-close diagnostic, not live direction.
 - The four-ETF state-team proxy is current through 2026-07-17, but 2015-era CSF/Huijin direct stock holdings and ETF in-kind redemption destinations remain unverified; a full direct-holding check must wait for the 2026 interim-report disclosure set.
 - Galaxy/AmazingData is not a universal ARM macOS/Linux runtime. Iwencai is now a guarded local Core source for fixed-anchor breadth and completed-close futures basis under ADR-0008, but cross-platform execution, multi-day reconciliation, latency/quota measurement, and supply-chain gates remain open; do not describe it as cloud/universal production readiness.
@@ -90,7 +91,7 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Version Discipline and Parked Expansion
 
-- V3.1 advances one admitted increment at a time; `feat-059` is active by the owner's 2026-08-07 reprioritization, while `feat-058` visual acceptance and `IR-002` calibration are parked without losing their state. V3.2 and parallel redesign remain unauthorized.
+- V3.1 advances one admitted increment at a time; the owner explicitly returned to the `feat-058` repair closure on 2026-08-08. It is ready for acceptance, `IR-002` calibration is parked without losing state, and no later increment is admitted. V3.2 and parallel redesign remain unauthorized.
 - Preserve the four-route information architecture, modular monolith, local-only runtime, and human authority boundary. ADR-0012 authorizes intraday Core behavior inside those routes; it does not authorize a fifth page, cloud deployment, or automatic execution.
 - Windows reminder: extraction and external cutover complete; it is no longer an InsightRadar repository component.
 - Factor Lab: keep available but park new development.

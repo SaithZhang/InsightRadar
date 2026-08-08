@@ -6,15 +6,25 @@ from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import Mock
 
 from stock_assist.after_close_workbench_html import render_after_close_workbench
 from stock_assist.decision_workspace import build_decision_workspace
-from stock_assist.portfolio import Holding, Portfolio
-from stock_assist.portfolio_import_server import apply_portfolio_management_response
+from stock_assist.portfolio import Holding, Portfolio, _with_position_context
+from stock_assist.portfolio_import_server import (
+    apply_portfolio_management_response,
+    start_repair_recheck,
+)
 from stock_assist.refresh_jobs import select_refresh_workflows
 
 
-def _contract(state: str = "neutral") -> dict[str, object]:
+def _contract(
+    state: str = "neutral",
+    *,
+    provider_status: str | None = None,
+    gaps: tuple[str, ...] = (),
+    errors: tuple[str, ...] = (),
+) -> dict[str, object]:
     price_ready = state not in {"unknown", "quarantined"}
     return {
         "action": "持有观察" if price_ready else "等待数据，不做主动交易",
@@ -25,6 +35,18 @@ def _contract(state: str = "neutral") -> dict[str, object]:
             "close": 10.5 if price_ready else None,
             "ma20": 10.0 if price_ready else None,
             "support_20d": 9.6 if price_ready else None,
+        },
+        "data_evidence": {
+            "provider": "amazingdata",
+            "schema_version": "daily-ohlcv/v1",
+            "status": provider_status
+            or ("quarantined" if state == "quarantined" else "ok"),
+            "source_time": None,
+            "fetched_at": "2026-08-01T15:05:00+08:00",
+            "trade_date": "2026-08-01",
+            "price_basis": "unadjusted",
+            "gaps": list(gaps),
+            "errors": list(errors),
         },
         "cost_reference": {"authority": "reference_only"},
         "branches": [
@@ -59,6 +81,9 @@ class PortfolioManagementTests(unittest.TestCase):
         holding: Holding,
         *,
         technical_state: str = "neutral",
+        decision_contract: dict[str, object] | None = None,
+        missing_snapshot_fields: list[str] | None = None,
+        source_reports: list[dict[str, object]] | None = None,
     ) -> dict[str, object]:
         data_status = (
             "data_blocked"
@@ -93,7 +118,7 @@ class PortfolioManagementTests(unittest.TestCase):
                             [] if holding.risk_line else ["当前风险规则"]
                         ),
                         "missing_historical_context_fields": ["原始买入逻辑"],
-                        "missing_snapshot_fields": [],
+                        "missing_snapshot_fields": missing_snapshot_fields or [],
                         "decision_ready": True,
                         "base_analysis_ready": True,
                         "risk_reconciliation_status": "ready",
@@ -122,7 +147,7 @@ class PortfolioManagementTests(unittest.TestCase):
                     "upgrade_eligible": True,
                 },
                 "blocked_actions": [],
-                "source_reports": [],
+                "source_reports": source_reports or [],
                 "holding_plans": [
                     {
                         "code": holding.code,
@@ -130,7 +155,8 @@ class PortfolioManagementTests(unittest.TestCase):
                         "action": "持有观察",
                         "position_action": "维持仓位",
                         "priority": "中",
-                        "decision_contract": _contract(technical_state),
+                        "decision_contract": decision_contract
+                        or _contract(technical_state),
                     }
                 ],
             },
@@ -164,6 +190,8 @@ class PortfolioManagementTests(unittest.TestCase):
 
         management = workspace["portfolio_management_plans"][0]
         plan = workspace["active_plans"][0]
+        self.assertEqual(workspace["repair_issues"], [])
+        self.assertEqual(plan["data_status"], "ready")
         self.assertEqual(management["context_status"], "system_proposed")
         self.assertTrue(management["base_analysis_available"])
         self.assertNotIn("当前风险上下文", plan["blocking_reasons"])
@@ -243,6 +271,39 @@ class PortfolioManagementTests(unittest.TestCase):
         self.assertTrue(proposal["base_analysis_available"])
         self.assertIsNone(saved["confirmed_at"])
 
+    def test_saved_manual_context_survives_reload_and_after_close_rebuild(self) -> None:
+        holding = self._holding()
+        workspace = self._workspace(holding)
+        proposal = workspace["portfolio_management_plans"][0]
+        with TemporaryDirectory() as temporary:
+            context_path = Path(temporary) / "portfolio_context.json"
+            apply_portfolio_management_response(
+                workspace,
+                Portfolio(20_000, [holding], Path("portfolio.json"), as_of="2026-08-01"),
+                {
+                    "symbol": holding.code,
+                    "management_plan_version": proposal["management_plan_version"],
+                    "response": "adopt",
+                },
+                context_path=context_path,
+                now=datetime(2026, 8, 1, 21, 31),
+            )
+            reloaded = _with_position_context(
+                Portfolio(
+                    20_000,
+                    [holding],
+                    Path("portfolio.json"),
+                    as_of="2026-08-01",
+                ),
+                context_path,
+            )
+
+        rebuilt = self._workspace(reloaded.holdings[0])
+        rebuilt_management = rebuilt["portfolio_management_plans"][0]
+        self.assertEqual(rebuilt_management["context_status"], "user_confirmed")
+        self.assertFalse(rebuilt_management["requires_confirmation"])
+        self.assertTrue(rebuilt_management["current_risk_line"])
+
     def test_user_confirmation_cannot_bypass_quarantined_price_data(self) -> None:
         holding = self._holding(code="900002.SH", name="合成芯片ETF")
         workspace = self._workspace(holding, technical_state="quarantined")
@@ -310,6 +371,258 @@ class PortfolioManagementTests(unittest.TestCase):
         self.assertNotIn("current_risk_line", html)
         self.assertNotIn("review_status", html)
         self.assertNotIn("stale_context", html)
+
+    def test_quarantined_issue_has_structured_repair_contract_and_provider_lineage(self) -> None:
+        contract = _contract(
+            "quarantined",
+            gaps=("900002.SH:price_discontinuity:0.618819",),
+        )
+        workspace = self._workspace(
+            self._holding(code="900002.SH", name="合成芯片ETF"),
+            technical_state="quarantined",
+            decision_contract=contract,
+        )
+
+        issue = workspace["repair_issues"][0]
+        self.assertEqual(issue["entity"]["symbol"], "900002.SH")
+        self.assertEqual(issue["field"], "daily_kline.price_basis")
+        self.assertEqual(issue["status"], "quarantined")
+        self.assertEqual(issue["reason_code"], "PRICE_BASIS_QUARANTINED")
+        self.assertEqual(issue["source"], "amazingdata")
+        self.assertIsNone(issue["source_time"])
+        self.assertEqual(issue["fetched_at"], "2026-08-01T15:05:00+08:00")
+        self.assertEqual(issue["price_basis"], "unadjusted")
+        self.assertFalse(issue["manual_repair_allowed"])
+        self.assertEqual(issue["repair_method"], "retry_after_close")
+        self.assertIn("不能使用 0", issue["criticality_reason"])
+        self.assertIn("重新生成", issue["next_action"])
+
+    def test_provider_mapping_fault_is_auto_retried_not_manually_overridden(self) -> None:
+        contract = _contract(
+            "unknown",
+            provider_status="invalid",
+            errors=("900003.SH:code_mismatch",),
+        )
+        workspace = self._workspace(
+            self._holding(code="900003.SH", name="合成映射异常"),
+            technical_state="unknown",
+            decision_contract=contract,
+        )
+
+        issue = workspace["repair_issues"][0]
+        self.assertEqual(issue["field"], "security.mapping")
+        self.assertEqual(issue["reason_code"], "SECURITY_MAPPING_INVALID")
+        self.assertFalse(issue["manual_repair_allowed"])
+        self.assertEqual(issue["repair_method"], "retry_after_close")
+        self.assertIn("腾讯前复权全序列", issue["repair_label"])
+
+        coordinator = Mock()
+        coordinator.start.return_value = {"run_id": "mapping-run", "status": "pending"}
+        with TemporaryDirectory() as temporary:
+            repair_state_path = Path(temporary) / "daily-repair.json"
+            start_repair_recheck(
+                workspace,
+                {
+                    "issue_id": issue["issue_id"],
+                    "workspace_generated_at": workspace["generated_at"],
+                },
+                coordinator,
+                repair_state_path=repair_state_path,
+            )
+            repair_state = json.loads(repair_state_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            repair_state["repairs"]["900003.SH"]["reason_code"],
+            "SECURITY_MAPPING_INVALID",
+        )
+
+        repaired = self._workspace(
+            self._holding(code="900003.SH", name="合成映射异常"),
+            technical_state="neutral",
+            decision_contract=_contract("neutral"),
+        )
+        self.assertEqual(repaired["repair_issues"], [])
+        self.assertEqual(repaired["active_plans"][0]["data_status"], "ready")
+
+    def test_stale_source_issue_is_structured_and_links_blocked_plan(self) -> None:
+        workspace = self._workspace(
+            self._holding(),
+            source_reports=[
+                {
+                    "workflow": "market_pulse",
+                    "status": "stale",
+                    "source_time": "2026-07-30",
+                    "path": "reports/market-pulse.json",
+                }
+            ],
+        )
+
+        issue = next(
+            item
+            for item in workspace["repair_issues"]
+            if item["field"] == "source.market_pulse"
+        )
+        plan = workspace["active_plans"][0]
+        self.assertEqual(issue["status"], "stale")
+        self.assertEqual(issue["reason_code"], "SOURCE_STALE")
+        self.assertFalse(issue["manual_repair_allowed"])
+        self.assertEqual(issue["repair_method"], "refresh_sources")
+        self.assertIn(issue["issue_id"], plan["repair_issue_ids"])
+        self.assertEqual(workspace["market_gate"]["status"], "blocked")
+
+    def test_missing_core_snapshot_field_routes_to_approved_import_without_zero_fill(self) -> None:
+        workspace = self._workspace(
+            self._holding(market_price=None),
+            missing_snapshot_fields=["券商市价"],
+        )
+
+        issue = next(
+            item
+            for item in workspace["repair_issues"]
+            if item["field"] == "portfolio.market_price"
+        )
+        self.assertIsNone(issue["current_value"])
+        self.assertEqual(issue["status"], "missing")
+        self.assertTrue(issue["manual_repair_allowed"])
+        self.assertEqual(issue["repair_method"], "portfolio_import")
+        self.assertIn("券商持仓", issue["input_format"])
+
+    def test_ui_exposes_issue_detail_direct_action_and_explicit_recheck(self) -> None:
+        workspace = self._workspace(
+            self._holding(code="900002.SH", name="合成芯片ETF"),
+            technical_state="quarantined",
+            decision_contract=_contract(
+                "quarantined",
+                gaps=("900002.SH:price_discontinuity:0.618819",),
+            ),
+        )
+        html = render_after_close_workbench(
+            {"decision_workspace": workspace},
+            "# synthetic",
+        )
+
+        self.assertIn("核心数据缺口", html)
+        self.assertIn("daily_kline.price_basis", html)
+        self.assertIn("为什么阻断", html)
+        self.assertIn("当前系统知道什么", html)
+        self.assertIn("data-repair-action", html)
+        self.assertIn("重新检查并生成", html)
+        self.assertIn('post("/api/repair-recheck"', html)
+        self.assertIn("问题仍保持 blocked", html)
+        self.assertIn("pollRefresh(job.run_id, container)", html)
+        self.assertIn("重新检查未完成", html)
+
+    def test_recheck_validates_current_issue_and_starts_only_after_close(self) -> None:
+        workspace = self._workspace(
+            self._holding(code="900002.SH", name="合成芯片ETF"),
+            technical_state="quarantined",
+            decision_contract=_contract(
+                "quarantined",
+                gaps=("900002.SH:price_discontinuity:0.618819",),
+            ),
+        )
+        issue = workspace["repair_issues"][0]
+        coordinator = Mock()
+        coordinator.start.return_value = {"run_id": "repair-run", "status": "pending"}
+        with TemporaryDirectory() as temporary:
+            repair_state_path = Path(temporary) / "daily-repair.json"
+            job = start_repair_recheck(
+                workspace,
+                {
+                    "issue_id": issue["issue_id"],
+                    "workspace_generated_at": workspace["generated_at"],
+                    "request_id": "repair-request",
+                },
+                coordinator,
+                repair_state_path=repair_state_path,
+            )
+            repair_state = json.loads(repair_state_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(job["run_id"], "repair-run")
+        self.assertEqual(
+            repair_state["repairs"]["900002.SH"]["strategy"],
+            "tencent_forward_adjusted_whole_series",
+        )
+        coordinator.start.assert_called_once_with(
+            mode="after_close",
+            data_health=(),
+            idempotency_key="repair-request",
+        )
+        with self.assertRaisesRegex(ValueError, "版本已过期"):
+            start_repair_recheck(
+                workspace,
+                {
+                    "issue_id": issue["issue_id"],
+                    "workspace_generated_at": "stale-version",
+                },
+                coordinator,
+            )
+
+    def test_source_recheck_targets_only_selected_stale_source(self) -> None:
+        workspace = self._workspace(
+            self._holding(),
+            source_reports=[
+                {
+                    "workflow": "market_pulse",
+                    "status": "stale",
+                    "source_time": "2026-07-30",
+                },
+                {
+                    "workflow": "market_levels",
+                    "status": "missing",
+                    "source_time": None,
+                },
+            ],
+        )
+        issue = next(
+            item
+            for item in workspace["repair_issues"]
+            if item["field"] == "source.market_pulse"
+        )
+        matching_health = next(
+            item
+            for item in workspace["data_health"]
+            if item["source_name"] == "market_pulse"
+        )
+        coordinator = Mock()
+        coordinator.start.return_value = {"run_id": "source-run", "status": "pending"}
+
+        start_repair_recheck(
+            workspace,
+            {
+                "issue_id": issue["issue_id"],
+                "workspace_generated_at": workspace["generated_at"],
+            },
+            coordinator,
+        )
+
+        coordinator.start.assert_called_once_with(
+            mode="stale",
+            data_health=(matching_health,),
+            idempotency_key=(
+                f"repair-recheck:{issue['issue_id']}:{workspace['generated_at']}"
+            ),
+        )
+
+    def test_recheck_failure_is_not_swallowed_and_issue_remains_blocked(self) -> None:
+        workspace = self._workspace(
+            self._holding(code="900002.SH", name="合成芯片ETF"),
+            technical_state="quarantined",
+        )
+        issue = workspace["repair_issues"][0]
+        coordinator = Mock()
+        coordinator.start.side_effect = RuntimeError("after-close failed")
+
+        with self.assertRaisesRegex(RuntimeError, "after-close failed"):
+            start_repair_recheck(
+                workspace,
+                {
+                    "issue_id": issue["issue_id"],
+                    "workspace_generated_at": workspace["generated_at"],
+                },
+                coordinator,
+            )
+
+        self.assertEqual(workspace["repair_issues"][0]["status"], "quarantined")
 
 
 if __name__ == "__main__":

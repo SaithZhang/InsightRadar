@@ -18,6 +18,7 @@ from stock_assist.portfolio import (
 )
 from stock_assist.workflows.after_close import (
     _broker_snapshot_lines,
+    _build_core_reliability,
     _current_decision_context_complete,
     _historical_context_complete,
     _signal_for_holding,
@@ -178,6 +179,54 @@ class AfterCloseReliabilityTests(unittest.TestCase):
 
         self.assertTrue(_current_decision_context_complete(holding))
         self.assertFalse(_historical_context_complete(holding))
+
+    def test_provider_trade_date_drives_readiness_when_outcome_ledger_has_no_matured_date(self) -> None:
+        portfolio = Portfolio(
+            cash=400000,
+            holdings=[
+                Holding(
+                    code="600001.SH",
+                    name="合成标的甲",
+                    shares=100,
+                    cost=9.0,
+                    market_price=9.5,
+                    pnl_pct=5.5,
+                    market_value=950,
+                    weight_pct=19,
+                )
+            ],
+            source=Path("fixture-portfolio.json"),
+            as_of="2026-07-31",
+            risk_reconciliation_status="reconciled",
+        )
+        action = {
+            "name": "合成标的甲（600001.SH）",
+            "action": "持有观察",
+            "reason": "合成原因",
+            "position_action": "维持仓位",
+            "upside_trigger": "站上结构位",
+            "downside_trigger": "跌破结构位",
+            "flat_trigger": "继续等待",
+            "decision_contract": {
+                "technical": {"state": "neutral"},
+                "data_evidence": {"trade_date": "2026-07-31"},
+            },
+        }
+
+        reliability = _build_core_reliability(
+            portfolio,
+            [action],
+            {"as_of_trade_date": None},
+            [],
+            [],
+        )
+
+        self.assertEqual(reliability["decision_ready_holdings"], 1)
+        self.assertEqual(reliability["market_as_of_trade_date"], "2026-07-31")
+        self.assertEqual(
+            reliability["holdings"][0]["market_as_of_trade_date"],
+            "2026-07-31",
+        )
 
     @patch("stock_assist.workflows.after_close.load_outcome_snapshot", side_effect=_outcome_snapshot)
     def test_missing_user_context_does_not_block_base_after_close_analysis(self, _mock) -> None:

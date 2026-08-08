@@ -82,6 +82,7 @@ def _document(workspace: Mapping[str, object]) -> str:
   </nav>
   {_evidence_drawer(workspace)}
   {_data_drawer(workspace)}
+  {_repair_drawer(workspace)}
   {_management_drawer(workspace)}
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script type="application/json" id="workspace-data">{safe_json}</script>
@@ -1064,9 +1065,7 @@ def _portfolio(workspace: Mapping[str, object]) -> str:
         for item in management_plans
         if item.get("context_status") in {"system_proposed", "stale"}
     ]
-    data_anomalies = [
-        item for item in management_plans if item.get("data_status") == "data_blocked"
-    ]
+    repair_issues = _dict_rows(workspace.get("repair_issues"))
     changes = _today_plans(workspace)
     known_exposure = summary.get("known_exposure_pct")
     unknown_weight = sum(item.get("weight_pct") is None for item in positions)
@@ -1112,14 +1111,14 @@ def _portfolio(workspace: Mapping[str, object]) -> str:
         for item in pending_management
     ) or '<div class="management-empty">当前持仓管理方案均已处理；基础风险分析始终独立运行。</div>'
     anomaly_cards = "".join(
-        f'<article class="data-anomaly-card"><div><small>{escape(str(item.get("name") or item.get("symbol") or "持仓"))}</small>'
-        f'<strong>系统行情数据异常，用户无需填写</strong>'
-        f'<p>{escape(str(item.get("data_issue_reason") or "行情未通过数据质量校验。"))}</p>'
-        f'<p><b>已暂停：</b>{escape("、".join(_string_rows(item.get("blocked_capabilities"))) or "技术价格判断")}</p>'
-        f'<p><b>仍可用：</b>{escape("、".join(_string_rows(item.get("available_capabilities"))) or "可信的账户与组合分析")}</p></div>'
-        f'<span class="status blocked">系统修复中</span></article>'
-        for item in data_anomalies
-    ) or '<div class="management-empty">当前没有持仓级行情隔离。</div>'
+        f'<article class="data-anomaly-card"><div><small>{escape(str(_mapping(item.get("entity")).get("name") or _mapping(item.get("entity")).get("symbol") or "核心数据链路"))}</small>'
+        f'<strong>{escape(str(item.get("field_label") or item.get("field") or "核心字段"))} · {escape(str(item.get("status") or "blocked"))}</strong>'
+        f'<p>{escape(str(item.get("reason") or "该字段未通过数据质量校验。"))}</p>'
+        f'<p><b>字段：</b>{escape(str(item.get("field") or "unknown"))} · '
+        f'<b>来源：</b>{escape(str(item.get("source") or "unknown"))}</p></div>'
+        f'<button class="btn small danger" type="button" data-open-repair="{escape(str(item.get("issue_id") or ""))}">需要处理 →</button></article>'
+        for item in repair_issues
+    ) or '<div class="management-empty">当前没有核心数据缺口或持仓级行情隔离。</div>'
     return f"""
 <section class="view" id="route-portfolio" data-route-panel="portfolio">
   {_intraday_portfolio_panel(workspace)}
@@ -1155,7 +1154,7 @@ def _portfolio(workspace: Mapping[str, object]) -> str:
     <div class="management-grid">{pending_cards}</div>
   </section>
   <section class="panel section management-section data-anomaly-section">
-    <div class="section-head"><div><div class="eyebrow">B · 数据质量</div><h2>行情数据异常</h2><p>这是系统数据问题；确认持仓方案不会解除暂停，只有数据源真正修复后才恢复技术判断。</p></div><span class="status {'blocked' if data_anomalies else 'ready'}">{len(data_anomalies)} 项隔离</span></div>
+    <div class="section-head"><div><div class="eyebrow">B · 数据质量</div><h2>核心数据缺口</h2><p>包括行情数据异常、证券映射、账户核心字段与风险对账；系统数据问题用户无需填写，确认持仓方案不会解除数据隔离。</p></div><span class="status {'blocked' if repair_issues else 'ready'}">{len(repair_issues)} 项待处理</span></div>
     <div class="management-grid">{anomaly_cards}</div>
   </section>
   <section class="panel section holdings-section">
@@ -1441,6 +1440,77 @@ def _data_drawer(workspace: Mapping[str, object]) -> str:
     </div>"""
 
 
+def _repair_drawer(workspace: Mapping[str, object]) -> str:
+    issues = _dict_rows(workspace.get("repair_issues"))
+    generated_at = str(workspace.get("generated_at") or "")
+    panels: list[str] = []
+    for item in issues:
+        issue_id = str(item.get("issue_id") or "")
+        entity = _mapping(item.get("entity"))
+        known_context = _mapping(item.get("known_context"))
+        known_rows = "".join(
+            f'<div><small>{escape(str(key))}</small><strong>{escape(_contract_value(value))}</strong></div>'
+            for key, value in known_context.items()
+        ) or '<div><small>已知上下文</small><strong>unknown</strong></div>'
+        method = str(item.get("repair_method") or "")
+        if method in {"retry_after_close", "refresh_sources"}:
+            repair_action = (
+                f'<button class="btn primary" type="button" data-repair-action '
+                f'data-repair-issue="{escape(issue_id)}">重新检查并生成</button>'
+            )
+            save_action = "无需人工保存；系统重抓、校验并生成新计划版本。"
+        elif method == "portfolio_import":
+            repair_action = '<a class="btn primary" href="/portfolio-import">打开持仓导入</a>'
+            save_action = "在持仓导入页预览差异并明确批准保存；保存后自动串行刷新。"
+        else:
+            repair_action = '<span class="status blocked">当前没有自动修复入口</span>'
+            save_action = "保持 blocked，等待受支持的修复方式。"
+        panels.append(
+            f'<article class="repair-panel" data-repair-panel="{escape(issue_id)}" '
+            f'data-workspace-generated-at="{escape(generated_at)}" hidden>'
+            '<div class="repair-title"><div>'
+            f'<small>{escape(str(entity.get("symbol") or entity.get("type") or "system"))} · '
+            f'{escape(str(item.get("reason_code") or "BLOCKED"))}</small>'
+            f'<h3>{escape(str(entity.get("name") or "核心数据链路"))} · '
+            f'{escape(str(item.get("field_label") or item.get("field") or "核心字段"))}</h3></div>'
+            f'<span class="status blocked">{escape(str(item.get("status") or "blocked"))}</span></div>'
+            '<section class="repair-section"><h4>问题</h4>'
+            f'<p>{escape(str(item.get("reason") or "该字段不可用。"))}</p>'
+            f'<p><b>字段名称：</b>{escape(str(item.get("field") or "unknown"))} · '
+            f'<b>当前值：</b>{escape(_contract_value(item.get("current_value")))}</p></section>'
+            '<section class="repair-section danger"><h4>为什么阻断</h4>'
+            f'<p>{escape(str(item.get("criticality_reason") or "核心字段不可使用默认值替代。"))}</p></section>'
+            '<section class="repair-section"><h4>当前系统知道什么</h4>'
+            '<div class="repair-known-grid">'
+            f'<div><small>数据来源</small><strong>{escape(str(item.get("source") or "unknown"))}</strong></div>'
+            f'<div><small>price_basis</small><strong>{escape(str(item.get("price_basis") or "unknown"))}</strong></div>'
+            f'<div><small>source_time</small><strong>{escape(str(item.get("source_time") or "unknown"))}</strong></div>'
+            f'<div><small>fetched_at</small><strong>{escape(str(item.get("fetched_at") or "unknown"))}</strong></div>'
+            f'{known_rows}</div></section>'
+            '<section class="repair-section"><h4>用户需要做什么</h4>'
+            f'<p><b>修复方式：</b>{escape(str(item.get("repair_label") or "保持 blocked"))}</p>'
+            f'<p><b>允许人工覆盖：</b>{"是，仅通过受控 UI" if item.get("manual_repair_allowed") is True else "否，不能用人工值覆盖 provider 状态"}</p>'
+            f'<p><b>推荐/允许输入格式：</b>{escape(str(item.get("input_format") or "不适用；由系统自动获取"))}</p>'
+            f'<p><b>保存动作：</b>{escape(save_action)}</p>'
+            f'<p><b>修复后下一步：</b>{escape(str(item.get("next_action") or "重新生成 after-close"))}</p>'
+            f'<div class="repair-actions">{repair_action}'
+            '<p class="repair-feedback" data-repair-feedback></p></div></section>'
+            '</article>'
+        )
+    body = "".join(panels) or _empty(
+        "没有待修复问题",
+        "当前工作台没有结构化 repair issue。",
+    )
+    return f"""<div class="drawer-backdrop" id="repair-backdrop" hidden>
+      <aside class="drawer evidence-drawer" id="repair-drawer" role="dialog" aria-modal="true" aria-labelledby="repair-drawer-title" tabindex="-1">
+        <div class="drawer-head"><div><div class="eyebrow">Blocked / Repair / Retry</div><h2 id="repair-drawer-title">核心数据修复</h2></div>
+        <button class="btn small" id="repair-close" type="button" aria-label="关闭核心数据修复">关闭</button></div>
+        <div class="prototype-note">每个问题都绑定字段、来源、时间、修复权限和 retry；unknown 不会被改成 0。</div>
+        <div class="repair-drawer-body">{body}</div>
+      </aside>
+    </div>"""
+
+
 def _management_drawer(workspace: Mapping[str, object]) -> str:
     plans = _dict_rows(workspace.get("portfolio_management_plans"))
     panels: list[str] = []
@@ -1596,6 +1666,16 @@ def _value(value: object, *, suffix: str = "") -> str:
     if isinstance(value, float):
         return f"{value:.2f}{suffix}"
     return f"{value}{suffix}"
+
+
+def _contract_value(value: object) -> str:
+    if value is None or value == "":
+        return "unknown"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (list, tuple, dict)):
+        return json.dumps(value, ensure_ascii=False, default=str)
+    return str(value)
 
 
 def _money(value: object) -> str:
@@ -1941,6 +2021,21 @@ function closeManagementDrawer() {
   document.body.classList.remove("drawer-open");
   if (lastFocus) lastFocus.focus();
 }
+function openRepairDrawer(issueId) {
+  lastFocus = document.activeElement;
+  const backdrop = document.getElementById("repair-backdrop");
+  document.querySelectorAll("[data-repair-panel]").forEach(panel => {
+    panel.hidden = panel.dataset.repairPanel !== issueId;
+  });
+  backdrop.hidden = false;
+  document.body.classList.add("drawer-open");
+  document.getElementById("repair-drawer").focus();
+}
+function closeRepairDrawer() {
+  document.getElementById("repair-backdrop").hidden = true;
+  document.body.classList.remove("drawer-open");
+  if (lastFocus) lastFocus.focus();
+}
 document.getElementById("data-status-open").addEventListener("click", openDataDrawer);
 document.querySelectorAll("[data-open-data]").forEach(button => button.addEventListener("click", openDataDrawer));
 document.getElementById("data-status-close").addEventListener("click", closeDataDrawer);
@@ -1951,9 +2046,13 @@ document.getElementById("evidence-backdrop").addEventListener("click", event => 
 document.querySelectorAll("[data-open-management]").forEach(button => button.addEventListener("click", () => openManagementDrawer(button.dataset.openManagement)));
 document.getElementById("management-close").addEventListener("click", closeManagementDrawer);
 document.getElementById("management-backdrop").addEventListener("click", event => { if (event.target.id === "management-backdrop") closeManagementDrawer(); });
+document.querySelectorAll("[data-open-repair]").forEach(button => button.addEventListener("click", () => openRepairDrawer(button.dataset.openRepair)));
+document.getElementById("repair-close").addEventListener("click", closeRepairDrawer);
+document.getElementById("repair-backdrop").addEventListener("click", event => { if (event.target.id === "repair-backdrop") closeRepairDrawer(); });
 document.addEventListener("keydown", event => {
   if (event.key !== "Escape") return;
-  if (!document.getElementById("management-backdrop").hidden) closeManagementDrawer();
+  if (!document.getElementById("repair-backdrop").hidden) closeRepairDrawer();
+  else if (!document.getElementById("management-backdrop").hidden) closeManagementDrawer();
   else if (!document.getElementById("evidence-backdrop").hidden) closeEvidenceDrawer();
   else if (!document.getElementById("data-backdrop").hidden) closeDataDrawer();
 });
@@ -1970,6 +2069,29 @@ async function getJson(path) {
   if (!response.ok) throw new Error(result.error || "读取本地状态失败");
   return result;
 }
+async function recheckRepair(container) {
+  const button = container.querySelector("[data-repair-action]");
+  const feedback = container.querySelector("[data-repair-feedback]");
+  if (button) button.disabled = true;
+  if (feedback) feedback.textContent = "正在重新抓取、校验并生成 after-close…";
+  try {
+    const job = await post("/api/repair-recheck", {
+      issue_id:button.dataset.repairIssue,
+      workspace_generated_at:container.dataset.workspaceGeneratedAt,
+      request_id:refreshRequestId(),
+    });
+    if (feedback) feedback.textContent = "重新检查已启动；通过后页面会载入新计划，失败则保留 blocked。";
+    showToast("重新检查已启动。", "success");
+    pollRefresh(job.run_id, container);
+  } catch (error) {
+    if (feedback) feedback.textContent = `重新检查失败：${error.message}。问题仍保持 blocked。`;
+    showToast(`重新检查失败：${error.message}`, "error");
+    if (button) button.disabled = false;
+  }
+}
+document.querySelectorAll("[data-repair-action]").forEach(button => button.addEventListener("click", () => {
+  recheckRepair(button.closest("[data-repair-panel]"));
+}));
 async function saveManagement(container, response, form=null) {
   const feedback = container.querySelector("[data-management-feedback]");
   const body = {
@@ -2037,7 +2159,7 @@ if (document.getElementById("intradayProgress")) {
 function refreshRequestId() {
   return globalThis.crypto?.randomUUID?.() || `refresh-${Date.now()}-${Math.random()}`;
 }
-async function pollRefresh(runId) {
+async function pollRefresh(runId, repairContainer=null) {
   try {
     const job = await getJson(`/api/refresh/${runId}`);
     const done = Number(job.completed_steps || 0);
@@ -2053,6 +2175,10 @@ async function pollRefresh(runId) {
       window.setTimeout(() => location.reload(), 500);
     } else if (job.status === "failed" || job.status === "interrupted") {
       showToast(`刷新未完成：${job.failed_step || job.current_step || "服务中断"}。上一版报告仍保留。`, "error");
+      const repairButton = repairContainer?.querySelector("[data-repair-action]");
+      const repairFeedback = repairContainer?.querySelector("[data-repair-feedback]");
+      if (repairButton) repairButton.disabled = false;
+      if (repairFeedback) repairFeedback.textContent = `重新检查未完成：${job.failed_step || job.current_step || "服务中断"}${failureDetail ? ` · ${failureDetail}` : ""}。问题仍保持 blocked。`;
       document.getElementById("refresh-data").disabled = false;
       document.getElementById("refresh-all-data").disabled = false;
     } else {
@@ -2060,6 +2186,10 @@ async function pollRefresh(runId) {
     }
   } catch (error) {
     showToast(`读取刷新进度失败：${error.message}`, "error");
+    const repairButton = repairContainer?.querySelector("[data-repair-action]");
+    const repairFeedback = repairContainer?.querySelector("[data-repair-feedback]");
+    if (repairButton) repairButton.disabled = false;
+    if (repairFeedback) repairFeedback.textContent = `读取重新检查进度失败：${error.message}。问题仍保持 blocked。`;
     document.getElementById("refresh-data").disabled = false;
     document.getElementById("refresh-all-data").disabled = false;
   }
@@ -2303,11 +2433,12 @@ def _css() -> str:
 .form-grid{display:grid;grid-template-columns:minmax(220px,1fr) repeat(3,minmax(150px,.45fr)) auto;gap:8px}.input,.select{min-height:39px;padding:8px 11px;border:1px solid var(--line2);border-radius:10px;color:var(--text);background:rgba(4,13,22,.68)}.lookup-result{display:grid;grid-template-columns:minmax(0,1.18fr) minmax(350px,.72fr);gap:14px;margin-top:14px}.chart-empty{min-height:245px;display:grid;place-content:center;gap:8px;padding:28px;text-align:center;border:1px dashed var(--line2);border-radius:13px;color:var(--muted);background:rgba(4,13,22,.45)}.chart-empty strong{color:var(--text);font-size:16px}.research-metrics{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:12px}.objective-banner{padding:11px 12px;border-left:3px solid var(--blue);color:var(--muted);background:rgba(112,172,228,.065)}.analysis-title{margin:4px 0 11px}.evidence-list{display:grid;gap:8px;margin-top:12px}.evidence-item{padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.018)}.evidence-item strong{display:flex;justify-content:space-between;gap:10px}.evidence-item p{margin:5px 0 0;color:var(--muted);font-size:10px}.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.tab{min-height:31px;padding:6px 10px;border:1px solid var(--line);border-radius:9px;color:var(--muted);background:transparent}.tab.active{color:var(--text);border-color:rgba(112,172,228,.45);background:rgba(112,172,228,.08)}.tab-panel{display:none;margin-top:10px}.tab-panel.active{display:block}.source-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:12px}.source-card{padding:11px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.018)}.source-card small{display:block;color:var(--muted)}.source-card strong{display:block;margin:4px 0}.source-card em{font-size:10px;font-style:normal;color:var(--muted)}
 .review-top{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}.score-card{padding:16px;border:1px solid var(--line);border-radius:14px;background:rgba(12,27,41,.82)}.score-card small{display:block;color:var(--muted)}.score-card strong{display:block;margin-top:5px;font-size:22px}.score-card .date-score{font-size:15px}.ledger{overflow:auto;border:1px solid var(--line);border-radius:13px}.maturity{display:grid;grid-template-columns:repeat(10,1fr);gap:5px;margin:12px 0}.maturity i{height:8px;border-radius:999px;background:rgba(255,255,255,.08)}.maturity i.done{background:var(--blue)}.maturity i.current{background:var(--amber)}
 .management-section{margin-top:14px}.management-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.management-card,.data-anomaly-card{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:14px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02)}.management-card.warn{border-color:rgba(229,169,92,.38)}.management-card small,.data-anomaly-card small{display:block;color:var(--muted)}.management-card strong,.data-anomaly-card strong{display:block;margin:4px 0}.management-card p,.data-anomaly-card p{margin:5px 0 0;color:var(--muted);font-size:11px}.management-empty{grid-column:1/-1;padding:18px;border:1px dashed var(--line2);border-radius:12px;color:var(--muted)}.data-anomaly-section{border-color:rgba(223,116,110,.2)}.management-drawer-body{margin-top:18px}.management-title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.management-title small{color:var(--muted)}.management-title h3{margin:5px 0 0;font-size:19px}.management-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:14px}.management-detail-grid>div{padding:12px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.02)}.management-detail-grid small{display:block;color:var(--muted)}.management-detail-grid strong,.management-detail-grid p{display:block;margin:5px 0 0}.management-detail-grid p{color:var(--muted);font-size:11px}.management-basis,.management-data-warning{margin-top:12px;padding:12px 14px;border:1px solid var(--line);border-radius:11px}.management-basis ul{margin:8px 0 0;padding-left:18px;color:var(--muted)}.management-data-warning{border-color:rgba(223,116,110,.42);background:rgba(223,116,110,.06)}.management-data-warning p{margin:6px 0 0;color:var(--muted)}.management-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}.management-actions>.management-feedback{flex-basis:100%;margin:0;color:var(--muted)}.management-adjust-form{flex-basis:100%;display:grid;gap:9px;margin-top:5px;padding:14px;border:1px solid var(--line2);border-radius:12px;background:rgba(4,13,22,.5)}.management-adjust-form[hidden]{display:none}.management-adjust-form fieldset{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0;padding:12px;border:1px solid var(--line);border-radius:10px}.management-adjust-form legend{padding:0 6px;color:var(--muted)}.management-adjust-form label{display:grid;gap:5px;color:var(--muted);font-size:11px}.management-adjust-form fieldset label{display:flex;align-items:center;gap:7px}.management-adjust-form textarea{min-height:68px;resize:vertical;padding:9px;border:1px solid var(--line2);border-radius:9px;color:var(--text);background:rgba(4,13,22,.68)}.disabled-option{opacity:.45}.drawer-backdrop{position:fixed;inset:0;display:flex;justify-content:flex-end;background:rgba(0,0,0,.58);backdrop-filter:blur(3px);z-index:100}.drawer-backdrop[hidden]{display:none}.drawer{width:min(560px,94vw);height:100%;overflow:auto;padding:24px;border-left:1px solid var(--line2);background:#091724;box-shadow:-20px 0 55px rgba(0,0,0,.35);outline:0}.evidence-drawer{width:min(720px,96vw)}.drawer-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start}.drawer h2{margin:5px 0 0}.timeline,.evidence-chain{display:grid;gap:10px;margin-top:18px}.timeline-item{position:relative;padding:13px 14px 13px 18px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02)}.timeline-item:before{content:"";position:absolute;left:8px;top:18px;width:5px;height:5px;border-radius:50%;background:var(--blue)}.timeline-item small{display:block;color:var(--muted)}.timeline-item strong{display:block;margin-top:4px}.timeline-item p{margin:7px 0 0;color:var(--muted);font-size:10px}.evidence-chain-item{padding:15px 16px;border:1px solid var(--line);border-radius:9px;background:#0a1a28}.evidence-chain-item header{display:flex;justify-content:space-between;gap:12px;color:var(--blue);font-size:10px;text-transform:uppercase}.evidence-chain-item header em{font-style:normal}.evidence-chain-item h3{margin:9px 0;font-size:15px}.evidence-chain-item p{margin:6px 0;color:var(--muted);font-size:11px}.evidence-chain-item p b{color:var(--text)}.evidence-chain-item footer{margin-top:10px;padding-top:9px;border-top:1px solid var(--line);color:#7f93a4;font-size:10px}.toast{position:fixed;right:22px;bottom:22px;z-index:120;transform:translateY(18px);opacity:0;padding:10px 13px;border:1px solid var(--line2);border-radius:11px;background:#102536;box-shadow:var(--shadow);transition:.18s;pointer-events:none}.toast.visible{transform:translateY(0);opacity:1}.toast.success{border-color:rgba(121,184,174,.45)}.toast.error{border-color:rgba(223,116,110,.45)}.mobile-nav{display:none}.prototype-note{margin-top:12px;padding:11px 13px;border:1px dashed rgba(137,169,198,.25);border-radius:12px;color:var(--muted);font-size:10px}.empty-state{min-height:220px;display:grid;place-content:center;padding:22px;text-align:center;border:1px dashed var(--line2);border-radius:var(--radius);color:var(--muted);background:rgba(12,27,41,.6)}.empty-state h2{margin-bottom:6px;color:var(--text)}
+.repair-drawer-body{margin-top:18px}.repair-title{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.repair-title small{color:var(--muted)}.repair-title h3{margin:5px 0 0;font-size:20px}.repair-section{margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.02)}.repair-section.danger{border-color:rgba(223,116,110,.42);background:rgba(223,116,110,.06)}.repair-section h4{margin:0 0 7px;color:var(--blue2)}.repair-section p{margin:6px 0;color:var(--muted);font-size:11px}.repair-section p b{color:var(--text)}.repair-known-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.repair-known-grid>div{min-width:0;padding:10px;border:1px solid var(--line);border-radius:9px;background:#081725}.repair-known-grid small,.repair-known-grid strong{display:block}.repair-known-grid small{color:var(--muted)}.repair-known-grid strong{margin-top:4px;overflow-wrap:anywhere;font-size:11px}.repair-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}.repair-feedback{flex-basis:100%;margin:0!important;color:var(--muted)}
 @media(max-width:1120px){.today-workbench-grid,.today-layout,.portfolio-layout,.lookup-result,.decision-support,.review-evidence-grid,.decision-conclusion{grid-template-columns:1fr}.today-workbench-grid{gap:14px}.conclusion-invalid{grid-column:1}.side-stack{grid-template-columns:repeat(3,minmax(0,1fr))}.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.form-grid .btn{grid-column:1/-1}.review-top{grid-template-columns:repeat(3,minmax(0,1fr))}.authority-chain-new{grid-template-columns:repeat(2,minmax(0,1fr))}.authority-step:nth-child(3){border-left:0;border-top:1px solid var(--line)}.authority-step:nth-child(4){border-top:1px solid var(--line)}.review-value-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.review-value-summary>div:nth-child(3),.review-value-summary>div:nth-child(5){border-top:1px solid var(--line)}.review-value-summary>div:nth-child(3),.review-value-summary>div:nth-child(5){border-left:0}.review-data-state{grid-column:1/-1}.review-chart-blocked{grid-template-columns:1fr;min-height:420px}.review-attribution-blocked{grid-template-columns:120px minmax(0,1fr)}.review-attribution-blocked>p{grid-column:1/-1;padding-top:10px;border-top:1px solid var(--line)}}
 @media(max-width:820px){.app{display:block}.sidebar{display:none}.content{padding:16px 12px 90px}.topbar{display:block;margin-bottom:14px}.top-actions{margin-top:10px}.runtime-strip,.market-gate{grid-template-columns:repeat(2,minmax(0,1fr))}.runtime-cell:first-child,.market-gate>div:first-child{grid-column:1/-1}.runtime-cell:nth-child(2),.market-gate>div:nth-child(2){border-left:0}.theme-line{grid-template-columns:1fr}.decision-stage-rail{display:flex;overflow-x:auto}.stage-node{flex:0 0 142px}.action-command{min-height:0;padding:23px 18px 19px;display:grid;gap:22px}.action-command-controls{width:100%;display:grid}.authority-chain-new{display:block}.authority-step{width:100%;min-height:75px;border-top:1px solid var(--line);border-left:0}.authority-step:first-child{border-top:0}.holding-impact-strip{padding:16px;display:block}.holding-impact-strip h3{margin-bottom:12px}.holding-impact-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.holding-impact{padding:0;border-left:0}.evidence-command-panel,.risk-exit-panel{padding:18px 16px}.rules,.provenance,.source-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.rule-item:nth-child(3),.prov:nth-child(3){border-left:0}.queue-item{grid-template-columns:34px 1fr}.queue-item>:nth-child(3),.queue-actions,.queue-detail{grid-column:2}.queue-actions{justify-content:flex-start}.side-stack{grid-template-columns:1fr}.metrics,.review-top{grid-template-columns:repeat(2,minmax(0,1fr))}.decision-trust-summary{padding:12px 14px;flex-wrap:wrap;gap:7px 14px}.decision-trust-summary .trust-summary-kicker{flex-basis:100%}.decision-trust-summary em{margin-left:0}.review-inline-meta{justify-content:flex-start}.review-inline-meta span:first-child{flex-basis:100%;margin-right:0;padding-left:0}.review-controls{display:grid}.review-periods{margin-left:0;overflow:auto}.review-chart-blocked{padding:28px 20px}.review-attribution-blocked{display:block;overflow:auto}.review-attribution-blocked>div:first-child{padding:0 0 10px;border-right:0;border-bottom:1px solid var(--line)}.attribution-unknowns{min-width:700px;margin-top:12px}.review-attribution-blocked>p{min-width:330px;margin-top:12px}.mobile-nav{position:fixed;right:0;bottom:0;left:0;z-index:80;display:grid;grid-template-columns:repeat(4,1fr);padding:7px 8px calc(7px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:#06111c}.mobile-nav button{display:block;min-height:43px;border:0;border-radius:9px;color:var(--muted);background:transparent;text-align:center}.mobile-nav button.active{color:var(--text);background:#132a3e}.mobile-nav button span{display:inline}.card-footer,.response-box{display:block}.card-actions{margin-top:10px}}
 @media(max-width:520px){.runtime-strip,.market-gate,.rules,.provenance,.source-grid,.metrics,.review-top,.form-grid,.research-metrics,.review-value-summary{display:block}.runtime-cell,.market-gate>div,.rule-item,.prov,.source-card,.metric,.score-card,.review-value-summary>div{border-left:0;border-top:1px solid var(--line);margin-top:7px}.runtime-cell:first-child,.market-gate>div:first-child,.rule-item:first-child,.review-value-summary>div:first-child{border-top:0}.action-command h2{font-size:28px}.holding-impact-list{grid-template-columns:1fr}.evidence-command-panel>header,.risk-exit-panel>header{display:block}.evidence-command-panel>header .btn{margin-top:10px}.evidence-delta{grid-template-columns:56px minmax(0,1fr)}.evidence-delta em{grid-column:2}.risk-facts,.exit-conditions>div,.risk-next{grid-template-columns:1fr}.risk-facts>div{padding:9px 0;border-top:1px solid var(--line);border-left:0}.risk-facts>div:first-child{border-top:0}.review-chart-head{display:grid;padding:10px}.review-chart-blocked{padding:24px 14px}.review-chart-blocked li{display:grid}.review-value-summary>div{margin-top:0}.diff-grid{grid-template-columns:1fr}.diff-arrow{transform:rotate(90deg)}.card-footer,.section-head{display:block}.card-actions,.section-head>.inline{margin-top:10px}.change-title h2{font-size:21px}.content{padding-left:10px;padding-right:10px}.top-actions .chip:first-child{display:none}.btn,.input,.select{min-height:44px}}
 @media(max-width:820px){.today-phase-banner{align-items:flex-start;flex-wrap:wrap}.today-phase-banner em{margin-left:0}.today-column-head{min-height:0}.today-data-details>div{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.today-column-head{padding:15px;display:block}.today-column-head>.source,.today-column-head>.status{margin-top:10px}.today-column-head h2{font-size:20px}.account-pnl{padding:15px}.account-metric-grid{margin:10px 15px;grid-template-columns:1fr}.attention-stack,.decision-stack{padding:8px}.today-rule-actions{grid-template-columns:1fr}.decision-card-title{display:block}.decision-card-title .source{margin-top:6px}.today-data-details>div{grid-template-columns:1fr}}
 @media(max-width:1120px){.management-grid{grid-template-columns:1fr}}
-@media(max-width:620px){.management-detail-grid,.management-adjust-form fieldset{grid-template-columns:1fr}.management-card,.data-anomaly-card{align-items:flex-start;flex-direction:column}}
+@media(max-width:620px){.management-detail-grid,.management-adjust-form fieldset,.repair-known-grid{grid-template-columns:1fr}.management-card,.data-anomaly-card{align-items:flex-start;flex-direction:column}}
 """
