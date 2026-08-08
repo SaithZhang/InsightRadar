@@ -20,6 +20,8 @@ The owner selected a bounded V3.1 repair: the system must generate the first pro
 - User confirmation never changes `data_status` and cannot clear a quarantine.
 - Preserve `current_risk_line` and `review_status` as compatibility fields in the existing private context file. Add source, confirmation time, report binding, plan version, and structured management-rule fields to that same record instead of creating a second fact store.
 - The loopback UI provides adopt, fixed single-choice adjustment, and uncertain actions. It validates and atomically writes private context, then runs only `after-close`. It never creates an order or makes free text mandatory.
+- Every blocked data state exposed to the workbench has a structured `repair_issues` record. The record binds the affected entity and plan to the exact field, reason code, provider/source time, current known value, repair authority, permitted input format, and next action.
+- Provider mapping, price-basis, and source-freshness faults cannot be edited by the user. A version-bound `POST /api/repair-recheck` retries only the corresponding system source (plus the required after-close regeneration). For daily-series price-basis/mapping faults, the system records the explicit request in ignored local state and may select Tencent forward-adjusted data as a whole-series fallback; it never stitches providers, retains the primary fault in provenance, and rejects invalid or stale fallback evidence. Missing broker snapshot fields route to the existing preview/approval importer. Failed retries retain blocked state and the last-good report.
 
 ## Consequences
 
@@ -28,3 +30,4 @@ The owner selected a bounded V3.1 repair: the system must generate the first pro
 - Legacy usable context remains readable as confirmed historical local context, with an unknown confirmation timestamp when none exists. Conflicting legacy context becomes stale and receives a replacement system proposal.
 - AI is not used for the proposal or for missing-history reconstruction. Later AI explanations, if admitted, cannot change these deterministic states.
 - The four-route shell, private-data boundary, human trade authority, and no-automatic-execution rule remain unchanged.
+- Blocked plans are no longer a terminal explanation: each is linked to at least one visible repair issue, but the existence of a repair action does not imply that an external provider can be repaired immediately.

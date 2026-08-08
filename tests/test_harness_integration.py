@@ -96,10 +96,10 @@ class HarnessIntegrationTests(unittest.TestCase):
         self.assertNotIn("execution not started", text)
         self.assertNotIn("`feat-054` is not registered or activated", text)
 
-    def test_macro_shadow_remains_closed_under_intraday_activation(self) -> None:
+    def test_macro_shadow_remains_closed_during_repair_acceptance(self) -> None:
         current_state = (PROJECT_ROOT / "CURRENT_STATE.md").read_text(encoding="utf-8")
         self.assertRegex(current_state, r'"updated_at": "\d{4}-\d{2}-\d{2}"')
-        self.assertIn('"next_feature_id": "feat-059"', current_state)
+        self.assertIn('"next_feature_id": "feat-058"', current_state)
 
         feature_payload = json.loads((PROJECT_ROOT / "feature_list.json").read_text(encoding="utf-8"))
         feature_status = {item["id"]: item["status"] for item in feature_payload["features"]}
@@ -459,9 +459,9 @@ class HarnessIntegrationTests(unittest.TestCase):
                 self.assertNotIn(marker, stderr.getvalue())
                 self.assertFalse(output_dir.exists())
 
-    def test_restart_snapshot_activates_intraday_acceptance(self) -> None:
+    def test_restart_snapshot_activates_repair_acceptance(self) -> None:
         current_state = (PROJECT_ROOT / "CURRENT_STATE.md").read_text(encoding="utf-8")
-        self.assertIn('"next_feature_id": "feat-059"', current_state)
+        self.assertIn('"next_feature_id": "feat-058"', current_state)
 
         feature_payload = json.loads(
             (PROJECT_ROOT / "feature_list.json").read_text(encoding="utf-8")

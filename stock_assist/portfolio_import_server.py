@@ -14,13 +14,17 @@ from collections.abc import Mapping
 from dataclasses import asdict
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from threading import Event, Thread
 
 from stock_assist.after_close_workbench_html import render_after_close_workbench
 from stock_assist.decision_workspace import (
+    DAILY_KLINE_REPAIR_REASON_CODES,
+    DEFAULT_DAILY_KLINE_REPAIR_STATE,
     append_plan_response,
     load_runtime_state,
     overlay_plan_responses,
+    record_daily_kline_repair,
     restage_workspace,
     write_runtime_state,
 )
@@ -193,6 +197,18 @@ def serve_portfolio_import(
                         },
                         status=202,
                     )
+                    return
+                if self.path == "/api/repair-recheck":
+                    workspace = _latest_workspace()
+                    if workspace is None:
+                        raise ValueError("尚未生成 after-close workspace")
+                    job = start_repair_recheck(
+                        workspace,
+                        body,
+                        coordinator,
+                        repair_state_path=DEFAULT_DAILY_KLINE_REPAIR_STATE,
+                    )
+                    self._send_json(job, status=202)
                     return
                 if self.path == "/api/morning-recheck":
                     workspace = _latest_workspace()
@@ -448,6 +464,83 @@ def apply_portfolio_management_response(
         "code": code,
         "updated_at": str(saved.get("updated_at") or (now or datetime.now()).isoformat(timespec="seconds")),
     }
+
+
+def start_repair_recheck(
+    workspace: Mapping[str, object],
+    body: Mapping[str, object],
+    coordinator: RefreshCoordinator,
+    *,
+    repair_state_path: Path | None = None,
+) -> dict[str, object]:
+    """Validate one current repair issue before starting its bounded retry."""
+
+    issue_id = str(body.get("issue_id") or "").strip()
+    workspace_generated_at = str(body.get("workspace_generated_at") or "").strip()
+    if not issue_id:
+        raise ValueError("修复问题编号不能为空")
+    if workspace_generated_at != str(workspace.get("generated_at") or ""):
+        raise ValueError("工作台版本已过期，请刷新后重新检查")
+    raw_issues = workspace.get("repair_issues")
+    issues = raw_issues if isinstance(raw_issues, list) else []
+    issue = next(
+        (
+            item
+            for item in issues
+            if isinstance(item, Mapping)
+            and str(item.get("issue_id") or "") == issue_id
+        ),
+        None,
+    )
+    if issue is None:
+        raise ValueError("修复问题已变化或不存在，请刷新后重试")
+    if issue.get("repair_allowed") is not True:
+        raise ValueError("当前问题不允许从工作台触发修复")
+    method = str(issue.get("repair_method") or "")
+    if method == "retry_after_close":
+        if (
+            str(issue.get("reason_code") or "")
+            in DAILY_KLINE_REPAIR_REASON_CODES
+            and repair_state_path is not None
+        ):
+            record_daily_kline_repair(
+                issue,
+                workspace_generated_at=workspace_generated_at,
+                path=repair_state_path,
+            )
+        mode = "after_close"
+        data_health: tuple[Mapping[str, object], ...] = ()
+    elif method == "refresh_sources":
+        mode = "stale"
+        raw_health = workspace.get("data_health")
+        available_health = tuple(
+            item
+            for item in (raw_health if isinstance(raw_health, list) else [])
+            if isinstance(item, Mapping)
+        )
+        source = str(issue.get("source") or "")
+        data_health = tuple(
+            item
+            for item in available_health
+            if str(item.get("source_name") or item.get("id") or "") == source
+        )
+        if str(issue.get("field") or "") == "portfolio.risk_reconciliation":
+            data_health = ({"source_name": "risk_watch", "status": "blocked"},)
+        elif not data_health and source == "after-close":
+            data_health = ({"source_name": "after-close", "status": "blocked"},)
+        elif not data_health:
+            raise ValueError("修复问题对应的数据来源已变化，请刷新后重试")
+    elif method == "portfolio_import":
+        raise ValueError("该问题需要从持仓导入页重新提供券商字段")
+    else:
+        raise ValueError("当前修复方式未接入自动重试")
+    request_id = str(body.get("request_id") or "").strip()
+    return coordinator.start(
+        mode=mode,
+        data_health=data_health,
+        idempotency_key=request_id
+        or f"repair-recheck:{issue_id}:{workspace_generated_at}",
+    )
 
 
 def _latest_after_close_html():

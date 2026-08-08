@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import json
+from datetime import date, datetime
 from urllib.parse import urlencode
 from urllib.request import Request
+from zoneinfo import ZoneInfo
 
-from stock_assist.data_sources.eastmoney_klines import Candle, fetch_klines as fetch_eastmoney_klines
+import pandas as pd
+
+from stock_assist.data_sources.contracts import ProviderResult
+from stock_assist.data_sources.eastmoney_klines import Candle
+from stock_assist.data_sources.eastmoney_klines import (
+    fetch_klines as fetch_eastmoney_klines,
+)
 from stock_assist.intraday.network import (
     build_urllib_opener,
     provider_policy,
     sanitized_error_type,
 )
-
 
 TENCENT_BASE = "https://ifzq.gtimg.cn/appstock/app"
 TENCENT_PERIODS = {
@@ -26,6 +32,7 @@ TENCENT_PERIODS = {
     "week": "week",
     "month": "month",
 }
+SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 
 
 def fetch_public_klines(
@@ -74,6 +81,100 @@ def fetch_tencent_klines(code: str, interval: str, limit: int = 500, timeout: in
         raise RuntimeError(f"Tencent returned no {interval} K-lines for {code}")
     rows = [_parse_tencent_row(row) for row in raw_rows if isinstance(row, list)]
     return [row for row in rows if row.close > 0 and row.high > 0 and row.low > 0]
+
+
+def fetch_tencent_daily_result(
+    code: str,
+    *,
+    expected_trade_date: date,
+    limit: int = 260,
+    fetched_at: datetime | None = None,
+) -> ProviderResult[pd.DataFrame]:
+    """Fetch one whole forward-adjusted daily series as a typed repair fallback."""
+
+    fetched = fetched_at or datetime.now(tz=SHANGHAI_TZ)
+    if fetched.tzinfo is None:
+        fetched = fetched.replace(tzinfo=SHANGHAI_TZ)
+    try:
+        tencent_code = _tencent_security_code(code)
+        rows = fetch_tencent_klines(tencent_code, "day", limit)
+    except Exception as exc:
+        return ProviderResult(
+            provider="tencent",
+            schema_version="daily-ohlcv/v1",
+            source_time=None,
+            fetched_at=fetched,
+            trade_date=None,
+            status="invalid",
+            gaps=(),
+            errors=(f"{code}:tencent_daily:{sanitized_error_type(exc)}",),
+            price_basis="forward_adjusted",
+            data=pd.DataFrame(),
+        )
+
+    future_count = sum(row.time.date() > expected_trade_date for row in rows)
+    completed = [row for row in rows if row.time.date() <= expected_trade_date]
+    if not completed:
+        return ProviderResult(
+            provider="tencent",
+            schema_version="daily-ohlcv/v1",
+            source_time=None,
+            fetched_at=fetched,
+            trade_date=None,
+            status="empty",
+            gaps=(f"{code}:missing_series",),
+            errors=(),
+            price_basis="forward_adjusted",
+            data=pd.DataFrame(),
+        )
+
+    frame = pd.DataFrame(
+        {
+            "code": [code] * len(completed),
+            "trade_date": pd.to_datetime([row.time.date() for row in completed]),
+            "open": [row.open for row in completed],
+            "high": [row.high for row in completed],
+            "low": [row.low for row in completed],
+            "close": [row.close for row in completed],
+            "volume": [row.volume for row in completed],
+            "amount": [row.amount for row in completed],
+        }
+    ).sort_values("trade_date", kind="stable")
+    frame = frame.drop_duplicates(subset=["trade_date"], keep="last").reset_index(drop=True)
+    trade_date = frame["trade_date"].iloc[-1].date()
+    gaps: list[str] = []
+    if future_count:
+        gaps.append(f"{code}:future_rows_dropped:{future_count}")
+    if trade_date < expected_trade_date:
+        gaps.append(f"{code}:stale_trade_date:{trade_date.isoformat()}<{expected_trade_date.isoformat()}")
+    closes = pd.to_numeric(frame["close"], errors="coerce")
+    largest_gap = float(closes.pct_change().abs().dropna().max()) if len(closes) > 1 else 0.0
+    if largest_gap > 0.35:
+        gaps.append(f"{code}:price_discontinuity:{largest_gap:.6f}")
+        status = "quarantined"
+    elif gaps:
+        status = "partial"
+    else:
+        status = "ok"
+    return ProviderResult(
+        provider="tencent",
+        schema_version="daily-ohlcv/v1",
+        source_time=None,
+        fetched_at=fetched,
+        trade_date=trade_date,
+        status=status,
+        gaps=tuple(gaps),
+        errors=(),
+        price_basis="forward_adjusted",
+        data=frame,
+    )
+
+
+def _tencent_security_code(code: str) -> str:
+    symbol, separator, market = code.upper().partition(".")
+    if not separator or not symbol.isdigit() or market not in {"SH", "SZ"}:
+        raise ValueError("unsupported_a_share_code")
+    return ("sh" if market == "SH" else "sz") + symbol
 
 
 def _parse_tencent_row(values: list[object]) -> Candle:

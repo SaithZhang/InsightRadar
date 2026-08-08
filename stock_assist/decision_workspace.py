@@ -42,6 +42,14 @@ RunStage = Literal["after_close", "morning_recheck"]
 DEFAULT_RESPONSE_LEDGER = DATA_DIR / "decision_workspace_responses.jsonl"
 DEFAULT_PLAN_LEDGER = DATA_DIR / "decision_workspace_plans.jsonl"
 DEFAULT_RUNTIME_STATE = DATA_DIR / "decision_workspace_runtime.json"
+DEFAULT_DAILY_KLINE_REPAIR_STATE = DATA_DIR / "daily_kline_repair_state.json"
+DAILY_KLINE_REPAIR_REASON_CODES = {
+    "PRICE_BASIS_QUARANTINED",
+    "SECURITY_MAPPING_INVALID",
+    "PROVIDER_FIELD_MAPPING_INVALID",
+    "MARKET_SERIES_MISSING",
+    "MARKET_SERIES_STALE",
+}
 ALLOWED_RESPONSES = {
     "accepted",
     "disputed",
@@ -106,8 +114,10 @@ class DecisionPlan(TypedDict):
     evidence_refs: list[str]
     branches: list[dict[str, object]]
     technical_snapshot: dict[str, object]
+    data_evidence: dict[str, object]
     cost_reference: dict[str, object]
     data_status: str
+    repair_issue_ids: list[str]
     change_reasons: list[str]
     created_at: str
     effective_after_user_confirmation: bool
@@ -147,6 +157,14 @@ def build_decision_workspace(
     )
     gaps = _string_list(payload.get("data_gaps"))
     data_health = _data_health(decision, gaps, now)
+    repair_issues = _repair_issues(
+        portfolio,
+        plans,
+        reliability,
+        management_plans,
+        data_health,
+    )
+    _link_repair_issues(plans, repair_issues)
     decision_evidence = build_decision_evidence(
         decision,
         data_health,
@@ -192,6 +210,19 @@ def build_decision_workspace(
         "portfolio_summary": _portfolio_summary(portfolio, reliability),
         "portfolio_positions": positions,
         "portfolio_management_plans": management_plans,
+        "repair_issues": repair_issues,
+        "repair_summary": {
+            "blocked_count": len(repair_issues),
+            "manual_count": sum(
+                item.get("manual_repair_allowed") is True
+                for item in repair_issues
+            ),
+            "automatic_retry_count": sum(
+                item.get("repair_method")
+                in {"retry_after_close", "refresh_sources"}
+                for item in repair_issues
+            ),
+        },
         "management_attention_summary": {
             "pending_count": sum(
                 item.get("context_status") in {"system_proposed", "stale"}
@@ -520,6 +551,63 @@ def load_runtime_state(path: Path = DEFAULT_RUNTIME_STATE) -> dict[str, object] 
     return value if isinstance(value, dict) else None
 
 
+def record_daily_kline_repair(
+    issue: Mapping[str, object],
+    *,
+    workspace_generated_at: str,
+    path: Path = DEFAULT_DAILY_KLINE_REPAIR_STATE,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Persist one system-owned, provider-specific daily K-line repair route."""
+
+    reason_code = str(issue.get("reason_code") or "")
+    if reason_code not in DAILY_KLINE_REPAIR_REASON_CODES:
+        raise ValueError("当前问题不支持日线口径自动修复")
+    entity = _mapping(issue.get("entity"))
+    symbol = str(entity.get("symbol") or "")
+    if not symbol:
+        raise ValueError("修复问题缺少证券代码")
+    existing = load_daily_kline_repairs(path)
+    requested_at = (now or datetime.now()).isoformat(timespec="seconds")
+    existing[symbol] = {
+        "strategy": "tencent_forward_adjusted_whole_series",
+        "reason_code": reason_code,
+        "issue_id": str(issue.get("issue_id") or ""),
+        "workspace_generated_at": workspace_generated_at,
+        "requested_at": requested_at,
+    }
+    payload = {
+        "schema_version": "daily-kline-repair/v1",
+        "updated_at": requested_at,
+        "repairs": existing,
+    }
+    _atomic_write_text(
+        path,
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+    )
+    return existing[symbol]
+
+
+def load_daily_kline_repairs(
+    path: Path = DEFAULT_DAILY_KLINE_REPAIR_STATE,
+) -> dict[str, dict[str, object]]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    raw = payload.get("repairs") if isinstance(payload, dict) else None
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(symbol): dict(value)
+        for symbol, value in raw.items()
+        if isinstance(value, dict)
+        and value.get("strategy") == "tencent_forward_adjusted_whole_series"
+    }
+
+
 def _plans(
     decision: Mapping[str, object],
     reliability: Mapping[str, object],
@@ -652,6 +740,7 @@ def _plans(
                 "evidence_refs": ["unified_decision", f"holding:{symbol}"],
                 "branches": list(contract_branches.values()),
                 "technical_snapshot": _mapping(contract.get("technical")),
+                "data_evidence": _mapping(contract.get("data_evidence")),
                 "cost_reference": _mapping(contract.get("cost_reference")),
                 "data_status": (
                     "data_blocked"
@@ -659,6 +748,7 @@ def _plans(
                     in {"unknown", "quarantined"}
                     else "ready"
                 ),
+                "repair_issue_ids": [],
                 "change_reasons": (
                     ["首次形成可审核计划"]
                     if status == "new"
@@ -934,6 +1024,368 @@ def _management_basis(
     return result
 
 
+_SNAPSHOT_FIELD_CONTRACTS = {
+    "股数": ("portfolio.shares", "持仓股数", "大于 0 的券商持仓股数"),
+    "成本": ("portfolio.cost", "持仓成本", "大于 0 的券商成本价"),
+    "券商市价": ("portfolio.market_price", "券商市价", "大于 0 的券商当前市价"),
+    "单票盈亏": ("portfolio.pnl_pct", "单票盈亏", "券商盈亏比例，可为负数"),
+    "市值/仓位": (
+        "portfolio.market_value_or_weight",
+        "市值或仓位",
+        "大于 0 的券商市值或仓位占比",
+    ),
+}
+
+
+def _repair_issues(
+    portfolio: Portfolio,
+    plans: list[DecisionPlan],
+    reliability: Mapping[str, object],
+    management_plans: list[dict[str, object]],
+    data_health: list[DataHealthItem],
+) -> list[dict[str, object]]:
+    """Turn fail-closed states into an actionable, provider-aware UI contract."""
+
+    by_symbol = {item["symbol"]: item for item in plans}
+    holdings = {item.code: item for item in portfolio.holdings}
+    issues: list[dict[str, object]] = []
+
+    for management in management_plans:
+        if management.get("data_status") != "data_blocked":
+            continue
+        symbol = str(management.get("symbol") or "")
+        plan = by_symbol.get(symbol)
+        evidence = _mapping(plan.get("data_evidence") if plan else None)
+        technical = _mapping(plan.get("technical_snapshot") if plan else None)
+        issue = _market_repair_issue(
+            symbol=symbol,
+            name=str(management.get("name") or symbol),
+            reason=str(
+                management.get("data_issue_reason")
+                or "持仓行情未通过数据质量校验。"
+            ),
+            evidence=evidence,
+            technical=technical,
+            plan_id=str(plan.get("plan_id") or "") if plan else "",
+        )
+        issues.append(issue)
+
+    holding_rows = reliability.get("holdings")
+    for row in holding_rows if isinstance(holding_rows, list) else []:
+        if not isinstance(row, Mapping):
+            continue
+        symbol = str(row.get("code") or "")
+        holding = holdings.get(symbol)
+        plan = by_symbol.get(symbol)
+        for missing_label in _string_list(row.get("missing_snapshot_fields")):
+            contract = _SNAPSHOT_FIELD_CONTRACTS.get(missing_label)
+            if contract is None:
+                field, field_label, input_format = (
+                    "portfolio.unknown_field",
+                    missing_label,
+                    "从券商持仓表重新提供该字段",
+                )
+            else:
+                field, field_label, input_format = contract
+            current_value = _holding_field_value(holding, field)
+            issues.append(
+                _new_repair_issue(
+                    entity={
+                        "type": "holding",
+                        "symbol": symbol,
+                        "name": str(row.get("name") or symbol),
+                    },
+                    field=field,
+                    field_label=field_label,
+                    status="missing",
+                    reason_code="PORTFOLIO_FIELD_MISSING",
+                    reason=f"当前持仓快照未提供{field_label}。",
+                    source=str(portfolio.source),
+                    source_time=portfolio.as_of or None,
+                    fetched_at=None,
+                    price_basis=None,
+                    current_value=current_value,
+                    known_context={
+                        "portfolio_as_of": portfolio.as_of or None,
+                        "missing_field": missing_label,
+                    },
+                    criticality_reason=(
+                        "该字段参与持仓、风险预算或操作建议判断，"
+                        "不能使用 0、默认值或猜测替代。"
+                    ),
+                    repair_allowed=True,
+                    manual_repair_allowed=True,
+                    repair_method="portfolio_import",
+                    repair_label="打开持仓导入并重新提供",
+                    input_format=f"券商持仓表中的{input_format}",
+                    next_action="批准保存后系统会串行刷新并重新生成 after-close。",
+                    affected_plan_ids=[str(plan.get("plan_id") or "")] if plan else [],
+                )
+            )
+
+    if str(reliability.get("risk_reconciliation_status") or "") == "blocked":
+        issues.append(
+            _new_repair_issue(
+                entity={"type": "portfolio", "symbol": "", "name": "组合风险预算"},
+                field="portfolio.risk_reconciliation",
+                field_label="组合风险对账",
+                status="blocked",
+                reason_code="RISK_RECONCILIATION_BLOCKED",
+                reason="组合权重或 Beta 证据尚未完成可信对账。",
+                source="portfolio-beta / risk-watch",
+                source_time=portfolio.as_of or None,
+                fetched_at=None,
+                price_basis=None,
+                current_value=None,
+                known_context={
+                    "reconciliation_status": reliability.get(
+                        "risk_reconciliation_status"
+                    )
+                },
+                criticality_reason=(
+                    "组合风险预算会约束所有持仓动作，证据不完整时不能把 unknown 当作 0。"
+                ),
+                repair_allowed=True,
+                manual_repair_allowed=False,
+                repair_method="refresh_sources",
+                repair_label="重新计算 Beta 与风险对账",
+                input_format=None,
+                next_action="刷新成功后重新生成 after-close 并复核各持仓计划。",
+                affected_plan_ids=[str(item.get("plan_id") or "") for item in plans],
+            )
+        )
+
+    for item in data_health:
+        status = str(item.get("status") or "missing")
+        if status == "ready":
+            continue
+        is_core_gap = item.get("id") == "core_data_gaps"
+        source_name = str(item.get("source_name") or "after-close")
+        field = (
+            "after_close.core_inputs"
+            if is_core_gap
+            else f"source.{source_name}"
+        )
+        field_label = (
+            "核心决策输入"
+            if is_core_gap
+            else str(item.get("label") or source_name)
+        )
+        reason_code = str(
+            item.get("error_code")
+            or ("SOURCE_STALE" if status == "stale" else "SOURCE_NOT_READY")
+        )
+        issues.append(
+            _new_repair_issue(
+                entity={"type": "source", "symbol": "", "name": field_label},
+                field=field,
+                field_label=field_label,
+                status=status,
+                reason_code=reason_code,
+                reason=str(item.get("gap_reason") or f"{field_label}尚未就绪。"),
+                source=source_name,
+                source_time=item.get("source_time"),
+                fetched_at=str(item.get("fetched_at") or "") or None,
+                price_basis=None,
+                current_value=status,
+                known_context={
+                    "evidence": item.get("evidence"),
+                    "owner": item.get("owner"),
+                    "freshness_rule": item.get("freshness_rule"),
+                    "next_check": item.get("next_check"),
+                },
+                criticality_reason=(
+                    str(item.get("freshness_rule") or "来源必须通过时效校验。")
+                    + "；该来源参与市场权限或组合风险判断，不能用 0、默认值或猜测替代。"
+                ),
+                repair_allowed=True,
+                manual_repair_allowed=False,
+                repair_method="refresh_sources",
+                repair_label=f"重新运行 {source_name} 并校验时间",
+                input_format=None,
+                next_action="刷新完成后重新生成 after-close；失败时保留 blocked 和最新失败原因。",
+                affected_plan_ids=[str(item.get("plan_id") or "") for item in plans],
+            )
+        )
+
+    unique: dict[str, dict[str, object]] = {}
+    for issue in issues:
+        unique[str(issue["issue_id"])] = issue
+    return list(unique.values())
+
+
+def _market_repair_issue(
+    *,
+    symbol: str,
+    name: str,
+    reason: str,
+    evidence: Mapping[str, object],
+    technical: Mapping[str, object],
+    plan_id: str,
+) -> dict[str, object]:
+    markers = [
+        *_string_list(evidence.get("gaps")),
+        *_string_list(evidence.get("errors")),
+    ]
+    marker_text = " ".join(markers)
+    if "code_mismatch" in marker_text:
+        field = "security.mapping"
+        field_label = "证券映射"
+        reason_code = "SECURITY_MAPPING_INVALID"
+    elif "missing_fields" in marker_text:
+        field = "daily_kline.field_mapping"
+        field_label = "行情字段映射"
+        reason_code = "PROVIDER_FIELD_MAPPING_INVALID"
+    elif "missing_series" in marker_text or evidence.get("status") == "empty":
+        field = "daily_kline.series"
+        field_label = "日线行情序列"
+        reason_code = "MARKET_SERIES_MISSING"
+    elif "stale_trade_date" in marker_text:
+        field = "daily_kline.trade_date"
+        field_label = "行情交易日"
+        reason_code = "MARKET_SERIES_STALE"
+    elif (
+        "price_discontinuity" in marker_text
+        or technical.get("state") == "quarantined"
+    ):
+        field = "daily_kline.price_basis"
+        field_label = "行情复权口径"
+        reason_code = "PRICE_BASIS_QUARANTINED"
+    else:
+        field = "daily_kline.provider_contract"
+        field_label = "行情数据契约"
+        reason_code = "PROVIDER_CONTRACT_INVALID"
+    status = str(evidence.get("status") or technical.get("state") or "blocked")
+    if technical.get("state") == "quarantined":
+        status = "quarantined"
+    repair_label = (
+        "由系统改用腾讯前复权全序列重新抓取并校验"
+        if reason_code in DAILY_KLINE_REPAIR_REASON_CODES
+        else "由系统重新抓取并校验"
+    )
+    return _new_repair_issue(
+        entity={"type": "holding", "symbol": symbol, "name": name},
+        field=field,
+        field_label=field_label,
+        status=status,
+        reason_code=reason_code,
+        reason=reason,
+        source=str(evidence.get("provider") or "after-close"),
+        source_time=evidence.get("source_time"),
+        fetched_at=str(evidence.get("fetched_at") or "") or None,
+        price_basis=str(evidence.get("price_basis") or "unknown"),
+        current_value=technical.get("close"),
+        known_context={
+            "provider_status": evidence.get("status") or "unknown",
+            "trade_date": evidence.get("trade_date"),
+            "price_basis": evidence.get("price_basis") or "unknown",
+            "technical_state": technical.get("state") or "unknown",
+            "gaps": _string_list(evidence.get("gaps")),
+            "errors": _string_list(evidence.get("errors")),
+        },
+        criticality_reason=(
+            "该字段参与均线、支撑/压力与价格阈值判断，"
+            "不能使用 0、默认值或猜测替代。"
+        ),
+        repair_allowed=True,
+        manual_repair_allowed=False,
+        repair_method="retry_after_close",
+        repair_label=repair_label,
+        input_format=None,
+        next_action=(
+            "重新检查通过后保留 fallback 来源与原始 quarantine 证据，并重新生成新的 after-close 计划版本；"
+            "仍异常则继续 blocked。"
+        ),
+        affected_plan_ids=[plan_id] if plan_id else [],
+    )
+
+
+def _new_repair_issue(
+    *,
+    entity: dict[str, str],
+    field: str,
+    field_label: str,
+    status: str,
+    reason_code: str,
+    reason: str,
+    source: str,
+    source_time: object,
+    fetched_at: str | None,
+    price_basis: str | None,
+    current_value: object,
+    known_context: dict[str, object],
+    criticality_reason: str,
+    repair_allowed: bool,
+    manual_repair_allowed: bool,
+    repair_method: str,
+    repair_label: str,
+    input_format: str | None,
+    next_action: str,
+    affected_plan_ids: list[str],
+) -> dict[str, object]:
+    identity = "|".join(
+        (
+            str(entity.get("type") or "unknown"),
+            str(entity.get("symbol") or entity.get("name") or "unknown"),
+            field,
+            field_label,
+            reason_code,
+            source,
+        )
+    )
+    return {
+        "issue_id": "repair-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12],
+        "entity": entity,
+        "field": field,
+        "field_label": field_label,
+        "status": status,
+        "reason_code": reason_code,
+        "reason": reason,
+        "source": source,
+        "source_time": source_time,
+        "fetched_at": fetched_at,
+        "price_basis": price_basis,
+        "current_value": current_value,
+        "known_context": known_context,
+        "criticality_reason": criticality_reason,
+        "repair_allowed": repair_allowed,
+        "manual_repair_allowed": manual_repair_allowed,
+        "repair_method": repair_method,
+        "repair_label": repair_label,
+        "input_format": input_format,
+        "next_action": next_action,
+        "affected_plan_ids": [item for item in affected_plan_ids if item],
+    }
+
+
+def _holding_field_value(holding: object, field: str) -> object:
+    if holding is None:
+        return None
+    attribute = {
+        "portfolio.shares": "shares",
+        "portfolio.cost": "cost",
+        "portfolio.market_price": "market_price",
+        "portfolio.pnl_pct": "pnl_pct",
+        "portfolio.market_value_or_weight": "market_value",
+    }.get(field)
+    return getattr(holding, attribute, None) if attribute else None
+
+
+def _link_repair_issues(
+    plans: list[DecisionPlan],
+    issues: list[dict[str, object]],
+) -> None:
+    for plan in plans:
+        plan_id = str(plan.get("plan_id") or "")
+        symbol = str(plan.get("symbol") or "")
+        plan["repair_issue_ids"] = [
+            str(issue.get("issue_id") or "")
+            for issue in issues
+            if plan_id in _string_list(issue.get("affected_plan_ids"))
+            or str(_mapping(issue.get("entity")).get("symbol") or "") == symbol
+        ]
+
+
 def _current_plan_state(
     contract: Mapping[str, object],
     *,
@@ -1086,7 +1538,7 @@ def _data_health(
             status: DataStatus = (
                 "ready" if (now.date() - source_date).days <= 1 else "stale"
             )
-        elif raw_status in {"blocked", "failed"}:
+        elif raw_status in {"stale", "missing", "blocked", "pending", "failed"}:
             status = raw_status  # type: ignore[assignment]
         else:
             status = "missing"
@@ -1108,7 +1560,13 @@ def _data_health(
                 "fetched_at": now.isoformat(timespec="seconds"),
                 "freshness_rule": "来源日期不晚于工作台生成日期 1 个自然日",
                 "is_simulated": False,
-                "error_code": None if status in {"ready", "stale"} else "SOURCE_UNAVAILABLE",
+                "error_code": (
+                    None
+                    if status == "ready"
+                    else "SOURCE_STALE"
+                    if status == "stale"
+                    else "SOURCE_UNAVAILABLE"
+                ),
                 "gap_reason": gap_reason,
                 "evidence": str(item.get("path") or "") or None,
                 "repair_action": (
@@ -1151,7 +1609,7 @@ def _market_gate(
     health: list[DataHealthItem],
 ) -> dict[str, object]:
     budget = _mapping(decision.get("risk_budget"))
-    blocked_count = sum(item["status"] in {"missing", "blocked", "failed"} for item in health)
+    blocked_count = sum(item["status"] != "ready" for item in health)
     return {
         "permission": str(decision.get("stance") or "等待确认"),
         "risk_level": str(budget.get("risk_level") or "unknown"),

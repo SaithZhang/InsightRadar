@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -11,6 +11,7 @@ import pandas as pd
 
 from stock_assist.after_close_workbench import build_market_matrix_contract
 from stock_assist.after_close_workbench_html import render_after_close_workbench
+from stock_assist.data_sources.a_share_klines import fetch_tencent_daily_result
 from stock_assist.data_sources.cninfo import latest_profit_notice
 from stock_assist.data_sources.contracts import ProviderResult
 from stock_assist.data_sources.global_markets import (
@@ -22,7 +23,10 @@ from stock_assist.data_sources.xysz import (
     AmazingDataError,
     daily_kline_result_for_code,
 )
-from stock_assist.decision_workspace import build_decision_workspace
+from stock_assist.decision_workspace import (
+    build_decision_workspace,
+    load_daily_kline_repairs,
+)
 from stock_assist.execution_plans import build_holding_execution_plans
 from stock_assist.holding_decision import HoldingDecision, build_holding_decision
 from stock_assist.paths import CONFIG_DIR, DATA_DIR, REPORT_DIR
@@ -642,6 +646,7 @@ def _build_core_reliability(
         )
     market_as_of = str(outcome_snapshot.get("as_of_trade_date") or "")
     holding_rows: list[dict[str, object]] = []
+    holding_market_dates: list[str] = []
     structural_ready = 0
     decision_ready = 0
     current_context_ready = 0
@@ -682,6 +687,17 @@ def _build_core_reliability(
             if isinstance(contract, dict) and isinstance(contract.get("technical"), dict)
             else {}
         )
+        data_evidence = (
+            contract.get("data_evidence")
+            if isinstance(contract, dict)
+            and isinstance(contract.get("data_evidence"), dict)
+            else {}
+        )
+        holding_market_as_of = str(
+            data_evidence.get("trade_date") or market_as_of
+        )
+        if holding_market_as_of:
+            holding_market_dates.append(holding_market_as_of)
         technical_state = str(technical.get("state") or "not_evaluated")
         data_status = (
             "data_blocked"
@@ -690,7 +706,7 @@ def _build_core_reliability(
         )
         ready = bool(
             action_complete
-            and market_as_of
+            and holding_market_as_of
             and portfolio.as_of
             and not missing_snapshot_fields
             and portfolio.risk_reconciliation_status != "blocked"
@@ -719,6 +735,7 @@ def _build_core_reliability(
                 ),
                 "data_status": data_status,
                 "technical_state": technical_state,
+                "market_as_of_trade_date": holding_market_as_of or None,
                 "blocked_capabilities": (
                     ["均线判断", "支撑/压力判断", "价格阈值判断"]
                     if data_status == "data_blocked"
@@ -743,7 +760,9 @@ def _build_core_reliability(
         "portfolio_as_of": portfolio.as_of or None,
         "portfolio_source_note": portfolio.source_note,
         "risk_reconciliation_status": portfolio.risk_reconciliation_status,
-        "market_as_of_trade_date": market_as_of or None,
+        "market_as_of_trade_date": (
+            max(holding_market_dates) if holding_market_dates else market_as_of or None
+        ),
         "holding_count": count,
         "structural_action_holdings": structural_ready,
         "structural_action_coverage": round(structural_ready / count, 4) if count else 0.0,
@@ -1513,13 +1532,81 @@ def _build_signals(
         begin_date,
         end_date,
     )
-    return [
-        _signal_for_holding(
-            holding,
-            daily_kline_result_for_code(result, holding.code),
+    repairs = load_daily_kline_repairs()
+    signals: list[HoldingSignal] = []
+    expected_trade_date = datetime.strptime(str(end_date), "%Y%m%d").date()
+    for holding in holdings:
+        primary = daily_kline_result_for_code(result, holding.code)
+        repaired = _daily_kline_result_with_requested_repair(
+            primary,
+            code=holding.code,
+            expected_trade_date=expected_trade_date,
+            repair=repairs.get(holding.code),
         )
-        for holding in holdings
-    ]
+        signals.append(_signal_for_holding(holding, repaired))
+    return signals
+
+
+def _daily_kline_result_with_requested_repair(
+    primary: ProviderResult[pd.DataFrame],
+    *,
+    code: str,
+    expected_trade_date: date,
+    repair: object,
+) -> ProviderResult[pd.DataFrame]:
+    repair_contract = repair if isinstance(repair, dict) else {}
+    markers = " ".join((*primary.gaps, *primary.errors))
+    reason_code = str(repair_contract.get("reason_code") or "")
+    if (
+        not reason_code
+        and primary.status == "quarantined"
+        and ":price_discontinuity:" in markers
+    ):
+        reason_code = "PRICE_BASIS_QUARANTINED"
+    repair_matches = {
+        "PRICE_BASIS_QUARANTINED": (
+            primary.status == "quarantined"
+            and ":price_discontinuity:" in markers
+        ),
+        "SECURITY_MAPPING_INVALID": "code_mismatch" in markers,
+        "PROVIDER_FIELD_MAPPING_INVALID": "missing_fields" in markers,
+        "MARKET_SERIES_MISSING": (
+            primary.status == "empty" or "missing_series" in markers
+        ),
+        "MARKET_SERIES_STALE": "stale_trade_date" in markers,
+    }.get(reason_code, False)
+    if (
+        not repair_matches
+        or repair_contract.get("strategy")
+        != "tencent_forward_adjusted_whole_series"
+    ):
+        return primary
+    fallback = fetch_tencent_daily_result(
+        code,
+        expected_trade_date=expected_trade_date,
+    )
+    if (
+        fallback.status in {"ok", "partial"}
+        and fallback.trade_date == expected_trade_date
+        and fallback.price_basis == "forward_adjusted"
+        and not any(":price_discontinuity:" in gap for gap in fallback.gaps)
+    ):
+        return replace(
+            fallback,
+            status="partial",
+            gaps=(
+                f"{code}:fallback_from:amazingdata:{reason_code.lower()}",
+                *fallback.gaps,
+            ),
+        )
+    fallback_errors = fallback.errors or (
+        f"{code}:tencent_daily:fallback_status={fallback.status}",
+    )
+    return replace(
+        primary,
+        gaps=(*primary.gaps, *fallback.gaps, f"{code}:repair_fallback_failed:tencent"),
+        errors=(*primary.errors, *fallback_errors),
+    )
 
 
 def _frame_for_code(raw: object, code: str) -> pd.DataFrame:

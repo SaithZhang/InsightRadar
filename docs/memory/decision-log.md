@@ -128,7 +128,7 @@ This file is the bounded decision index. Full context, alternatives, and consequ
 
 - Decision: generate deterministic holding-management proposals when context is missing or stale, and track user consent independently from account/market data quality.
 - Reason: user uncertainty is a personalization state, not missing market evidence; the old read-only context path incorrectly blocked the whole report and offered no UI repair flow.
-- Consequence: confirmation never clears a quarantine, per-capability data faults remain fail closed, compatible private context is written atomically through the loopback UI, and only after-close is regenerated. See ADR-0016.
+- Consequence: confirmation never clears a quarantine, per-capability data faults remain fail closed, compatible private context is written atomically through the loopback UI, and only after-close is regenerated. The 2026-08-08 closure adds plan-linked structured repair issues and version-bound source retries; failure keeps the last-good report blocked. See ADR-0016.
 
 ## Existing durable decisions
 
