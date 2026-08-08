@@ -73,6 +73,7 @@ Before writing code:
 - Track source, tests, product documents, reproducible configs, schemas, examples, and synthetic review assets only.
 - Keep `.env`, credentials, cookies, tokens, real holdings/accounts/trades, account screenshots, local databases, reports, caches, logs, and raw authenticated data local.
 - Stage explicit paths only. Do not use `git add -A` in a mixed worktree.
+- After the user explicitly authorizes a GitHub write operation, use the authenticated `gh` CLI directly for push, pull-request creation, and merge; do not try the GitHub App connector first. The connector remains appropriate for read-only lookup and triage.
 - If a secret is suspected in any candidate public commit, stop publication and report the path and remediation without echoing the value.
 
 ## Definition of Done
