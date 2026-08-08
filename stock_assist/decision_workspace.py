@@ -382,8 +382,24 @@ def overlay_plan_responses(
                 item["user_response_note"] = response.get("note", "")
                 item["user_response_at"] = response.get("created_at")
     result["user_responses"] = responses
+    _refresh_plan_collections(result)
+    return result
+
+
+def _refresh_plan_collections(result: dict[str, object]) -> None:
     active_plans = result.get("active_plans")
     if isinstance(active_plans, list):
+        for item in active_plans:
+            if (
+                isinstance(item, dict)
+                and item.get("status") == "blocked"
+                and item.get("user_response_status") == "accepted"
+            ):
+                item["user_response_status"] = "pending"
+                item["user_response_note"] = (
+                    "当前数据阻断已撤销旧 accepted 的执行授权；修复并生成新版本后需重新确认。"
+                )
+                item["user_response_at"] = None
         actionable = [
             item
             for item in active_plans
@@ -420,7 +436,6 @@ def overlay_plan_responses(
             if unresolved_blocked
             else "reviewed"
         )
-    return result
 
 
 def restage_workspace(
@@ -428,6 +443,7 @@ def restage_workspace(
     *,
     run_stage: RunStage,
     now: datetime | None = None,
+    latest_completed_trade_date: date | None = None,
 ) -> dict[str, object]:
     """Move the same evidence into a declared run stage without inventing data."""
 
@@ -440,16 +456,189 @@ def restage_workspace(
         if run_stage == "after_close"
         else "晨间增量复核：仅重算现有来源时效；本阶段未接入实时行情刷新。"
     )
+    expected_date = latest_completed_trade_date or _parse_date(
+        result.get("latest_completed_trade_date")
+    )
+    if run_stage == "morning_recheck":
+        result["latest_completed_trade_date"] = (
+            expected_date.isoformat() if expected_date else None
+        )
     health = result.get("data_health")
-    if isinstance(health, list):
+    if run_stage == "morning_recheck" and isinstance(health, list):
         for item in health:
             if not isinstance(item, dict) or item.get("status") != "ready":
                 continue
             source_date = _parse_date(item.get("source_time"))
-            if source_date and (current.date() - source_date).days > 1:
+            if expected_date is None:
+                item["status"] = "blocked"
+                item["error_code"] = "LATEST_COMPLETED_TRADE_DATE_UNAVAILABLE"
+                item["gap_reason"] = (
+                    "晨间复核无法确认最近已完成交易日；核心来源不能继续保持 ready。"
+                )
+            elif source_date is None:
+                item["status"] = "blocked"
+                item["error_code"] = "SOURCE_TIME_MISSING"
+                item["gap_reason"] = (
+                    "晨间复核无法解析来源交易日；核心来源不能继续保持 ready。"
+                )
+            elif source_date < expected_date:
                 item["status"] = "stale"
-                item["gap_reason"] = "晨间复核发现来源已超过 1 个自然日。"
+                item["error_code"] = "SOURCE_STALE"
+                item["gap_reason"] = (
+                    f"晨间复核发现来源交易日 {source_date.isoformat()} 早于最近已完成交易日 "
+                    f"{expected_date.isoformat()}。"
+                )
+            item["freshness_rule"] = "来源交易日不得早于当前时点的最近已完成交易日"
+        _recompute_morning_derived_state(result, health)
     return result
+
+
+def _recompute_morning_derived_state(
+    result: dict[str, object],
+    health: list[object],
+) -> None:
+    health_rows = [item for item in health if isinstance(item, dict)]
+    previous_gate = _mapping(result.get("market_gate"))
+    result["market_gate"] = _market_gate(
+        {
+            "stance": previous_gate.get("permission"),
+            "risk_budget": {
+                "risk_level": previous_gate.get("risk_level"),
+                "risk_score": previous_gate.get("risk_score"),
+            },
+            "first_action": previous_gate.get("first_action"),
+        },
+        health_rows,  # type: ignore[arg-type]
+    )
+    market_blocked = _mapping(result.get("market_gate")).get("status") != "ready"
+    active = result.get("active_plans")
+    plans = (
+        [item for item in active if isinstance(item, dict)]
+        if isinstance(active, list)
+        else []
+    )
+    if market_blocked:
+        blocker = "晨间复核发现核心市场来源非 ready，计划执行授权已撤销。"
+        for plan in plans:
+            plan["status"] = "blocked"
+            plan["authority_state"] = "blocked"
+            plan["blocking_reasons"] = _dedupe_strings(
+                [*_string_list(plan.get("blocking_reasons")), blocker]
+            )
+            plan["risk_constraints"] = _dedupe_strings(
+                [*_string_list(plan.get("risk_constraints")), blocker]
+            )
+            plan["change_reasons"] = _dedupe_strings(
+                [*_string_list(plan.get("change_reasons")), blocker]
+            )
+            plan["effective_after_user_confirmation"] = False
+            if plan.get("user_response_status") == "accepted":
+                plan["user_response_status"] = "pending"
+                plan["user_response_note"] = (
+                    "晨间来源 freshness 降级已撤销旧 accepted 的当前执行授权；"
+                    "修复并生成新版本后需重新确认。"
+                )
+                plan["user_response_at"] = None
+
+    existing = result.get("repair_issues")
+    retained = (
+        [
+            item
+            for item in existing
+            if isinstance(item, dict)
+            and str(_mapping(item.get("entity")).get("type") or "") != "source"
+        ]
+        if isinstance(existing, list)
+        else []
+    )
+    source_issues = _restaged_source_repair_issues(health_rows, plans)
+    unique = {
+        str(item.get("issue_id") or ""): item
+        for item in [*retained, *source_issues]
+        if item.get("issue_id")
+    }
+    repair_issues = list(unique.values())
+    result["repair_issues"] = repair_issues
+    _link_repair_issues(plans, repair_issues)  # type: ignore[arg-type]
+    result["repair_summary"] = {
+        "blocked_count": len(repair_issues),
+        "manual_count": sum(
+            item.get("manual_repair_allowed") is True for item in repair_issues
+        ),
+        "automatic_retry_count": sum(
+            item.get("repair_method") in {"retry_after_close", "refresh_sources"}
+            for item in repair_issues
+        ),
+    }
+    by_plan_id = {str(item.get("plan_id") or ""): item for item in plans}
+    positions = result.get("portfolio_positions")
+    if isinstance(positions, list):
+        for position in positions:
+            if not isinstance(position, dict):
+                continue
+            plan = by_plan_id.get(str(position.get("current_plan_id") or ""))
+            if plan:
+                position["today_status"] = plan.get("status")
+    _refresh_plan_collections(result)
+
+
+def _restaged_source_repair_issues(
+    health: list[dict[str, object]],
+    plans: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    plan_ids = [str(item.get("plan_id") or "") for item in plans]
+    issues: list[dict[str, object]] = []
+    for item in health:
+        status = str(item.get("status") or "missing")
+        if status == "ready":
+            continue
+        is_core_gap = item.get("id") == "core_data_gaps"
+        source_name = str(item.get("source_name") or "after-close")
+        field = "after_close.core_inputs" if is_core_gap else f"source.{source_name}"
+        field_label = (
+            "核心决策输入"
+            if is_core_gap
+            else str(item.get("label") or source_name)
+        )
+        reason_code = str(
+            item.get("error_code")
+            or ("SOURCE_STALE" if status == "stale" else "SOURCE_NOT_READY")
+        )
+        issues.append(
+            _new_repair_issue(
+                entity={"type": "source", "symbol": "", "name": field_label},
+                field=field,
+                field_label=field_label,
+                status=status,
+                reason_code=reason_code,
+                reason=str(item.get("gap_reason") or f"{field_label}尚未就绪。"),
+                source=source_name,
+                source_time=item.get("source_time"),
+                fetched_at=str(item.get("fetched_at") or "") or None,
+                price_basis=None,
+                current_value=status,
+                known_context={
+                    "evidence": item.get("evidence"),
+                    "owner": item.get("owner"),
+                    "freshness_rule": item.get("freshness_rule"),
+                    "next_check": item.get("next_check"),
+                },
+                criticality_reason=(
+                    str(item.get("freshness_rule") or "来源必须通过时效校验。")
+                    + "；该来源参与市场权限或组合风险判断，不能用 0、默认值或猜测替代。"
+                ),
+                repair_allowed=True,
+                manual_repair_allowed=False,
+                repair_method="refresh_sources",
+                repair_label=f"重新运行 {source_name} 并校验时间",
+                input_format=None,
+                next_action=(
+                    "刷新完成后重新生成 after-close；失败时保留 blocked 和最新失败原因。"
+                ),
+                affected_plan_ids=plan_ids,
+            )
+        )
+    return issues
 
 
 def append_plan_response(

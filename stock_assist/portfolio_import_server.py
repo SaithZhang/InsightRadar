@@ -12,12 +12,13 @@ import re
 import secrets
 from collections.abc import Mapping
 from dataclasses import asdict
-from datetime import datetime
+from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Event, Thread
 
 from stock_assist.after_close_workbench_html import render_after_close_workbench
+from stock_assist.data_sources.xysz import AmazingDataClient
 from stock_assist.decision_workspace import (
     DAILY_KLINE_REPAIR_REASON_CODES,
     DEFAULT_DAILY_KLINE_REPAIR_STATE,
@@ -44,6 +45,7 @@ from stock_assist.intraday.polling import (
     stop_intraday_refresh_process,
     stop_intraday_scheduler,
 )
+from stock_assist.intraday.session import latest_completed_trade_date
 from stock_assist.paths import REPORT_DIR
 from stock_assist.portfolio import (
     DEFAULT_PORTFOLIO_CONTEXT_PATH,
@@ -215,9 +217,14 @@ def serve_portfolio_import(
                     if workspace is None:
                         self._send_json({"error": "尚未生成 after-close workspace"}, status=404)
                         return
+                    current = datetime.now()
                     refreshed = restage_workspace(
                         overlay_plan_responses(workspace),
                         run_stage="morning_recheck",
+                        now=current,
+                        latest_completed_trade_date=(
+                            _resolve_latest_completed_trade_date(current)
+                        ),
                     )
                     write_runtime_state(refreshed)
                     self._send_json(refreshed)
@@ -596,6 +603,23 @@ def _latest_workspace() -> dict[str, object] | None:
     if replay is not None:
         selected["intraday_replay"] = replay
     return selected
+
+
+def _resolve_latest_completed_trade_date(current: datetime) -> date | None:
+    """Resolve freshness authority from the provider calendar or fail closed."""
+
+    client: AmazingDataClient | None = None
+    try:
+        client = AmazingDataClient()
+        return latest_completed_trade_date(current, client.calendar)
+    except Exception:
+        return None
+    finally:
+        if client is not None:
+            try:
+                client.logout()
+            except Exception:
+                pass
 
 
 def _normalize_intraday_overlay(

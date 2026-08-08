@@ -12,6 +12,7 @@ from stock_assist.decision_workspace import (
     build_decision_workspace,
     load_plan_responses,
     load_plan_versions,
+    overlay_plan_responses,
     record_plan_versions,
     restage_workspace,
 )
@@ -91,6 +92,78 @@ class DecisionWorkspaceTests(unittest.TestCase):
             },
             "sections": [],
             "signal_outcomes": {},
+        }
+
+    def _morning_recheck_workspace(
+        self,
+        *,
+        source_time: str,
+        source_status: str = "ready",
+    ) -> dict[str, object]:
+        plan = {
+            "plan_id": "holding:TEST001.SZ",
+            "symbol": "TEST001.SZ",
+            "plan_version": "v-friday",
+            "status": "unchanged",
+            "authority_state": "effective",
+            "blocking_reasons": [],
+            "risk_constraints": [],
+            "repair_issue_ids": [],
+            "effective_after_user_confirmation": True,
+            "user_response_status": "accepted",
+            "user_response_note": "",
+            "user_response_at": "2026-08-07T18:30:00",
+        }
+        return {
+            "run_stage": "after_close",
+            "latest_completed_trade_date": "2026-08-07",
+            "data_health": [
+                {
+                    "id": "market_levels",
+                    "label": "market levels",
+                    "status": source_status,
+                    "source_name": "market_levels",
+                    "source_time": source_time,
+                    "fetched_at": "2026-08-07T18:30:00",
+                    "freshness_rule": (
+                        "source trade date is not earlier than latest completed session"
+                    ),
+                    "error_code": None,
+                    "gap_reason": None,
+                    "owner": "market_levels",
+                    "next_check": "morning recheck",
+                }
+            ],
+            "market_gate": {
+                "permission": "hold cautiously",
+                "risk_level": "yellow",
+                "risk_score": 62,
+                "first_action": "wait for conditions",
+                "status": "ready",
+                "reason": "core sources ready",
+            },
+            "repair_issues": [],
+            "repair_summary": {
+                "blocked_count": 0,
+                "manual_count": 0,
+                "automatic_retry_count": 0,
+            },
+            "active_plans": [plan],
+            "plan_changes": [],
+            "today_plans": [],
+            "portfolio_positions": [
+                {
+                    "symbol": "TEST001.SZ",
+                    "current_plan_id": plan["plan_id"],
+                    "today_status": plan["status"],
+                }
+            ],
+            "attention_summary": {
+                "pending_response_count": 0,
+                "unresolved_blocked_count": 0,
+                "effective_plan_count": 1,
+            },
+            "runtime_status": "reviewed",
         }
 
     def test_schema_keeps_unknown_values_and_explicit_statuses(self) -> None:
@@ -765,6 +838,7 @@ class DecisionWorkspaceTests(unittest.TestCase):
     def test_morning_recheck_marks_old_ready_source_stale(self) -> None:
         workspace = {
             "run_stage": "after_close",
+            "latest_completed_trade_date": "2026-07-23",
             "data_health": [
                 {
                     "status": "ready",
@@ -781,6 +855,88 @@ class DecisionWorkspaceTests(unittest.TestCase):
         self.assertEqual(result["run_stage"], "morning_recheck")
         self.assertEqual(result["data_health"][0]["status"], "stale")
         self.assertIn("未接入实时行情刷新", result["stage_note"])
+
+    def test_morning_recheck_keeps_latest_completed_friday_ready_on_monday(self) -> None:
+        workspace = self._morning_recheck_workspace(source_time="2026-08-07 15:00")
+
+        result = restage_workspace(
+            workspace,
+            run_stage="morning_recheck",
+            now=datetime(2026, 8, 10, 8, 30),
+        )
+
+        self.assertEqual(result["data_health"][0]["status"], "ready")
+        self.assertEqual(result["market_gate"]["status"], "ready")
+        self.assertEqual(result["repair_issues"], [])
+        self.assertEqual(result["active_plans"][0]["authority_state"], "effective")
+        self.assertEqual(
+            result["active_plans"][0]["user_response_status"],
+            "accepted",
+        )
+
+    def test_morning_recheck_recomputes_derived_state_for_truly_stale_source(
+        self,
+    ) -> None:
+        workspace = self._morning_recheck_workspace(source_time="2026-08-06 15:00")
+
+        result = restage_workspace(
+            workspace,
+            run_stage="morning_recheck",
+            now=datetime(2026, 8, 10, 8, 30),
+        )
+
+        self.assertEqual(result["data_health"][0]["status"], "stale")
+        self.assertEqual(result["market_gate"]["status"], "blocked")
+        self.assertTrue(result["repair_issues"])
+        self.assertEqual(result["repair_issues"][0]["reason_code"], "SOURCE_STALE")
+        plan = result["active_plans"][0]
+        self.assertEqual(plan["status"], "blocked")
+        self.assertEqual(plan["authority_state"], "blocked")
+        self.assertFalse(plan["effective_after_user_confirmation"])
+        self.assertNotEqual(plan["user_response_status"], "accepted")
+        self.assertTrue(plan["repair_issue_ids"])
+        self.assertEqual(result["portfolio_positions"][0]["today_status"], "blocked")
+        self.assertIn(
+            plan["plan_id"],
+            result["repair_issues"][0]["affected_plan_ids"],
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            responses = Path(temporary) / "responses.jsonl"
+            append_plan_response(
+                plan_id=plan["plan_id"],
+                plan_version=plan["plan_version"],
+                response="accepted",
+                ledger_path=responses,
+            )
+            replayed = overlay_plan_responses(result, response_ledger=responses)
+        self.assertNotEqual(
+            replayed["active_plans"][0]["user_response_status"],
+            "accepted",
+        )
+
+    def test_morning_recheck_never_leaves_core_health_blocked_with_ready_gate(
+        self,
+    ) -> None:
+        workspace = self._morning_recheck_workspace(
+            source_time="2026-08-07 15:00",
+            source_status="blocked",
+        )
+
+        result = restage_workspace(
+            workspace,
+            run_stage="morning_recheck",
+            now=datetime(2026, 8, 10, 8, 30),
+        )
+
+        core_health = [
+            item
+            for item in result["data_health"]
+            if item["id"]
+            in {"risk_watch", "market_pulse", "market_levels", "style_rotation"}
+        ]
+        self.assertTrue(any(item["status"] != "ready" for item in core_health))
+        self.assertNotEqual(result["market_gate"]["status"], "ready")
 
 
 if __name__ == "__main__":

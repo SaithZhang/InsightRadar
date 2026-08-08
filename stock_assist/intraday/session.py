@@ -40,6 +40,20 @@ class TradingSessionResolution:
         return payload
 
 
+def latest_completed_trade_date(
+    now: datetime,
+    calendar: Iterable[object],
+) -> date | None:
+    """Return the latest completed exchange session from an explicit calendar."""
+
+    calendar_dates = _calendar_dates(calendar)
+    today = now.date()
+    if today in calendar_dates and now.time() >= time(15, 0):
+        return today
+    prior = [day for day in calendar_dates if day < today]
+    return prior[-1] if prior else None
+
+
 def resolve_trading_session(
     now: datetime,
     *,
@@ -76,14 +90,9 @@ def resolve_trading_session(
             calendar_dates = (probed,)
             source = "bounded completed A-share K-line date probe"
             gaps.append("交易日历与本地档案不可用；当前日期来自有界真实K线探测。")
-    eligible = tuple(day for day in calendar_dates if day <= today)
     is_exchange_day = today in calendar_dates
     current_trade_date = today if is_exchange_day else None
-    if is_exchange_day and now.time() >= time(15, 0):
-        latest_completed = today
-    else:
-        prior = [day for day in eligible if day < today]
-        latest_completed = prior[-1] if prior else None
+    latest_completed = latest_completed_trade_date(now, calendar_dates)
     if is_exchange_day:
         runtime_trade_date = today
         session_mode = (

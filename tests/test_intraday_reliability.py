@@ -54,7 +54,10 @@ from stock_assist.intraday.polling import (
     run_intraday_service,
 )
 from stock_assist.intraday.rules import AccountRiskEngine, OpportunityRadarEngine
-from stock_assist.intraday.session import resolve_trading_session
+from stock_assist.intraday.session import (
+    latest_completed_trade_date,
+    resolve_trading_session,
+)
 from stock_assist.portfolio_import_server import (
     _intraday_workspace_views,
     _normalize_intraday_overlay,
@@ -213,6 +216,14 @@ class IntradayReliabilityTests(unittest.TestCase):
         self.assertEqual(resolution.runtime_trade_date, date(2026, 7, 31))
         self.assertEqual(resolution.session_mode, "non_trading_day")
         self.assertEqual(resolution.trade_authority, "none")
+
+    def test_monday_premarket_uses_friday_from_explicit_exchange_calendar(self) -> None:
+        result = latest_completed_trade_date(
+            datetime(2026, 8, 10, 8, 30),
+            [20260807, 20260810],
+        )
+
+        self.assertEqual(result, date(2026, 8, 7))
 
     def test_non_trading_day_runtime_is_historical_not_fake_live(self) -> None:
         class FakeClient:
