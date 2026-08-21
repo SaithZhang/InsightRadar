@@ -67,6 +67,12 @@ Before writing code:
 - Use two-phase extraction for separately deployed components: verify the standalone copy and external ownership before deleting the original rollback path.
 - Architecture/module changes must refresh `configs/architecture.json`, regenerate `docs/architecture.html`, and pass `scripts/validate_project_memory.py`.
 
+## Web / Codex Handoffs
+
+- For Notion, Web, Shared State, or cross-lane handoff work, read `docs/memory/web-codex-collaboration.md`.
+- A non-owner must not overwrite owner state; emit a Patch Proposal or State Proposal instead.
+- Load only the Notion pages required for the task; do not fetch the full control plane by default.
+
 ## Public Repository Safety
 
 - Public Git history starts from the sanitized V3 baseline. Never push the local legacy/private history.

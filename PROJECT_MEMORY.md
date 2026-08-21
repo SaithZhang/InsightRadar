@@ -37,10 +37,17 @@ This bounded index is the always-on entry point for durable project context. Rea
       "generated": []
     },
     {
+      "id": "web-codex-collaboration",
+      "path": "docs/memory/web-codex-collaboration.md",
+      "triggers": ["Notion", "Web Lane", "Codex Lane", "Shared State", "handoff", "Single Writer", "Patch Proposal", "conflict"],
+      "sources": ["AGENTS.md", "CURRENT_STATE.md", "docs/memory/decisions/0017-web-codex-single-writer-handoff.md"],
+      "generated": []
+    },
+    {
       "id": "decision-log",
       "path": "docs/memory/decision-log.md",
       "triggers": ["why", "decision", "tradeoff", "replace", "deprecate", "design rationale"],
-      "sources": ["AGENTS.md", "docs/DECISION_LOG.md", "docs/DATA_BOUNDARIES.md", "docs/harness.md", "docs/memory/decisions/0001-bounded-repository-memory.md", "docs/memory/decisions/0002-modular-monolith-product-rings.md", "docs/memory/decisions/0003-extract-discipline-reminder-and-freeze-expansion.md", "docs/memory/decisions/0004-canonical-insightradar-workspace.md", "docs/memory/decisions/0005-iwencai-cross-platform-market-data-candidate.md", "docs/memory/decisions/0006-local-first-core-value-validation.md", "docs/memory/decisions/0007-evidence-bound-discipline-contracts.md", "docs/memory/decisions/0008-guarded-iwencai-futures-basis.md", "docs/memory/decisions/0009-personal-investment-decision-intelligence.md", "docs/memory/decisions/0010-v3-pilot-scope-frozen.md", "docs/memory/decisions/0011-public-v3-baseline.md", "docs/memory/decisions/0012-intraday-risk-opportunity-pivot.md", "docs/memory/decisions/0013-deterministic-portfolio-beta.md", "docs/memory/decisions/0014-separate-current-and-historical-position-context.md", "docs/memory/decisions/0015-open-sequential-v3-1-iteration.md", "docs/memory/decisions/0016-separate-management-consent-from-data-quality.md"],
+      "sources": ["AGENTS.md", "docs/DECISION_LOG.md", "docs/DATA_BOUNDARIES.md", "docs/harness.md", "docs/memory/decisions/0001-bounded-repository-memory.md", "docs/memory/decisions/0002-modular-monolith-product-rings.md", "docs/memory/decisions/0003-extract-discipline-reminder-and-freeze-expansion.md", "docs/memory/decisions/0004-canonical-insightradar-workspace.md", "docs/memory/decisions/0005-iwencai-cross-platform-market-data-candidate.md", "docs/memory/decisions/0006-local-first-core-value-validation.md", "docs/memory/decisions/0007-evidence-bound-discipline-contracts.md", "docs/memory/decisions/0008-guarded-iwencai-futures-basis.md", "docs/memory/decisions/0009-personal-investment-decision-intelligence.md", "docs/memory/decisions/0010-v3-pilot-scope-frozen.md", "docs/memory/decisions/0011-public-v3-baseline.md", "docs/memory/decisions/0012-intraday-risk-opportunity-pivot.md", "docs/memory/decisions/0013-deterministic-portfolio-beta.md", "docs/memory/decisions/0014-separate-current-and-historical-position-context.md", "docs/memory/decisions/0015-open-sequential-v3-1-iteration.md", "docs/memory/decisions/0016-separate-management-consent-from-data-quality.md", "docs/memory/decisions/0017-web-codex-single-writer-handoff.md"],
       "generated": []
     }
   ]
@@ -54,6 +61,7 @@ This bounded index is the always-on entry point for durable project context. Rea
 | [Architecture](docs/memory/architecture.md) | Adding/changing modules, commands, data sources, workflows, reports, or diagrams | `stock_assist/product.py`, `configs/architecture.json`, `docs/architecture.html` |
 | [Product state](docs/memory/product-state.md) | Resuming work, choosing the next feature, or checking current capability status | `feature_list.json`, `progress.md`, `session-handoff.md` |
 | [Product direction](docs/product-charter.md) | Changing product scope, goals, module rings, extraction boundaries, or roadmap order | `CURRENT_STATE.md`, `stock_assist/product.py`, `configs/architecture.json` |
+| [Web-Codex collaboration](docs/memory/web-codex-collaboration.md) | Notion, Web/Shared State, cross-lane handoff, ownership, proposals, or conflicts | ADR-0017 and the linked Notion control-plane pages |
 | [Decision log](docs/memory/decision-log.md) | A prior design choice or constraint affects a new change | Append-only durable decisions and links to evidence |
 
 ## Write Protocol
