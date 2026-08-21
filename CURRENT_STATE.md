@@ -5,7 +5,7 @@ This is the bounded startup snapshot. Read it after `PROJECT_MEMORY.md`; load ch
 <!-- current-state-manifest
 {
   "schema_version": "insight-radar-current-state/v1",
-  "updated_at": "2026-08-08",
+  "updated_at": "2026-08-21",
   "next_feature_id": "feat-058",
   "product_charter": "docs/product-charter.md",
   "architecture_source": "configs/architecture.json",
@@ -30,7 +30,8 @@ The proof goal remains local Core value through real trials, controlled replay, 
 - Lab: factor research, universe lineage, neutralization, and model promotion gates. Lab output cannot enter core decisions without a validated champion.
 - Satellite: no in-repository satellite is active; the former Windows reminder now has independent ownership at `D:\work\reminder`.
 - Optional extension: crypto/RWA monitoring and public-viewpoint collectors. They must not set the A-share core roadmap.
-- Governance: project memory, product map, architecture topology, feature state, verification, and evolution backlog.
+- Governance: Notion defines Web/Codex/Shared Zone Single Writer and canonical [09｜Shared Handoff｜Web ↔ Codex](https://app.notion.com/p/3c344bc3d1cd813687a8eafb9f363cbf); repo recovery uses `docs/memory/web-codex-collaboration.md`. Web Intraday Market Desk MCP differs from local `feat-059`. Installed `a-stock-data`/`wavecycle` are Codex evidence skills, not product dependencies or Trading Permission.
+- Notion engineering roadmap: DI-002 was corrected to `Done` on 2026-08-21 against merged commit `7b32bfd`; this records control-plane alignment, not a new implementation in this branch.
 
 The canonical boundary and extraction rules are in `docs/product-charter.md`. The live command graph is in `configs/architecture.json`; `docs/architecture.html` is generated from it.
 
@@ -54,6 +55,7 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 - `feat-058` is the owner-selected active V3.1 increment and is ready for final owner acceptance. The blocked-to-repair vertical chain is implemented and verified; stop here and do not start P1/P2 or another product increment.
 - `feat-059` remains available on `main`; local MCP does not imply ChatGPT Web reachability and no remote tunnel/deployment is admitted by this closure.
+- The uncommitted 2026-08-13 historical study remains local research and is not part of the merged or verified baseline.
 - `IR-002` P0 remains intact but its live calibration is parked for this bounded increment. When resumed, next evidence is multiple real 09:25/09:35/10:00 shadows, verified external point-time mapping, timing/false-escalation/missed-protection measurement, and notification admission. No notifications are authorized.
 - `feat-056` remains pending and the sole queued Harness experiment; no pilot or benchmark run has started.
 - `feat-057` is complete but remains an unpromoted diagnostic layer until adequate independent events, held-out outcomes, stable thresholds, primary-source event evidence, and reliable source coverage exist.
