@@ -1,12 +1,12 @@
 # InsightRadar Current State
 
-This is the bounded startup snapshot. Read it after `PROJECT_MEMORY.md`; load chronological history only when a referenced feature or decision requires it. Keep this file under 120 lines and 16 KB.
+Bounded startup snapshot. Read after PROJECT_MEMORY.md; load only referenced history. Limit: 120 lines / 16 KB.
 
 <!-- current-state-manifest
 {
   "schema_version": "insight-radar-current-state/v1",
-  "updated_at": "2026-08-21",
-  "next_feature_id": "feat-058",
+  "updated_at": "2026-10-26",
+  "next_feature_id": "feat-060",
   "product_charter": "docs/product-charter.md",
   "architecture_source": "configs/architecture.json",
   "decision_index": "docs/memory/decision-log.md"
@@ -21,11 +21,12 @@ The proof goal remains local Core value through real trials, controlled replay, 
 
 ## Current Product Shape
 
+- Release check 2026-10-26: 481 tests pass, 1 live skip; startup/HTTP passed. Use `InsightRadar.command`.
 - Version: **InsightRadar V3.1 — Incremental Development** under ADR-0015. V3.0 is historical; its incomplete ten-run pilot is not reported as passed.
 - Direction: **Intraday Core pivot under ADR-0012**. Four routes and the rule/user/AI/trade boundary remain V3.1 guardrails.
 - Routes: `today` 今日工作台, `portfolio` 组合风险, `lookup` 标的研究, and `review` 复盘账本. Today is a conclusion layer, not a fifth route.
-- Canonical workspace: `D:\work\InsightRadar`. All new code, local data, reports, harness state, and Codex project context belong here.
-- Public release: prepare a fresh sanitized GitHub baseline under ADR-0011; legacy history and private runtime data remain local.
+- Primary platform: **macOS**, owner-authorized 2026-10-22 under ADR-0018. Current checkout: `/Users/zhangjiawen/work/market/insightradar`; use `InsightRadar.command` or `scripts/macos.sh start`. Windows remains compatible.
+- Public history uses the sanitized baseline under ADR-0011; private data stays local.
 - Core: portfolio decisions, A-share market radar, research/filing evidence, and the outcome-calibration loop.
 - Lab: factor research, universe lineage, neutralization, and model promotion gates. Lab output cannot enter core decisions without a validated champion.
 - Satellite: no in-repository satellite is active; the former Windows reminder now has independent ownership at `D:\work\reminder`.
@@ -37,9 +38,11 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Verified Baseline
 
+- feat-060 overnight slice passed Mac acceptance: calendar window, diversified sampling, coverage/audit and run-scoped citations. 96 tests, three frozen archive replays, one real model/UI run and 1440/390 UI passed; see 2026-10-25 progress.md. Full coverage/primary-source accuracy remain unverified. Parent stays in_progress for owner trial; stop here.
+
 - `feat-059` is on `main`: four read-only MCP tools expose Eastmoney-primary/Tencent whole-series-fallback tape and trade review with explicit provenance, no-lookahead, no cross-source row merge, and no trade authority.
 - `IR-001` passed: 36,060 private minute bars, 25 auction snapshots, 255 no-lookahead snapshots, and 15 transitions reproduced the bounded case. Private results beat full hold on profit protection; account values stay local and improvement versus actual remains unknown.
-- `IR-002` P0 is weekend-usable but still uncalibrated: the page opens before bounded provider work; explicit domestic/foreign/local routes, real exchange/runtime/display dates, latest-completed historical review, a pre-registered restart-safe scheduler, and a terminable sub-60-second refresh are live. Runtime v2 remains `shadow_only`; per-component freshness and unknowns fail closed. Confirmed executions and real re-entry-failure observations retain per-sell lineage under single-flight ledger writes. No notification or trade authority is admitted.
+- IR-002 P0 is weekend-usable but uncalibrated: historical-review freshness, bounded refresh, restart-safe scheduling and per-sell lineage are preserved. Runtime remains shadow_only; no notification or trade authority. Full prior evidence is in progress.md.
 
 - Older passed Core and governance increments remain recorded in `feature_list.json` and scoped memory topics; this bounded snapshot does not duplicate their full evidence.
 - `feat-048/050` passed: the next-session guide consumes market levels and unbacktested gauges; the bear-bull score is a persisted close-finalized state machine with rule/veto ledger, hysteresis, daily ±1 cap, and fail-closed market-level authority.
@@ -53,7 +56,9 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Next Feature
 
-- `feat-058` is the owner-selected active V3.1 increment and is ready for final owner acceptance. The blocked-to-repair vertical chain is implemented and verified; stop here and do not start P1/P2 or another product increment.
+- 2026-10-24 owner reprioritized feat-060: implement a persistent research/opportunity UI in the existing application. feat-058 owner acceptance remains parked; this does not claim it passed. Acceptance and boundaries are recorded in feature_list.json.
+
+- feat-058 remains locally verified and pending owner acceptance; it is parked during the explicitly selected feat-060.
 - `feat-059` remains available on `main`; local MCP does not imply ChatGPT Web reachability and no remote tunnel/deployment is admitted by this closure.
 - The uncommitted 2026-08-13 historical study remains local research and is not part of the merged or verified baseline.
 - `IR-002` P0 remains intact but its live calibration is parked for this bounded increment. When resumed, next evidence is multiple real 09:25/09:35/10:00 shadows, verified external point-time mapping, timing/false-escalation/missed-protection measurement, and notification admission. No notifications are authorized.
@@ -75,14 +80,14 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 - The live poller has no open-session IR-002 calibration sample yet. The 2026-08-01 Saturday smoke resolved the real 2026-07-31 session, loaded 90/90 archived symbols, and exposed historical-only authority; this proves weekend usability, not live timing, profitability, or notification admission.
 - The workbench can append user-confirmed sell/re-entry evidence and gate re-entry, but no real execution has been supplied; absence remains unknown rather than “no sale”.
 
-- Codex config and the weekday brief target `D:\work\InsightRadar`. The old `%USERPROFILE%\Documents\stock-assist` root remains empty but process-locked; do not force-delete it.
-- The project `.venv` and AmazingData connectivity are restored. Private beta/risk reconciliation is complete; historical entry context limits Review only. The latest private P0 verification report matches the current portfolio, uses the explicit calendar's 2026-08-07 completed session for Saturday, and leaves no stale/blocked core source. Exact portfolio counts and values remain local.
+- Legacy Windows scheduled jobs are historical and were not migrated to this Mac. No login daemon or recurring job is installed by the Mac launcher.
+- Windows provider acceptance remains historical. Mac now has private account data and the local research UI; source gaps and account freshness are shown separately.
 - The weekend `market-pulse` now contains eight dated IF/IH/IC/IM 2608/2609 close-basis rows, while Eastmoney index/ETF snapshots still closed connections and realtime AmazingData remains session-gated. Derivative context is valid through 2026-07-17, but the report is still a partial after-close diagnostic, not live direction.
 - The four-ETF state-team proxy is current through 2026-07-17, but 2015-era CSF/Huijin direct stock holdings and ETF in-kind redemption destinations remain unverified; a full direct-holding check must wait for the 2026 interim-report disclosure set.
 - Galaxy/AmazingData is not a universal ARM macOS/Linux runtime. Iwencai is now a guarded local Core source for fixed-anchor breadth and completed-close futures basis under ADR-0008, but cross-platform execution, multi-day reconciliation, latency/quota measurement, and supply-chain gates remain open; do not describe it as cloud/universal production readiness.
 - Point-in-time industry/free-float exposure coverage and neutralization are incomplete.
 - Signal-outcome samples are still maturing; product-quality claims require visible sample counts and benchmark-relative results. One historical plan is quarantined from Review because its 20-day threshold and the current broker price use incompatible bases.
-- Cloud deployment, production Docker work, WSL/macOS migration, and new clients are deferred by ADR-0006 until Core reliability and outcome-value gates pass. The canonical product continues locally on Windows; portability remains a later option rather than the active roadmap.
+- ADR-0018 supersedes the Mac deferral in ADR-0006. Cloud deployment, production containerization, WSL migration and new clients remain parked; Mac uses the existing local Python/HTML application.
 - Portfolio attribution and event-to-position alerting remain roadmap work.
 - A-share turnover concentration currently has only as-of snapshots, not a mature daily percentile history. Futu community feeds provide timestamped text but no interaction fields; long-horizon narrative/FOMO ratios must accumulate point-in-time samples before they can influence Core risk scores.
 - The market-regime state machine is transparent and persisted but still `diagnostic_unbacktested`; rule thresholds are not calibrated against forward returns, drawdown, or regime persistence. Crowding has fewer than 20 archived daily observations and is not a historical percentile. Missing or conflicting management context is now a pending personalization state rather than a data blocker; invalid account/market evidence remains fail closed. Unknown historical entry context is a Review gap. The service never guesses beta from ticker codes.
@@ -93,7 +98,7 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Version Discipline and Parked Expansion
 
-- V3.1 advances one admitted increment at a time; the owner explicitly returned to the `feat-058` repair closure on 2026-08-08. It is ready for acceptance, `IR-002` calibration is parked without losing state, and no later increment is admitted. V3.2 and parallel redesign remain unauthorized.
+- V3.1 advances one admitted increment at a time; the owner explicitly returned to the `feat-058` repair closure on 2026-08-08. The 2026-10-22 Mac adaptation is an explicitly admitted feat-058 slice; `IR-002` calibration stays parked, and later increments remain parked except the owner-authorized feat-060 overnight slice (2026-10-25). V3.2 and parallel redesign remain unauthorized.
 - Preserve the four-route information architecture, modular monolith, local-only runtime, and human authority boundary. ADR-0012 authorizes intraday Core behavior inside those routes; it does not authorize a fifth page, cloud deployment, or automatic execution.
 - Windows reminder: extraction and external cutover complete; it is no longer an InsightRadar repository component.
 - Factor Lab: keep available but park new development.

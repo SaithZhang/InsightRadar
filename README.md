@@ -6,7 +6,7 @@ InsightRadar 是面向个人投资者和资产出资人的独立 AI 风险官。
 
 短定义：**不是帮用户知道更多，而是帮助用户识别少数真正值得改变仓位的信息。**
 
-Canonical workspace: `D:\work\InsightRadar`. New code, local data, generated reports, and Codex automation context belong in this directory.
+主要开发与运行平台：**macOS**。当前工作区为 `/Users/zhangjiawen/work/market/insightradar`；启动脚本从自身位置定位项目，也可放在其他目录。Windows 启动方式继续保留。
 
 ## 版本基线文档
 
@@ -19,11 +19,39 @@ Canonical workspace: `D:\work\InsightRadar`. New code, local data, generated rep
 
 V3.1 已获准按增量逐项开发；一次只推进一个已准入增量，未验证能力不得写成已实现。不得新增第五个一级菜单、用原型数据冒充真实能力、自动交易，或让 AI/实名观点来源覆盖规则和人工确认。
 
+## Mac 一键使用（主要入口）
+
+双击根目录 **`InsightRadar.command`**，打开 [本地工作台](http://127.0.0.1:8765/)。第一次启动会在项目 `.venv` 中安装依赖，不修改系统 Python，也不覆盖已有密钥。需要 Python 3.10+ 或已安装的 uv。
+
+首页提供今日工作台、组合风险、标的研究、复盘账本四项任务。点击“隔夜机会发现”，系统按交易日历读取最近已收盘交易日15:00之后的已归档新闻、NGA、雪球片段，生成待核验候选，不预设方向；交易日盘中点击时，材料截止到09:25，更早两天的材料单列为历史背景。也可以“指定研究”。发现复用相邻 `InsightRadar-Control` 的 Pilot 模型配置，单次最多1次模型请求、90秒、本地估算额度0.10美元；未找到原项目、日历不可确认或没有可用证据时明确停止。只读已有归档，不自动启动采集，无后台定时任务。
+
+研究卡可检索现有归档、调用现有 Agent、补充来源与反证、修订条件、冻结观察版及记录复盘。数据保存在忽略Git的 `data/research-board.json`；原始发现输入和模型返回保存在 `data/research-discovery/`，失败或中断不自动重发。未知代码映射保持待核验，AI不自动更新价格条件或解除缺口。原有分析工作台保留于 `/report`；持仓导入入口不变，仍需预览和确认。研究上下文与账户导入版本分开显示，不自动覆盖账户。JSON、Markdown、HTML 报告继续作为原有分析的审计产物。
+
+当前实现是人工触发的归档发现与持续研究，尚未接实时行情扫描、自动9:25冻结、自动订单或已验证盈利策略。历史案例与自主发现明确分开；点击刷新状态只重读已保存内容，不刷新行情。
+
+```bash
+./scripts/macos.sh setup          # 只安装项目环境
+./scripts/macos.sh start          # 启动并打开工作台
+./scripts/macos.sh start --no-open # 只启动服务
+./scripts/macos.sh check          # 项目记忆、编译与真实盘后产物检查
+```
+
+保持启动窗口打开；按 Control-C 或在页面点击退出停止。重复启动会复用同一工作区的服务。端口被其他程序占用时会明确报错，不会结束其他进程；可用 `INSIGHTRADAR_PORT=8767 ./scripts/macos.sh start` 指定空闲端口。未安装登录自启或后台计划任务。
+
+**数据与密钥边界：** 基础工作台不需要 AI API key。已有环境变量、项目 `.env` 与仓库外密钥文件按原有优先级使用，启动器不复制、改写或自动切换供应商。AmazingData/tgw 是可选专用 SDK，Mac 基础安装不包含它们，也不代表已通过真实账户行情验收。公开源已有的降级规则仍保留，缺失数据不会补成零。可选功能按需安装：
+
+```bash
+uv pip install --python .venv/bin/python -e '.[mcp]'        # 已有只读 MCP
+uv pip install --python .venv/bin/python -e '.[collectors]' # 可选采集 CLI
+```
+
+在受 SDK 支持的 Windows 环境安装 `.[amazingdata]`，或沿用下文的 vendor wheel。无需为了打开工作台安装这些扩展。
+
 ## Windows 一键使用
 
 不需要先打开 PowerShell。直接在项目根目录双击：
 
-- `InsightRadar.cmd`：启动本地应用并打开持仓导入页面；页面内可粘贴、预览、批准保存、查看自动 beta 计算进度、打开最新报告和关闭应用；
+- `InsightRadar.cmd`：启动本地应用并打开工作台；页面内可粘贴、预览、批准保存、查看自动 beta 计算进度、打开最新报告和关闭应用；
 - `生成盘后报告.cmd`：生成并自动打开最新盘后报告；
 - `导入持仓.cmd`：与主入口相同，打开仅监听 `127.0.0.1` 的本地持仓导入页面；
 - `打开最新报告.cmd`：不刷新数据，直接打开最近一次盘后报告。
@@ -75,7 +103,7 @@ Windows 个人交易纪律提醒器已完成两阶段拆分并由独立项目 `D
 
 ## 数据源连通性检查
 
-先安装 SDK wheel：
+仅在受支持的 Windows 环境使用 AmazingData 时，安装 SDK wheel：
 
 ```powershell
 python -m venv .venv
@@ -317,6 +345,8 @@ InsightRadar 把文件分成四类：
 - `data/portfolio_context.json`: private local position context written by the loopback Portfolio UI. The system generates a deterministic management proposal first; users adopt, adjust, or leave it uncertain without editing JSON. The file retains compatible `current_risk_line` / `review_status` fields plus confirmation/source/version metadata. User confirmation affects personalization only and cannot clear an account or market-data quarantine. Unknown entry history stays explicit and limits Review quality without blocking base analysis.
 
 ## 开发验证
+
+Mac 使用 `.venv/bin/python`；标准检查为 `./init.sh`，回归测试为 `.venv/bin/python -m unittest discover -s tests -v`。完整回归需先安装 `.[mcp,lab]`（含现有因子计算所需 SciPy）。以下保留 Windows 等价命令。
 
 安装项目依赖并检查环境：
 

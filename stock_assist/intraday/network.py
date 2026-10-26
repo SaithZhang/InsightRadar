@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import os
 import re
+import ssl
 from typing import Literal
-from urllib.request import OpenerDirector, ProxyHandler, build_opener
+from urllib.request import HTTPSHandler, OpenerDirector, ProxyHandler, build_opener
 
 
 NetworkRegion = Literal["domestic", "foreign", "local", "unknown"]
@@ -119,10 +121,20 @@ def provider_policy(provider_id: str) -> ProviderNetworkPolicy:
 def build_urllib_opener(policy: ProviderNetworkPolicy) -> OpenerDirector:
     """Create a provider-owned urllib opener without mutating process env."""
 
+    context = ssl.create_default_context()
+    if not context.get_ca_certs() and not any(
+        os.environ.get(key) for key in ("SSL_CERT_FILE", "SSL_CERT_DIR")
+    ):
+        # Some macOS Python installations have no default CA bundle. Reuse the
+        # bundle already shipped with requests, keeping certificate/host checks.
+        from requests.certs import where
+
+        context.load_verify_locations(cafile=where())
+    https = HTTPSHandler(context=context)
     if policy.proxy_policy in {"direct", "local_only"}:
-        opener = build_opener(ProxyHandler({}))
+        opener = build_opener(ProxyHandler({}), https)
     else:
-        opener = build_opener(ProxyHandler())
+        opener = build_opener(ProxyHandler(), https)
     opener.insightradar_proxy_policy = policy.proxy_policy
     return opener
 

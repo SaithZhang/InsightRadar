@@ -36,6 +36,15 @@ def _document(workspace: Mapping[str, object]) -> str:
     positions = _dict_rows(workspace.get("portfolio_positions"))
     plans = _today_plans(workspace)
     source_time = _latest_source_time(workspace)
+    onboarding = bool(workspace.get("onboarding")) or (
+        _mapping(workspace.get("portfolio_summary")).get("holding_count") == 0
+        and not positions and not plans
+        and not _mapping(workspace.get("outcome_summary")).get("tracked_signals")
+        and not workspace.get("user_responses") and not workspace.get("plan_history")
+    )
+    pages = _onboarding_views(bool(workspace.get("portfolio_saved"))) if onboarding else (
+        _today(workspace) + _portfolio(workspace) + _research(workspace) + _review(workspace)
+    )
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -45,35 +54,33 @@ def _document(workspace: Mapping[str, object]) -> str:
   <title>{escape(PRODUCT_NAME)} V3 — A股决策情报闭环</title>
   <style>{_css()}</style>
 </head>
-<body>
+<body class="{'onboarding' if onboarding else 'workspace'}">
   <div class="app">
     <aside class="sidebar">
-      <div class="brand"><span class="brand-mark">IR</span><div>{escape(PRODUCT_NAME)}<small>Rule-first decision intelligence</small></div></div>
+      <div class="brand"><span class="brand-mark">IR</span><div>{escape(PRODUCT_NAME)}<small>看清风险 · 留下依据</small></div></div>
       <nav class="nav" aria-label="主要任务">
         {_nav("today", "今日工作台", str(len(plans)), True)}
-        {_nav("portfolio", "组合风险", f"{len(positions)} 持仓")}
+        {_nav("portfolio", "组合风险", "待导入" if onboarding and not workspace.get("portfolio_saved") else "待分析" if onboarding else f"{len(positions)} 持仓")}
         {_nav("lookup", "标的研究", "证据优先")}
         {_nav("review", "复盘账本", "历史验证")}
       </nav>
-      <div class="sidebar-card"><strong>本地单用户工作台</strong>真实本地数据 · 无交易权<br>规则决定状态，AI只做解释。</div>
+      <div class="sidebar-card"><strong>你的本地工作台</strong>持仓与决策记录保存在本机。<br>所有交易由你自主执行。<button class="btn small ghost" id="shutdown" type="button">退出应用</button></div>
     </aside>
     <main class="content">
       <header class="topbar">
         <div><div id="pageEyebrow" class="eyebrow">After close · Weekend ready</div><h1 id="pageTitle">今日工作台</h1></div>
         <div class="top-actions">
           <span class="chip">数据截至 {escape(source_time)}</span>
-          <span class="chip" id="stage-label">{escape(_stage_label(workspace))}</span>
+          <span class="chip" id="stage-label">{escape("等待分析" if onboarding and workspace.get("portfolio_saved") else "应用已启动" if onboarding else _stage_label(workspace))}</span>
           <button class="btn small" id="morning-recheck" type="button">晨间增量复核</button>
           <button class="btn small" id="refresh-data" type="button">刷新异常数据</button>
           <button class="btn small ghost" id="refresh-all-data" type="button">全量刷新</button>
           <button class="btn small" id="data-status-open" type="button" aria-haspopup="dialog">数据状态</button>
+          <a class="btn small" href="/portfolio-import">导入持仓</a>
         </div>
       </header>
       <div class="stage">
-        {_today(workspace)}
-        {_portfolio(workspace)}
-        {_research(workspace)}
-        {_review(workspace)}
+        {pages}
       </div>
     </main>
   </div>
@@ -92,6 +99,57 @@ def _document(workspace: Mapping[str, object]) -> str:
   <script>{_script()}</script>
 </body>
 </html>"""
+
+
+def render_start_workspace(*, portfolio_saved: bool = False) -> str:
+    """Open the real application shell before any portfolio or report exists."""
+    return _document({
+        "onboarding": True,
+        "portfolio_saved": portfolio_saved,
+        "portfolio_summary": {"holding_count": 0},
+        "portfolio_positions": [],
+        "active_plans": [],
+        "plan_changes": [],
+        "data_health": [],
+        "runtime_status": "blocked",
+    })
+
+
+def _onboarding_views(portfolio_saved: bool) -> str:
+    title = "持仓已就位，<br>开始查看风险。" if portfolio_saved else "从你的持仓，<br>开始看清风险。"
+    action = (
+        '<button class="btn primary" data-start-refresh type="button">生成我的工作台 <span>↗</span></button>'
+        if portfolio_saved else
+        '<a class="btn primary" href="/portfolio-import">导入我的持仓 <span>↗</span></a>'
+    )
+    status = "持仓已保存 · 等待分析" if portfolio_saved else "首次使用 · 等待导入"
+    views = f"""
+<section class="view active" id="route-today" data-route-panel="today">
+  <div class="welcome-hero">
+    <div class="welcome-copy">
+      <span class="welcome-kicker"><i></i> {status}</span>
+      <h2>{title}</h2>
+      <p>把账户变化、需要关注的持仓和下一步计划，放在同一个工作台。每天只关注真正与你有关的事。</p>
+      <div class="welcome-actions">{action}<button class="btn ghost" data-view-link="portfolio" type="button">了解组合风险 →</button></div>
+      <small>数据保存在本机 · 导入前可预览 · 保存需要你确认</small>
+    </div>
+    <div class="welcome-orbit" aria-hidden="true"><div class="orbit-ring ring-one"></div><div class="orbit-ring ring-two"></div><div class="orbit-core">IR<small>你的组合</small></div><span class="orbit-label label-risk">组合风险</span><span class="orbit-label label-evidence">事实与依据</span><span class="orbit-label label-review">决策与复盘</span><span class="orbit-dot"></span></div>
+  </div>
+  <div class="welcome-section-heading"><h3>准备好你的每日决策空间</h3><span>3 步开始</span></div>
+  <div class="setup-steps">
+    <article class="setup-step"><span class="step-number">01</span><span class="step-state">{'已保存' if portfolio_saved else '从这里开始'}</span><h3>带入真实持仓</h3><p>粘贴券商持仓表，核对预览后保存。缺少的字段会明确标出。</p><a href="/portfolio-import">{'更新持仓' if portfolio_saved else '去导入'} →</a></article>
+    <article class="setup-step"><span class="step-number">02</span><span class="step-state muted">等待数据</span><h3>先看风险，再看机会</h3><p>查看持仓集中度、数据缺口与条件计划。证据不足时保持待核实。</p><button data-view-link="portfolio" type="button">查看组合风险 →</button></article>
+    <article class="setup-step"><span class="step-number">03</span><span class="step-state muted">逐步积累</span><h3>让每次判断可回看</h3><p>保留计划、你的反馈和后续结果，让复盘有依据可查。</p><button data-view-link="review" type="button">打开复盘账本 →</button></article>
+  </div>
+  <div class="welcome-note"><span class="note-mark">i</span><p>当前尚无可用分析。导入真实持仓并完成数据刷新后，这里会显示你的账户变化和待处理计划。</p><span>本机保存 · 人工决策</span></div>
+</section>"""
+    for route, number, heading, copy, labels in (
+        ("portfolio", "01", "你的风险，从真实持仓开始", "导入后查看持仓、仓位与风险证据。缺失数据会保留为待核实，不会被当成零风险。", ("持仓与仓位", "风险与数据缺口", "条件计划")),
+        ("lookup", "02", "把结论和依据放在一起", "工作台生成后，可围绕持仓查看已有研究线索、来源和反证。更完整的研究编排尚未接入。", ("来源与时间", "支持与反证", "仍需核实")),
+        ("review", "03", "给每次决策，留一份可回看的记录", "计划版本、你的反馈与后续表现会在这里逐步积累。尚无记录时，不展示收益或命中率。", ("计划版本", "人工反馈", "后续表现")),
+    ):
+        views += f"""<section class="view" id="route-{route}" data-route-panel="{route}"><div class="setup-route"><span class="welcome-kicker">{number} / 你的决策空间</span><h2>{heading}</h2><p>{copy}</p>{action}<div class="setup-capabilities">{''.join(f'<div><span>—</span><strong>{label}</strong><small>等待真实数据</small></div>' for label in labels)}</div><a class="welcome-back" href="#today">返回今日工作台 →</a></div></section>"""
+    return views
 
 
 def _browser_workspace_json(workspace: Mapping[str, object]) -> str:
@@ -1978,7 +2036,7 @@ window.addEventListener("unhandledrejection", event => {
 });
 const routes = new Set(["today", "portfolio", "lookup", "review"]);
 const titles = {
-  today:["After close · Weekend ready","今日工作台"],
+  today:["你的每日决策空间","今日工作台"],
   portfolio:["Portfolio Risk","组合风险"],
   lookup:["Evidence before conclusion","标的研究"],
   review:["Plan · Attribution · Quality","复盘账本"],
@@ -2233,6 +2291,7 @@ async function pollRefresh(runId, repairContainer=null) {
       if (repairFeedback) repairFeedback.textContent = `重新检查未完成：${job.failed_step || job.current_step || "服务中断"}${failureDetail ? ` · ${failureDetail}` : ""}。问题仍保持 blocked。`;
       document.getElementById("refresh-data").disabled = false;
       document.getElementById("refresh-all-data").disabled = false;
+      document.querySelectorAll("[data-start-refresh]").forEach(button => { button.disabled = false; });
     } else {
       window.setTimeout(() => pollRefresh(runId), 900);
     }
@@ -2244,12 +2303,14 @@ async function pollRefresh(runId, repairContainer=null) {
     if (repairFeedback) repairFeedback.textContent = `读取重新检查进度失败：${error.message}。问题仍保持 blocked。`;
     document.getElementById("refresh-data").disabled = false;
     document.getElementById("refresh-all-data").disabled = false;
+    document.querySelectorAll("[data-start-refresh]").forEach(button => { button.disabled = false; });
   }
 }
 async function startRefresh(mode) {
   const buttons = [
     document.getElementById("refresh-data"),
     document.getElementById("refresh-all-data"),
+    ...document.querySelectorAll("[data-start-refresh]"),
   ];
   buttons.forEach(button => { button.disabled = true; });
   try {
@@ -2263,11 +2324,20 @@ async function startRefresh(mode) {
 }
 document.getElementById("refresh-data").addEventListener("click", () => startRefresh("stale"));
 document.getElementById("refresh-all-data").addEventListener("click", () => startRefresh("full"));
+document.querySelectorAll("[data-start-refresh]").forEach(button => button.addEventListener("click", () => startRefresh("full")));
+document.getElementById("shutdown").addEventListener("click", async () => {
+  try {
+    await post("/api/shutdown", {});
+    document.querySelector(".content").innerHTML = '<div class="setup-route"><h2>工作台已关闭</h2><p>下次双击 InsightRadar 即可继续。</p></div>';
+    document.getElementById("shutdown").disabled = true;
+  } catch (error) { showToast(error.message, "error"); }
+});
 if (token && token !== "__LOCAL_SESSION_TOKEN__") {
   getJson("/api/refresh/active").then(job => {
     if (["pending","running"].includes(job.status)) {
       document.getElementById("refresh-data").disabled = true;
       document.getElementById("refresh-all-data").disabled = true;
+      document.querySelectorAll("[data-start-refresh]").forEach(button => { button.disabled = true; });
       pollRefresh(job.run_id);
     } else if (["failed","interrupted"].includes(job.status)) {
       pollRefresh(job.run_id);
@@ -2456,7 +2526,7 @@ document.querySelectorAll("[data-review-window]").forEach(button => button.addEv
 def _css() -> str:
     return """
 :root{color-scheme:dark;--bg:#071522;--sidebar:#06111c;--panel:#091a28;--panel2:#0d2030;--panel3:#10263a;--line:#294055;--line2:#3d586f;--text:#f3f0e8;--muted:#91a4b5;--blue:#69a9e9;--blue2:#a9d2f7;--amber:#e6b653;--amber2:#f1c56f;--danger:#ff6262;--good:#25c89a;--violet:#c7b9ed;--shadow:none;--radius:9px}
-*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font:14px/1.55 "Segoe UI","Noto Sans SC","Microsoft YaHei",sans-serif}body{background:var(--bg);overflow-x:hidden;-webkit-font-smoothing:antialiased}button,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.48;cursor:not-allowed}a{color:inherit}button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI","Noto Sans SC","Microsoft YaHei",sans-serif}body{background:var(--bg);overflow-x:hidden;-webkit-font-smoothing:antialiased}button,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.48;cursor:not-allowed}a{color:inherit}button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .app{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:100vh}.sidebar{position:sticky;top:0;height:100vh;padding:30px 20px 24px;border-right:1px solid var(--line);background:var(--sidebar);z-index:30}.brand{display:flex;align-items:center;gap:11px;padding:0 8px 28px;font-size:19px;font-weight:820}.brand-mark{display:grid;place-items:center;width:36px;height:36px;border:1px solid #49657d;border-radius:8px;color:var(--blue2);background:#0a1b29}.brand small{display:block;color:var(--muted);font-size:9px;font-weight:650;letter-spacing:.08em;text-transform:uppercase}.nav{display:grid;gap:8px}.nav button{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:58px;padding:0 15px;border:0;border-radius:9px;color:var(--muted);font-size:16px;text-align:left;background:transparent}.nav button:hover{color:var(--text);background:#0c1b29}.nav button.active{color:var(--text);background:#1b344b}.nav button small{font-size:10px;color:#6f8496}.nav .count{min-width:23px;padding:1px 6px;border:1px solid var(--line);border-radius:999px;text-align:center}.sidebar-card{position:absolute;right:20px;bottom:18px;left:20px;padding:12px;border:1px solid var(--line);border-radius:9px;color:var(--muted);font-size:11px;background:#081725}.sidebar-card strong{display:block;margin-bottom:5px;color:var(--text)}
 .content{min-width:0;padding:27px 32px 80px}.topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;max-width:1340px;margin:0 auto 14px}.eyebrow{color:var(--blue);font-size:10px;font-weight:820;letter-spacing:.14em;text-transform:uppercase}h1{margin:3px 0 0;font-size:clamp(28px,3vw,43px);line-height:1.15;letter-spacing:-.04em}h2,h3,p{margin-top:0}.top-actions,.inline,.data-state,.legend,.evidence-row,.card-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.chip,.tag,.source,.status{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:4px 9px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:10px;background:#0a1a28}.source.rule,.source.ready{color:var(--blue2);border-color:#315b7b;background:#0b2031}.source.ai,.source.pending{color:var(--amber2);border-color:#6d5b32;background:#211d15}.source.user{color:var(--good);border-color:#285e54;background:#0b2926}.source.research{color:var(--violet);border-color:#4f4968;background:#1d1b2a}.source.blocked{color:var(--danger);border-color:#6f3f45;background:#1d1820}
 .stage{max-width:1340px;margin:0 auto}.view{display:none}.view.active{display:block}.panel{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);box-shadow:var(--shadow)}.section{padding:18px 20px}.section-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:14px}.section-head h2,.section-head h3{margin:0}.section-head p{margin:3px 0 0;color:var(--muted);font-size:11px}.btn{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:8px 13px;border:1px solid var(--line2);border-radius:7px;color:var(--text);text-decoration:none;background:#0a1a28}.btn:hover{border-color:#5b7690;background:#10263a}.btn.primary{border-color:var(--text);color:#09131d;font-weight:820;background:var(--text)}.btn.ghost{border-color:transparent;color:var(--muted);background:transparent}.btn.danger{color:var(--danger);border-color:#6f3f45}.btn.small{min-height:31px;padding:6px 10px;font-size:11px}
@@ -2493,4 +2563,19 @@ def _css() -> str:
 @media(max-width:520px){.today-column-head{padding:15px;display:block}.today-column-head>.source,.today-column-head>.status{margin-top:10px}.today-column-head h2{font-size:20px}.account-pnl{padding:15px}.account-metric-grid{margin:10px 15px;grid-template-columns:1fr}.attention-stack,.decision-stack{padding:8px}.today-rule-actions{grid-template-columns:1fr}.decision-card-title{display:block}.decision-card-title .source{margin-top:6px}.today-data-details>div{grid-template-columns:1fr}}
 @media(max-width:1120px){.management-grid{grid-template-columns:1fr}}
 @media(max-width:620px){.management-detail-grid,.management-adjust-form fieldset,.repair-known-grid{grid-template-columns:1fr}.management-card,.data-anomaly-card{align-items:flex-start;flex-direction:column}}
+/* First-run experience shares the real four-route application shell. */
+.onboarding .top-actions>span:first-child,.onboarding #morning-recheck,.onboarding #refresh-data,.onboarding #refresh-all-data,.onboarding #data-status-open{display:none}
+.onboarding #stage-label{border-color:#2e6156;color:#9bd7bf;background:#0c2526}
+.onboarding .topbar{align-items:center;margin-bottom:30px}.onboarding .topbar h1{font-size:27px;letter-spacing:-.03em}.onboarding .content{padding-top:35px}
+.onboarding .nav .count{display:none}.sidebar-card #shutdown{display:block;padding-left:0;margin-top:12px}.workspace .top-actions{max-width:670px;justify-content:flex-end}
+.welcome-hero{position:relative;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(240px,.8fr);gap:20px;align-items:center;min-height:348px;padding:42px;border:1px solid #334b5b;border-radius:18px;background:linear-gradient(120deg,#102b36,#0c202e 70%);overflow:hidden}
+.welcome-kicker{display:inline-flex;align-items:center;gap:8px;color:#9bd7bf;font-size:12px;font-weight:600;letter-spacing:.06em}.welcome-kicker i{width:6px;height:6px;border-radius:50%;background:#a3dec7}
+.welcome-copy h2{max-width:500px;margin:21px 0 17px;font-size:clamp(29px,3vw,44px);line-height:1.35;letter-spacing:-.045em;font-weight:650}.welcome-copy p{max-width:470px;color:#adc0cb;font-size:14px;line-height:1.9}.welcome-actions{display:flex;align-items:center;flex-wrap:wrap;gap:13px;margin:25px 0 18px}.welcome-actions .primary,.setup-route>.primary{gap:36px;min-height:45px;background:#bcdfcb;border-color:#bcdfcb;color:#142a2c;border-radius:8px}.welcome-copy>small{display:block;color:#839daa;font-size:11px}
+.welcome-orbit{position:relative;width:260px;height:260px;justify-self:center}.orbit-ring{position:absolute;border:1px solid #35505a;border-radius:50%;inset:0}.ring-two{inset:38px;border-style:dashed;border-color:#42636c}.orbit-core{position:absolute;inset:85px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid #568574;border-radius:50%;color:#c6e7d8;font-size:26px;background:#183c3e}.orbit-core small{font-size:10px;font-weight:400;color:#adc6bf}.orbit-label{position:absolute;padding:7px 11px;border:1px solid #3a5760;border-radius:7px;background:#102a36;font-size:11px;color:#b5cdd3;white-space:nowrap}.label-risk{top:10px;left:23px}.label-evidence{right:-6px;top:111px}.label-review{left:11px;bottom:18px}.orbit-dot{position:absolute;bottom:31px;right:38px;width:8px;height:8px;background:#b1d3bc;border-radius:50%;box-shadow:0 0 0 5px #b1d3bc12}
+.welcome-section-heading{display:flex;align-items:center;justify-content:space-between;margin:30px 0 15px}.welcome-section-heading h3{margin:0;font-size:16px;font-weight:600}.welcome-section-heading>span{color:#8299a9;font-size:12px}.setup-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.setup-step{padding:24px;border:1px solid #294251;border-radius:12px;background:#0b1e2c}.step-number{font-size:19px;font-weight:500;color:#b2c7d2}.step-state{float:right;padding:4px 7px;border-radius:5px;background:#1b3839;color:#a8cdb9;font-size:10px}.step-state.muted{color:#879eac;background:#142a37}.setup-step h3{margin:27px 0 10px;font-size:17px;font-weight:600}.setup-step p{min-height:52px;color:#91a8b8;font-size:12px;line-height:1.85}.setup-step a,.setup-step button,.welcome-back{display:inline-block;border:0;padding:8px 0;color:#bddece;background:none;text-decoration:none;font:12px inherit}.setup-step a:hover,.setup-step button:hover,.welcome-back:hover{color:#fff}.welcome-note{display:flex;align-items:center;gap:12px;margin-top:22px;color:#7f97a7;font-size:11px}.welcome-note p{flex:1;margin:0}.welcome-note>span:last-child{white-space:nowrap}.note-mark{display:grid;place-content:center;flex-shrink:0;width:20px;height:20px;border:1px solid #38505f;border-radius:50%;font-family:serif}
+.setup-route{padding:60px 42px;border:1px solid #304a5b;border-radius:16px;background:#0b202f}.setup-route h2{max-width:660px;margin:24px 0 16px;font-size:34px;line-height:1.4;font-weight:600;letter-spacing:-.035em}.setup-route>p{max-width:650px;color:#9bb1c0;line-height:1.9;margin-bottom:26px}.setup-capabilities{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin:48px 0 20px;padding-top:30px;border-top:1px solid #294251}.setup-capabilities>div{display:grid;gap:10px}.setup-capabilities span{color:#5d7b8d;font-size:30px}.setup-capabilities strong{font-size:14px;font-weight:500}.setup-capabilities small{color:#819aa9}
+@media(min-width:1600px){.welcome-hero{min-height:390px}.welcome-copy h2{font-size:46px}}
+@media(max-width:1180px){.welcome-hero{padding:30px;grid-template-columns:1fr 200px}.welcome-orbit{transform:scale(.78);transform-origin:center;width:260px;margin-left:-30px}.setup-step{padding:18px}.welcome-note>span:last-child{display:none}.welcome-copy h2{font-size:32px}}
+@media(max-width:820px){.onboarding .content{padding-top:22px}.onboarding .topbar{display:flex;gap:10px;margin-bottom:20px}.onboarding .top-actions{margin:0;justify-content:flex-end}.onboarding .top-actions>a{display:none}.onboarding .topbar h1{font-size:24px}.welcome-hero{grid-template-columns:1fr;padding:28px 24px;min-height:0}.welcome-orbit{display:none}.welcome-copy h2{font-size:32px;max-width:380px}.welcome-copy p{font-size:13px}.welcome-actions{gap:4px}.welcome-copy>small{line-height:1.8}.setup-steps{grid-template-columns:1fr}.setup-step h3{margin-top:16px}.setup-step p{min-height:0;margin-bottom:7px}.welcome-note{align-items:flex-start}.setup-route{padding:32px 24px}.setup-route h2{font-size:29px}.setup-capabilities{gap:10px;margin-top:32px}.setup-capabilities strong{font-size:12px}.setup-capabilities small{font-size:10px}.workspace .top-actions{justify-content:flex-start}}
+
 """

@@ -143,3 +143,5 @@ This file is the bounded decision index. Full context, alternatives, and consequ
 - Report conclusions are conditional and evidence-based, never unconditional trading orders.
 - Same-evening critical A-share filings prioritize CNInfo; structured sources are confirmation when they lag.
 - The factor pipeline promotes only candidates that pass hard gates; no threshold is loosened merely to force a champion.
+
+- [ADR-0018: Mac primary workspace](decisions/0018-mac-primary-workspace.md): owner-authorized Mac development, existing four-route local product, optional SDK dependencies and unchanged credential/data boundaries.

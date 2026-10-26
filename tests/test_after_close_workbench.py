@@ -384,7 +384,7 @@ class AfterCloseWorkbenchHTMLTests(unittest.TestCase):
         self.assertIn('`刷新失败：${job.failed_step || "unknown"}${failureDetail', html)
         self.assertIn('class="review-value-summary"', html)
         self.assertIn('class="review-chart-blocked"', html)
-        self.assertIn("Rule-first decision intelligence", html)
+        self.assertIn("看清风险 · 留下依据", html)
         self.assertIn('class="chart-empty"', html)
         self.assertIn("技术图表尚未接入此 P0 页面", html)
         self.assertNotIn("示意技术结构图", html)

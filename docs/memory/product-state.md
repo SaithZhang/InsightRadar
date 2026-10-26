@@ -55,3 +55,7 @@
 - `feat-056` returns to pending next as the sole queued Harness experiment; no five-task pilot, four-profile benchmark, implementation, or run has started.
 - `feat-055` remains an approved Core design, not active implementation. Its canonical specification is `docs/superpowers/specs/2026-07-20-jin10-event-intelligence-design.md`; Jin10 is future discovery input only, with deterministic normalization, primary-source confirmation, relevance mapping, risk vetoes, and unknown provider prominence preserved.
 - A blocked-plan acknowledgement records that the user saw the blocker; it does not resolve the blocker, remove the plan from Today, create an effective plan, or grant monitor/trade authority. Today separately counts pending responses and unresolved blocked attention. Blockers attach to the affected plan unless the underlying constraint is genuinely portfolio-wide. Source evidence time is carried separately from report generation time, and implausible historical/current price-basis mismatches are quarantined from Review rather than scored.
+
+## Mac primary workspace (2026-10-22 owner decision)
+
+[ADR-0018](decisions/0018-mac-primary-workspace.md) supersedes the Windows-only workspace and Mac deferral. Mac startup and first-use product entry remain inside feat-058; acceptance evidence is in its `mac_primary_workspace` entry and the 2026-10-23 progress/handoff. Prior Windows account and provider acceptance is historical, not proof of Mac source readiness.

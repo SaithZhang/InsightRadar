@@ -217,7 +217,7 @@ class AfterCloseReliabilityTests(unittest.TestCase):
         self.assertIs(result, payload)
         self.assertIn('id="route-today" data-route-panel="today"', html)
         self.assertIn('data-view="lookup"', html)
-        self.assertIn("Rule-first decision intelligence", html)
+        self.assertIn("看清风险 · 留下依据", html)
         self.assertIn("不改变当前计划", html)
         self.assertNotIn('class="dashboard"', html)
 

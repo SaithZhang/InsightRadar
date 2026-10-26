@@ -4,15 +4,22 @@ version = "0.1.0"
 description = "A research-grade market insight workstation with AmazingData-backed data sources."
 requires-python = ">=3.10"
 dependencies = [
-  "AmazingData>=1.1.8",
-  "mcp>=2.0,<3",
   "pandas",
   "pypdf",
   "pydantic>=2,<3",
-  "report-cli",
   "requests",
+]
+
+[project.optional-dependencies]
+amazingdata = [
+  "AmazingData>=1.1.8",
   "tables",
   "tgw>=1.0.8.7",
+]
+mcp = ["mcp>=2.0,<3"]
+lab = ["scipy"]
+collectors = [
+  "report-cli",
   "twitter-cli>=0.8.5",
 ]
 
@@ -26,3 +33,6 @@ pythonpath = ["."]
 
 [tool.setuptools.packages.find]
 include = ["stock_assist*"]
+
+[tool.setuptools.package-data]
+stock_assist = ["research_board.html"]

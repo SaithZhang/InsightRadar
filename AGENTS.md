@@ -18,7 +18,7 @@ The canonical checkout and all active project context use `InsightRadar`. The in
 
 Before writing code:
 
-1. Confirm the working directory is `D:\work\InsightRadar`.
+1. Confirm the working directory is the InsightRadar repository (primary Mac checkout: `/Users/zhangjiawen/work/market/insightradar`). Use `.venv/bin/python` on macOS; Windows `.venv\Scripts\python.exe` remains supported. The owner moved primary development to Mac on 2026-10-22.
 2. Read this file completely.
 3. Read the versioned product documents named above when the task touches product behavior, navigation, data, or release boundaries.
 4. Read `PROJECT_MEMORY.md` and `CURRENT_STATE.md` for non-trivial work, then load only the matching topic under `docs/memory/`.

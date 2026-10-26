@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import socket
+import ssl
 from subprocess import TimeoutExpired
 from types import SimpleNamespace
 import tempfile
@@ -15,7 +16,7 @@ import threading
 import time
 import unittest
 from unittest.mock import Mock, patch
-from urllib.request import Request, urlopen
+from urllib.request import HTTPSHandler, Request, urlopen
 
 from stock_assist.after_close_workbench_html import (
     _intraday_portfolio_panel,
@@ -63,12 +64,29 @@ from stock_assist.portfolio_import_server import (
     _normalize_intraday_overlay,
 )
 from stock_assist.portfolio_import_server import serve_portfolio_import
+from stock_assist.refresh_jobs import RefreshCoordinator
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class IntradayReliabilityTests(unittest.TestCase):
+    def test_urllib_restores_missing_ca_bundle_without_overriding_custom_trust(self) -> None:
+        for override in ({}, {"SSL_CERT_FILE": "/custom/ca.pem"}, {"SSL_CERT_DIR": "/custom/certs"}):
+            with self.subTest(override=override):
+                context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                self.assertEqual(context.get_ca_certs(), [])
+                with patch.dict(os.environ, override, clear=True), patch(
+                    "stock_assist.intraday.network.ssl.create_default_context",
+                    return_value=context,
+                ):
+                    opener = build_urllib_opener(provider_policy("tencent"))
+                handler = next(item for item in opener.handlers if isinstance(item, HTTPSHandler))
+                self.assertIs(handler._context, context)
+                self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
+                self.assertTrue(context.check_hostname)
+                self.assertEqual(bool(context.get_ca_certs()), not bool(override))
+
     def test_eastmoney_urllib_client_is_direct_even_with_http_proxy(self) -> None:
         with patch.dict(
             os.environ,
@@ -723,6 +741,7 @@ class IntradayReliabilityTests(unittest.TestCase):
             return {}
 
         with (
+            tempfile.TemporaryDirectory() as directory,
             patch(
                 "stock_assist.portfolio_import_server.run_intraday_service",
                 side_effect=blocked_refresh,
@@ -741,6 +760,11 @@ class IntradayReliabilityTests(unittest.TestCase):
                     "port": port,
                     "open_browser": False,
                     "intraday_mode": True,
+                    "refresh_coordinator": RefreshCoordinator(
+                        db_path=Path(directory) / "state.sqlite3",
+                        report_dir=Path(directory),
+                        portfolio_path=Path(directory) / "portfolio.json",
+                    ),
                 },
                 daemon=True,
             )

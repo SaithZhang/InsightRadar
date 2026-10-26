@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Event, Thread
 
-from stock_assist.after_close_workbench_html import render_after_close_workbench
+from stock_assist.after_close_workbench_html import render_after_close_workbench, render_start_workspace
 from stock_assist.data_sources.xysz import AmazingDataClient
 from stock_assist.decision_workspace import (
     DAILY_KLINE_REPAIR_REASON_CODES,
@@ -47,7 +47,7 @@ from stock_assist.intraday.polling import (
     stop_intraday_scheduler,
 )
 from stock_assist.intraday.session import latest_completed_trade_date
-from stock_assist.paths import REPORT_DIR
+from stock_assist.paths import PROJECT_ROOT, REPORT_DIR
 from stock_assist.portfolio import (
     DEFAULT_PORTFOLIO_CONTEXT_PATH,
     Portfolio,
@@ -63,6 +63,8 @@ from stock_assist.portfolio_import_web import (
     render_portfolio_import_page as _page,
 )
 from stock_assist.refresh_jobs import RefreshCoordinator
+from stock_assist.research_board import mutate as mutate_research_board, read_board, start_discovery, start_research
+from stock_assist.research_board_web import render_research_board
 
 
 def serve_portfolio_import(
@@ -77,7 +79,31 @@ def serve_portfolio_import(
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
-            if self.path in {"/", "/index.html", "/report"}:
+            if self.path == "/api/health":
+                self._send_json({
+                    "application": "InsightRadar",
+                    "status": "ready",
+                    "workspace_id": hashlib.sha256(str(PROJECT_ROOT.resolve()).encode()).hexdigest(),
+                })
+                return
+            if self.path in {"/", "/index.html"}:
+                self._send_html(render_research_board(token))
+                return
+            if self.path == "/api/research-board":
+                try:
+                    board = read_board()
+                    portfolio = load_portfolio()
+                    board["canonical_holdings"] = {
+                        "label": "本地账户导入快照", "as_of": portfolio.as_of,
+                        "cash": portfolio.cash, "debt": None,
+                        "holdings": [{k: getattr(h, k) for k in ("code", "name", "shares", "weight_pct", "market_value")}
+                                     for h in portfolio.holdings],
+                    }
+                    self._send_json(board)
+                except (OSError, ValueError, KeyError, TypeError):
+                    self._send_json({"error": "研究数据无法读取；原文件已保留"}, status=500)
+                return
+            if self.path == "/report":
                 content = _latest_workspace_html(
                     token,
                     refresh_snapshot=coordinator.latest(),
@@ -149,7 +175,20 @@ def serve_portfolio_import(
                 return
             try:
                 length = int(self.headers.get("Content-Length") or "0")
+                if not 0 < length <= 128_000:
+                    raise ValueError("请求过大或内容为空")
                 body = json.loads(self.rfile.read(length).decode("utf-8"))
+                if not isinstance(body, dict):
+                    raise ValueError("请求格式不正确")
+                if self.path == "/api/research-board":
+                    self._send_json(mutate_research_board(body))
+                    return
+                if self.path == "/api/research-run":
+                    self._send_json(start_research(body), status=202)
+                    return
+                if self.path == "/api/research-discovery":
+                    self._send_json(start_discovery(body), status=202)
+                    return
                 if self.path == "/api/shutdown":
                     self._send_json({"stopping": True})
                     Thread(target=server.shutdown, daemon=True).start()
@@ -357,6 +396,8 @@ def serve_portfolio_import(
     print("Only this loopback process can save. Use the page's Stop App button or close with Ctrl+C.")
     try:
         server.serve_forever()
+    except KeyboardInterrupt:
+        print("InsightRadar 已停止。")
     finally:
         if intraday_mode:
             intraday_stop.set()
@@ -942,18 +983,9 @@ def _latest_workspace_html(
 
 
 def _empty_workspace_page(token: str) -> str:
-    return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>InsightRadar 决策工作台</title>
-<style>body{{margin:0;background:#f4f5f7;color:#172033;font:14px/1.6 system-ui,"Microsoft YaHei",sans-serif}}
-main{{width:min(720px,calc(100% - 28px));margin:10vh auto;background:#fff;border:1px solid #e1e5eb;border-radius:14px;padding:28px}}
-.brand{{color:#b42332;font-weight:900}}a,button{{display:inline-block;border:0;border-radius:8px;padding:9px 13px;margin:8px 8px 0 0;background:#b42332;color:#fff;text-decoration:none;font-weight:800;cursor:pointer}}
-.secondary{{background:#edf0f4;color:#172033}}code{{background:#f4f5f7;padding:2px 5px;border-radius:4px}}</style></head>
-<body><main><div class="brand">IR · InsightRadar</div><h1>还没有可展示的行动简报</h1>
-<p>统一入口已经就绪，但必须先让真实 after-close 流程生成 JSON / Markdown / HTML。系统不会用样例数据填充空白。</p>
-<p><code>.venv\\Scripts\\python -m stock_assist.cli after-close</code></p>
-<a href="/portfolio-import">先导入 / 更新持仓</a><button class="secondary" id="shutdown">关闭本地应用</button>
-<script>const token={json.dumps(token)};document.getElementById("shutdown").onclick=async()=>{{await fetch("/api/shutdown",{{method:"POST",headers:{{"Content-Type":"application/json","X-InsightRadar-Token":token}},body:"{{}}"}});document.body.innerHTML="<main><h1>InsightRadar 已关闭</h1></main>"}}</script>
-</main></body></html>"""
+    return render_start_workspace(
+        portfolio_saved=bool(load_portfolio().holdings),
+    ).replace("__LOCAL_SESSION_TOKEN__", token, 1)
 
 
 def _legacy_inline_page(token: str) -> str:

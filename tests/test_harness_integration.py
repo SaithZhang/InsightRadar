@@ -96,16 +96,17 @@ class HarnessIntegrationTests(unittest.TestCase):
         self.assertNotIn("execution not started", text)
         self.assertNotIn("`feat-054` is not registered or activated", text)
 
-    def test_macro_shadow_remains_closed_during_repair_acceptance(self) -> None:
+    def test_macro_shadow_remains_closed_during_research_trial(self) -> None:
         current_state = (PROJECT_ROOT / "CURRENT_STATE.md").read_text(encoding="utf-8")
         self.assertRegex(current_state, r'"updated_at": "\d{4}-\d{2}-\d{2}"')
-        self.assertIn('"next_feature_id": "feat-058"', current_state)
+        self.assertIn('"next_feature_id": "feat-060"', current_state)
 
         feature_payload = json.loads((PROJECT_ROOT / "feature_list.json").read_text(encoding="utf-8"))
         feature_status = {item["id"]: item["status"] for item in feature_payload["features"]}
         self.assertEqual(feature_status["feat-054"], "pass")
         self.assertEqual(feature_status["feat-056"], "pending")
         self.assertEqual(feature_status["feat-057"], "pass")
+        self.assertEqual(feature_status["feat-060"], "in_progress")
 
         governance = json.loads(
             (PROJECT_ROOT / "configs" / "product_governance.json").read_text(encoding="utf-8")
@@ -459,9 +460,10 @@ class HarnessIntegrationTests(unittest.TestCase):
                 self.assertNotIn(marker, stderr.getvalue())
                 self.assertFalse(output_dir.exists())
 
-    def test_restart_snapshot_activates_repair_acceptance(self) -> None:
+    def test_restart_snapshot_activates_research_trial_and_parks_repair(self) -> None:
         current_state = (PROJECT_ROOT / "CURRENT_STATE.md").read_text(encoding="utf-8")
-        self.assertIn('"next_feature_id": "feat-058"', current_state)
+        self.assertIn('"next_feature_id": "feat-060"', current_state)
+        self.assertIn("feat-058 owner acceptance remains parked", current_state)
 
         feature_payload = json.loads(
             (PROJECT_ROOT / "feature_list.json").read_text(encoding="utf-8")
@@ -472,6 +474,7 @@ class HarnessIntegrationTests(unittest.TestCase):
         }
         self.assertEqual(feature_status["feat-056"], "pending")
         self.assertEqual(feature_status["feat-058"], "in_progress")
+        self.assertEqual(feature_status["feat-060"], "in_progress")
         self.assertEqual(feature_status["IR-001"], "pass")
         self.assertEqual(feature_status["IR-002"], "in_progress")
 

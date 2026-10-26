@@ -1,16 +1,25 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+cd "$(dirname "$0")"
+if [ -x .venv/bin/python ]; then
+  python=.venv/bin/python
+elif [ -x .venv/Scripts/python.exe ]; then
+  python=.venv/Scripts/python.exe
+else
+  echo "请先运行 scripts/macos.sh setup（Windows 请按 README 安装环境）。" >&2
+  exit 1
+fi
 
 echo "=== Harness Initialization ==="
 
 echo "=== project memory check ==="
-./.venv/Scripts/python scripts/validate_project_memory.py
+"$python" scripts/validate_project_memory.py
 
 echo "=== python compile check ==="
-./.venv/Scripts/python -m compileall stock_assist
+"$python" -m compileall -q stock_assist
 
 echo "=== after-close smoke test ==="
-./.venv/Scripts/python -m stock_assist.cli after-close
+"$python" -m stock_assist.cli after-close
 
 echo "Next steps:"
 echo "1. Read PROJECT_MEMORY.md and CURRENT_STATE.md"

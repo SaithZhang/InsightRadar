@@ -105,7 +105,7 @@ class OneClickLauncherTests(unittest.TestCase):
         self.assertIn("/api/refresh/", html)
         self.assertIn("/api/shutdown", html)
         self.assertIn("X-InsightRadar-Token", html)
-        self.assertIn("127.0.0.1", html)
+        self.assertIn("导入内容保存在本机", html)
         self.assertIn('id="beta-status"', html)
         self.assertIn('class="output"', html)
         self.assertIn("renderPreview", html)
@@ -116,7 +116,7 @@ class OneClickLauncherTests(unittest.TestCase):
         self.assertIn("后台刷新已取得任务号", html)
         self.assertNotIn("正在原子保存并串行刷新，请勿关闭本页", html)
         self.assertNotIn("JSON.stringify(last,null,2)", html)
-        self.assertIn("Beta 无需手工导入", html)
+        self.assertIn("市场敏感度（Beta）会在保存后自动计算", html)
         self.assertIn("保存后先自动计算 beta", html)
         self.assertIn('href="/#portfolio"', html)
 
