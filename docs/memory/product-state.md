@@ -59,3 +59,9 @@
 ## Mac primary workspace (2026-10-22 owner decision)
 
 [ADR-0018](decisions/0018-mac-primary-workspace.md) supersedes the Windows-only workspace and Mac deferral. Mac startup and first-use product entry remain inside feat-058; acceptance evidence is in its `mac_primary_workspace` entry and the 2026-10-23 progress/handoff. Prior Windows account and provider acceptance is historical, not proof of Mac source readiness.
+
+## Official zsxq read-only source validation
+
+The owner-authorized 2026-11-08 check installed the official Skill and CLI, completed user OAuth, and verified bounded member/topic/search reads. It did not add a product source adapter or change feat-060 acceptance. Evidence and continuation are in `CHECKPOINT.md`, the dated `progress.md` entry, and private `data/acceptance/zsxq-20261108/REPORT.md`.
+
+Preserve the distinction between attachment metadata, a download URL, downloaded bytes and extracted PDF text. The tested official route returned metadata without a download URL; the installed endpoint catalog and live tool list did not identify a download method. This is an unverified capability, not proof of absent membership or permanent platform non-support. Do not guess endpoints or substitute cookie scraping. Titles may be excerpts; parse formal tags from both content and annotation, and label links constructed from official templates. Semantic search is not exhaustive history coverage. Third-party research PDFs must not be relabelled official issuer filings or relax the existing official-URL allowlist. The next bounded check is one authorized PDF after an official retrieval method is established, with no automatic system expansion.
