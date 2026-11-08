@@ -56,7 +56,9 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Next Feature
 
-- 11-07: filing pilot delivered. Next confirm value in real uses under the existing five-use gate. feat-058 remains parked.
+- 11-08: [Research Library](docs/research-library.md): pending requirements only; no implementation.
+
+- 11-07: filing pilot delivered; five-use gate open, feat-058 parked.
 
 - feat-058 remains locally verified and pending owner acceptance; it is parked during the explicitly selected feat-060.
 - `feat-059` remains available on `main`; local MCP does not imply ChatGPT Web reachability and no remote tunnel/deployment is admitted by this closure.

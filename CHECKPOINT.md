@@ -4,7 +4,15 @@
 
 本 checkpoint 保存当前代码与工程上下文，适用于普通编辑器、Codex、OpenCode、DeepSeek 等接手方式；不依赖原聊天。它是恢复点，不表示所有产品验收完成。精确提交以包含本文件的 Git 提交和总管索引为准。
 
-## 最新交付：Cookie/Python 后台 PDF 下载
+## 最新交付：Research Library 职责与计划（仅文档）
+
+2026-11-08，起始 d8772e0，分支 `codex/checkpoint-20261108-insightradar`。本次只登记用户给定的模块职责与技术边界；沿用总管 `IR-BL-RLIB-001`、`IR-BL-ZSXQ-001`，工程镜像保持 pending。主文档 [docs/research-library.md](docs/research-library.md) 与 ADR-0019 包含目录/模型盘点、最小资料模型、只读接口、权限/转载/版本规则、历史验证台账和后续顺序。拓扑只有规划节点，无运行连线。
+
+验收限于文档/编号/架构与记忆一致性，执行架构生成、项目记忆校验、JSON/diff 及原源码保留检查，结果见本轮 progress。业务代码、依赖、运行服务、资料、feat-060 与 V0.01 范围未改变；历史 ZSXQ 单样本通过不等于当前来源完整或产品接入已验收。只同步脱敏文档，原文/会员/凭据不上 Git。精确保存版本由包含本条的提交及 Control 回执定位。
+
+唯一下一步：另行准入一份指定授权 ZSXQ 资料到一个现有研究消费者的最小切片；此前停止。本次不实现 Connector/Store/检索，不重构 05C/05D 或 Thesis，不新建服务。以下为先前交付记录。
+
+## 前轮交付：Cookie/Python 后台 PDF 下载
 
 2026-11-08，起始 `f36042a`，分支 `codex/checkpoint-20261108-insightradar` 不变。用户明确改为 Cookie + Python 下载以避免浏览器抢前台，并要求保留 AppleScript 候选、其他逻辑不变。入口仍为 `scripts/zsxq_pdf.py`：默认 Cookie 后台请求，`--transport browser` 才使用旧网页控制；`--batch` 只接受 1–20 个明确附件，串行、间隔 2 秒、首错停止，不发现或遍历历史。
 

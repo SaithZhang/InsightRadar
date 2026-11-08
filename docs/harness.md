@@ -446,3 +446,9 @@ Minimum checks:
 - `.venv\Scripts\python -m compileall stock_assist`
 - `.venv\Scripts\python -m stock_assist.cli architecture-view`
 - `.venv\Scripts\python scripts\validate_project_memory.py`
+
+## Research Library requirement contract (not implemented)
+
+Existing requirements IR-BL-RLIB-001 / IR-BL-ZSXQ-001 are governed by [docs/research-library.md](research-library.md) and ADR-0019. Documentation acceptance requires consistent IDs/status, current-code reuse mapping, explicit source-test limits, original/derived/rights separation and a planned-only topology. Run project-memory validation, regenerate architecture when its source changes, and check diff plus unchanged source/feature baseline. Do not run collection, models or after-close merely to validate these documents.
+
+Future feature completion requires an explicitly admitted sample and consumer: immutable source/version references, exact original locations, idempotent import with preserved repost lineage, visible failure/coverage, access-restricted retrieval, and restart evidence. Negative cases must not produce synthetic text or permission. Keep the requirements pending until implemented behavior and relevant actual artifacts are verified; document checks alone do not pass product acceptance.

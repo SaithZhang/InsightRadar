@@ -60,6 +60,10 @@ Do not split into multiple repositories or services merely because file count gr
 
 The Windows reminder qualified and has completed extraction into its own repository and Windows lifecycle. Factor work qualifies as a lab namespace, not yet a service. Crypto monitoring is an optional extension and should not expand the A-share core.
 
+## Research Library boundary (planned)
+
+Under ADR-0019 and existing backlog `IR-BL-RLIB-001`, Research Library belongs to the Core research-evidence responsibility inside the modular monolith. It owns source normalization, originals/versions, parsing, deduplication, access restrictions and evidence retrieval; Thesis, industry research, Journal/Review and strategy/risk consumers own interpretation and decisions. Discovery is not Permission. The integrated module is not implemented or admitted for development. The existing ZSXQ utility remains an optional Extension without Core wiring; 05C/05D and existing research flows are preserved. See [the requirements and staged plan](research-library.md); this registration does not reorder the active feature or add a fifth route.
+
 ## Sustainable Objective
 
 The durable objective is “A-share decision intelligence,” not a clone feature list. HyperInsight is useful as a positioning reference because its official product description emphasizes decision-first intelligence, fund-flow/whale behavior, denoised feeds, and a personal analyst while explicitly avoiding trade execution. InsightRadar should translate that shape into A-share-native evidence:

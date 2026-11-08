@@ -145,3 +145,5 @@ This file is the bounded decision index. Full context, alternatives, and consequ
 - The factor pipeline promotes only candidates that pass hard gates; no threshold is loosened merely to force a champion.
 
 - [ADR-0018: Mac primary workspace](decisions/0018-mac-primary-workspace.md): owner-authorized Mac development, existing four-route local product, optional SDK dependencies and unchanged credential/data boundaries.
+
+- [ADR-0019: Research Library evidence boundary](decisions/0019-research-library-evidence-boundary.md): existing requirements remain pending; internal evidence infrastructure, independent connectors, versioned citations and access restrictions; no investment decision ownership, source migration or new service.

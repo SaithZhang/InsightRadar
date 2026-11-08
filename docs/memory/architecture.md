@@ -49,3 +49,7 @@ The topology has two complementary classifications. Lanes describe data flow: da
 ## Retrieval Rule
 
 Load this topic before architecture or cross-module work. Do not load the full HTML into model context unless visual or embedded graph inspection is necessary; inspect `configs/architecture.json` or use the generated page instead.
+
+## Planned Research Library boundary
+
+[ADR-0019](decisions/0019-research-library-evidence-boundary.md) and [the contract](../research-library.md) record existing backlog IDs IR-BL-RLIB-001 / IR-BL-ZSXQ-001. The topology node is explicitly planned, with no runtime edge or command; it is not an installed Core dependency. Reuse existing files/parsers/storage, keep platform JSON inside connectors and keep thesis/card/strategy/account state outside the library. Source access and redistribution rights remain separate; no 05C/05D migration or API/MCP server is admitted.

@@ -376,6 +376,28 @@
       "inputs": ["feature_list.json", "configs/product_governance.json", "业务报告", "本地配置/数据状态"],
       "outputs": ["reports/*-evolution.md"],
       "next": ["避免扫描自己的旧报告", "只提出可验证的下一步"]
+    },
+    {
+      "id": "research_library_planned",
+      "ring": "core",
+      "title": "Research Library（规划，未实现）",
+      "type": "module",
+      "lane": "data",
+      "status": "planned_not_implemented",
+      "commands": [],
+      "command": "",
+      "summary": "IR-BL-RLIB-001 / IR-BL-ZSXQ-001：仅职责与合同登记。项目内统一资料接入、解析、原件/版本、检索与可追溯引用；不形成投资判断，无交易权限。当前无运行连线，现有工具与业务保持。",
+      "inputs": [
+        "规划：授权原件与独立Connector标准化记录",
+        "合同：docs/research-library.md"
+      ],
+      "outputs": [
+        "规划：带来源、时间、版本、原文定位、权限与缺口的证据引用"
+      ],
+      "next": [
+        "另行准入一份指定ZSXQ资料到一个现有消费者的最小切片",
+        "复用原件/解析/存储；不自动部署API/MCP或迁移05C/05D"
+      ]
     }
   ],
   "edges": [
