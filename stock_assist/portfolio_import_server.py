@@ -63,8 +63,16 @@ from stock_assist.portfolio_import_web import (
     render_portfolio_import_page as _page,
 )
 from stock_assist.refresh_jobs import RefreshCoordinator
-from stock_assist.research_board import mutate as mutate_research_board, read_board, start_discovery, start_research
+from stock_assist.research_board import (
+    filing_pdf,
+    mutate as mutate_research_board,
+    read_board,
+    start_discovery,
+    start_filing,
+    start_research,
+)
 from stock_assist.research_board_web import render_research_board
+from stock_assist.research_filings import MAX_REQUEST_BYTES
 
 
 def serve_portfolio_import(
@@ -88,6 +96,21 @@ def serve_portfolio_import(
                 return
             if self.path in {"/", "/index.html"}:
                 self._send_html(render_research_board(token))
+                return
+            filing_match = re.fullmatch(r"/api/research-filing/([0-9a-f]{32})/source\.pdf", self.path)
+            if filing_match:
+                try:
+                    raw = filing_pdf(filing_match.group(1)).read_bytes()
+                except OSError:
+                    self.send_error(404)
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "application/pdf")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
                 return
             if self.path == "/api/research-board":
                 try:
@@ -175,13 +198,17 @@ def serve_portfolio_import(
                 return
             try:
                 length = int(self.headers.get("Content-Length") or "0")
-                if not 0 < length <= 128_000:
+                limit = MAX_REQUEST_BYTES if self.path == "/api/research-filing" else 128_000
+                if not 0 < length <= limit:
                     raise ValueError("请求过大或内容为空")
                 body = json.loads(self.rfile.read(length).decode("utf-8"))
                 if not isinstance(body, dict):
                     raise ValueError("请求格式不正确")
                 if self.path == "/api/research-board":
                     self._send_json(mutate_research_board(body))
+                    return
+                if self.path == "/api/research-filing":
+                    self._send_json(start_filing(body, f"http://127.0.0.1:{port}"), status=202)
                     return
                 if self.path == "/api/research-run":
                     self._send_json(start_research(body), status=202)

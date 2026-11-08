@@ -5,7 +5,7 @@ Bounded startup snapshot. Read after PROJECT_MEMORY.md; load only referenced his
 <!-- current-state-manifest
 {
   "schema_version": "insight-radar-current-state/v1",
-  "updated_at": "2026-10-26",
+  "updated_at": "2026-11-07",
   "next_feature_id": "feat-060",
   "product_charter": "docs/product-charter.md",
   "architecture_source": "configs/architecture.json",
@@ -21,7 +21,7 @@ The proof goal remains local Core value through real trials, controlled replay, 
 
 ## Current Product Shape
 
-- Release check 2026-10-26: 481 tests pass, 1 live skip; startup/HTTP passed. Use `InsightRadar.command`.
+- 11-07: PDF/official URL → cited draft → reviewed adoption verified on Mac. Continuation regression and one new sealed case pass. See progress.md.
 - Version: **InsightRadar V3.1 — Incremental Development** under ADR-0015. V3.0 is historical; its incomplete ten-run pilot is not reported as passed.
 - Direction: **Intraday Core pivot under ADR-0012**. Four routes and the rule/user/AI/trade boundary remain V3.1 guardrails.
 - Routes: `today` 今日工作台, `portfolio` 组合风险, `lookup` 标的研究, and `review` 复盘账本. Today is a conclusion layer, not a fifth route.
@@ -38,7 +38,7 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Verified Baseline
 
-- feat-060 overnight slice passed Mac acceptance: calendar window, diversified sampling, coverage/audit and run-scoped citations. 96 tests, three frozen archive replays, one real model/UI run and 1440/390 UI passed; see 2026-10-25 progress.md. Full coverage/primary-source accuracy remain unverified. Parent stays in_progress for owner trial; stop here.
+- feat-060: 75 checks, real draft/adoption, restart and bounded sealed checks pass. Five-use gate remains open; parent in_progress. See progress.md.
 
 - `feat-059` is on `main`: four read-only MCP tools expose Eastmoney-primary/Tencent whole-series-fallback tape and trade review with explicit provenance, no-lookahead, no cross-source row merge, and no trade authority.
 - `IR-001` passed: 36,060 private minute bars, 25 auction snapshots, 255 no-lookahead snapshots, and 15 transitions reproduced the bounded case. Private results beat full hold on profit protection; account values stay local and improvement versus actual remains unknown.
@@ -56,7 +56,7 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Next Feature
 
-- 2026-10-24 owner reprioritized feat-060: implement a persistent research/opportunity UI in the existing application. feat-058 owner acceptance remains parked; this does not claim it passed. Acceptance and boundaries are recorded in feature_list.json.
+- 11-07: filing pilot delivered. Next confirm value in real uses under the existing five-use gate. feat-058 remains parked.
 
 - feat-058 remains locally verified and pending owner acceptance; it is parked during the explicitly selected feat-060.
 - `feat-059` remains available on `main`; local MCP does not imply ChatGPT Web reachability and no remote tunnel/deployment is admitted by this closure.

@@ -1,6 +1,7 @@
 """Local research cards. Revisions are research records, never trading authority."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -16,6 +17,8 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from stock_assist.paths import DATA_DIR, PROJECT_ROOT
+from stock_assist import research_filings
+from stock_assist.research_changes import evaluate_change
 
 BOARD_PATH = DATA_DIR / "research-board.json"
 PILOT_ROOT = PROJECT_ROOT.parent / "InsightRadar-Control"
@@ -112,7 +115,10 @@ def read_board(path: Path = BOARD_PATH) -> dict:
             job = card.get("job") or {}
             if job.get("status") == "running" and card["id"] not in _RUNNING:
                 job.update(status="interrupted", message="上次研究中断，远端结果未知；不会自动重发", finished_at=now())
-                _record(board, card, "研究中断", job["message"])
+                if job.get("kind") == "filing":
+                    board["revision"] += 1
+                else:
+                    _record(board, card, "研究中断", job["message"])
                 changed = True
         if changed:
             _write(path, board)
@@ -121,6 +127,24 @@ def read_board(path: Path = BOARD_PATH) -> dict:
             card["expired"] = bool(card.get("valid_until") and card["valid_until"] < today)
             card["open_gaps"] = sum(not g.get("resolved_by") for g in card["gaps"])
             card["trade_authority"] = "none"
+            job = card.get("job") or {}
+            if job.get("kind") == "filing" and job.get("status") == "completed":
+                try:
+                    draft = _read_filing_draft(path, job["run_id"])
+                    card["filing_draft"] = {key: draft[key] for key in ("assessment", "source", "run_id")}
+                    card["filing_draft"]["can_adopt"] = (
+                        job["base_version"] == card["version"]
+                        and draft["assessment"]["status"] != "insufficient_coverage"
+                    )
+                except (OSError, ValueError, KeyError):
+                    job["message"] = "公告草稿文件不可读，当前结论已保留"
+            check = card.get("change_check")
+            if check:
+                check["stale"] = (
+                    check["assessment"]["thesis"]["text"] != card.get("thesis")
+                    or card.get("symbols") != [check["assessment"]["symbol"]]
+                    or check["assessment"]["as_of"][:10] < today
+                )
         result["today"] = today
         result["pilot_available"] = (PILOT_ROOT / "radar").is_file()
         return result
@@ -129,6 +153,10 @@ def read_board(path: Path = BOARD_PATH) -> dict:
 def mutate(body: dict, path: Path = BOARD_PATH) -> dict:
     with _LOCK:
         board = _read(path)
+        if body.get("action") == "change_check":
+            return _save_change_check(board, body, path)
+        if body.get("action") == "adopt_filing":
+            return _adopt_filing(board, body, path)
         if type(body.get("revision")) is not int or body["revision"] != board["revision"]:
             raise ValueError("页面已有新版本，请刷新后再保存；你的输入尚未覆盖旧记录")
         action = body.get("action")
@@ -213,6 +241,159 @@ def mutate(body: dict, path: Path = BOARD_PATH) -> dict:
         _record(board, card, str(action), note)
         _write(path, board)
         return {"saved": True, "card_id": card["id"], "revision": board["revision"]}
+
+
+def _save_change_check(board: dict, body: dict, path: Path, *, filing: dict | None = None) -> dict:
+    """Validate reviewed financial material through the normal versioned card API."""
+    card = _find(board, body.get("card_id"))
+    if (card.get("job") or {}).get("status") == "running":
+        raise ValueError("研究正在运行，请等待完成后再修改这张卡")
+    packet = body.get("packet")
+    if not isinstance(packet, dict):
+        raise ValueError("请选择变化核验材料文件")
+    assessment = evaluate_change(packet.get("assessment"))
+    if assessment["mode"] != "live_review":
+        raise ValueError("当前变化卡需使用实际材料复核，验证场景应放入验证记录")
+    if card.get("symbols") != [assessment["symbol"]] or card.get("thesis") != assessment["thesis"]["text"]:
+        raise ValueError("核验材料与当前标的或研究理由不一致，请按当前版本重新核验")
+    cases = packet.get("validation_cases", [])
+    if not isinstance(cases, list) or len(cases) > 2:
+        raise ValueError("最多保留两个明确标注的验证场景")
+    validations = [evaluate_change(case) for case in cases]
+    for case in validations:
+        if case["mode"] == "live_review" or case["symbol"] != assessment["symbol"] or case["thesis"] != assessment["thesis"]:
+            raise ValueError("验证场景必须属于同一标的和研究理由，并标注为历史或缺料验证")
+    candidate = {"assessment": assessment, "validation_cases": validations}
+    if filing:
+        candidate["filing"] = filing
+    # An exact retry is safe even if the client lost the first response.
+    if card.get("change_check") == candidate:
+        return {"saved": True, "unchanged": True, "card_id": card["id"], "revision": board["revision"]}
+    if type(body.get("revision")) is not int or body["revision"] != board["revision"]:
+        raise ValueError("页面已有新版本，请刷新后再保存；你的输入尚未覆盖旧记录")
+    card["change_check"] = candidate
+    if card.get("origin") != "discovery":
+        card["origin"] = "holding_change"
+    _record(board, card, "change_check", assessment["status_label"])
+    _write(path, board)
+    return {"saved": True, "unchanged": False, "card_id": card["id"], "revision": board["revision"]}
+
+
+def _filing_folder(path: Path, run_id: str) -> Path:
+    if not isinstance(run_id, str) or not re.fullmatch(r"[0-9a-f]{32}", run_id):
+        raise ValueError("公告运行编号无效")
+    return path.parent / "research-filings" / run_id
+
+
+def filing_pdf(run_id: str, path: Path = BOARD_PATH) -> Path:
+    return _filing_folder(path, run_id) / "source.pdf"
+
+
+def _read_filing_draft(path: Path, run_id: str) -> dict:
+    return json.loads((_filing_folder(path, run_id) / "draft.json").read_text())
+
+
+def _filing_context(card: dict, body: dict) -> dict:
+    if len(card["symbols"]) != 1 or not card.get("thesis"):
+        raise ValueError("先为一个标的保存原研究理由")
+    old = card.get("change_check", {}).get("assessment", {})
+    thesis = old.get("thesis", {}) if old.get("thesis", {}).get("text") == card["thesis"] else {}
+    holding = old.get("holding", {}) if old.get("symbol") == card["symbols"][0] else {}
+    return {"symbol": card["symbols"][0],
+            "thesis": {"text": card["thesis"], "as_of": thesis.get("as_of") or _date(body.get("thesis_as_of", "")),
+                       "url": thesis.get("url") or _url(body.get("thesis_url", ""))},
+            "holding": {"as_of": holding.get("as_of") or _date(body.get("holding_as_of", "")),
+                        "url": holding.get("url") or _url(body.get("holding_url", ""))}}
+
+
+def start_filing(body: dict, local_origin: str, path: Path = BOARD_PATH) -> dict:
+    metadata, data = research_filings.normalize_input(body)
+    with _LOCK:
+        board = _read(path)
+        card = _find(board, body.get("card_id"))
+        context = _filing_context(card, body)
+        if any(not row["url"] or row["as_of"] > now()[:10] for row in (context["thesis"], context["holding"])):
+            raise ValueError("请填写有日期和链接的原理由及持仓／自选记录")
+        digest = hashlib.sha256(json.dumps([metadata, context], sort_keys=True).encode()).hexdigest()
+        previous = card.get("job") or {}
+        adopted = card.get("change_check", {}).get("filing", {}).get("run_id")
+        same_version = previous.get("base_version") == card["version"] or (
+            adopted is not None and adopted == previous.get("run_id"))
+        if previous.get("kind") == "filing" and previous.get("input_hash") == digest and same_version:
+            return {"started": False, "run_id": previous["run_id"], "unchanged": True}
+        if type(body.get("revision")) is not int or body["revision"] != board["revision"]:
+            raise ValueError("页面已有新版本，请刷新后重试")
+        if _RUNNING:
+            raise ValueError("已有研究正在运行，请等待完成")
+        run_id = uuid.uuid4().hex
+        folder = _filing_folder(path, run_id)
+        folder.mkdir(mode=0o700, parents=True)
+        if data:
+            research_filings.write_private(folder / "source.pdf", data)
+        research_filings.save_json(folder / "input.json", {"source": metadata, "symbol": context["symbol"]})
+        card["job"] = {"kind": "filing", "status": "running", "started_at": now(),
+                       "run_id": run_id, "input_hash": digest, "base_version": card["version"],
+                       "message": "读取公告原件并生成带引用的草稿"}
+        board["revision"] += 1
+        _write(path, board)
+        _RUNNING.add(card["id"])
+        local_url = f"{local_origin}/api/research-filing/{run_id}/source.pdf"
+        threading.Thread(target=_run_filing, args=(path, card["id"], folder, metadata, context, local_url),
+                         daemon=True).start()
+        return {"started": True, "run_id": run_id}
+
+
+def _run_filing(path: Path, card_id: str, folder: Path, metadata: dict, context: dict, local_url: str) -> None:
+    status, message = "failed", "公告读取或模型回执异常，已保留原研究卡"
+    try:
+        draft = research_filings.prepare_draft(folder, metadata, context, local_url)
+        status = "completed"
+        message = draft["assessment"]["status_label"] + "。草稿已就绪，请对照原文审阅"
+    except ValueError as error:
+        message = str(error)
+    except (OSError, KeyError, TypeError):
+        pass
+    finally:
+        with _LOCK:
+            try:
+                research_filings.save_json(folder / "result.json", {"status": status, "message": message})
+                board = _read(path)
+                job = _find(board, card_id)["job"]
+                job.update(status=status, message=message, finished_at=now())
+                board["revision"] += 1
+                _write(path, board)
+            finally:
+                _RUNNING.discard(card_id)
+
+
+def _adopt_filing(board: dict, body: dict, path: Path) -> dict:
+    card = _find(board, body.get("card_id"))
+    run_id = body.get("run_id")
+    saved = card.get("change_check", {})
+    if saved.get("filing", {}).get("run_id") == run_id and run_id:
+        return {"saved": True, "unchanged": True, "card_id": card["id"], "revision": board["revision"]}
+    job = card.get("job") or {}
+    if (body.get("reviewed") is not True or job.get("kind") != "filing"
+            or job.get("status") != "completed" or job.get("run_id") != run_id
+            or job.get("base_version") != card["version"]):
+        raise ValueError("请选择当前版本的公告草稿并确认已对照原文")
+    draft = _read_filing_draft(path, run_id)
+    assessment = evaluate_change(draft["packet"])
+    if assessment["status"] == "insufficient_coverage":
+        raise ValueError("公告覆盖不足，当前结论继续保留")
+    prior = saved.get("assessment", {})
+    old_periods = [row["period"] for row in prior.get("metrics", {}).values()]
+    if prior.get("symbol") == assessment["symbol"] and old_periods:
+        if min(row["period"] for row in assessment["metrics"].values()) < max(old_periods):
+            raise ValueError("草稿财务期间早于当前核验，保留供历史查看")
+    source = draft["source"]
+    model = draft.get("model") or {}
+    filing = {"run_id": run_id, "sha256": source["sha256"], "received_at": source["received_at"],
+              "published_at": source["published_at"], "model": model.get("returned_model"),
+              "reviewed_at": now()}
+    return _save_change_check(board, {**body, "packet": {
+        "assessment": draft["packet"], "validation_cases": saved.get("validation_cases", [])}},
+        path, filing=filing)
 
 
 def start_research(body: dict, path: Path = BOARD_PATH) -> dict:
@@ -373,7 +554,9 @@ def _run_discovery(run_id: str, path: Path) -> None:
                     packet_schema=packet.get("schema", 1),
                     summary=result.get("answer", {}).get("summary", ""), model_calls=result.get("model_calls", 0),
                     estimated_usd=result.get("estimated_usd"), http_status=result.get("http_status"),
-                    mapping_warnings=result.get("mapping_warnings", []))
+                    mapping_warnings=result.get("mapping_warnings", []),
+                    quality_warnings=result.get("quality_warnings", []),
+                    semantic_status=result.get("semantic_status", "unverified"))
                 if result["status"] == "completed":
                     _import_discoveries(board, result, run_id)
                 board["discovery"]["card_ids"] = [c["id"] for c in board["cards"]
@@ -385,9 +568,18 @@ def _run_discovery(run_id: str, path: Path) -> None:
 
 
 def _import_discoveries(board: dict, result: dict, run_id: str) -> None:
+    if result.get("status", "completed") != "completed":
+        raise ValueError("未完成的发现结果不能导入")
+    review_note = result.get("review_note", "")
+    # Recheck new-format results at the persistence boundary, including reimports.
+    if result.get("claim_schema") in {1, 2}:
+        from stock_assist.research_discovery import apply_evidence_policy
+        answer, _ = apply_evidence_policy(result["answer"], result["packet"], require_stances=result["claim_schema"] == 2)
+    else:
+        answer = result["answer"]
     known = {r["id"]: r for r in result["packet"]["items"]}
     for kind in ("opportunities", "risks"):
-        for row in result["answer"][kind]:
+        for row in answer[kind]:
             keyword = row["keyword"].split()[0]
             signature = (keyword, kind)
             previous = next((c for c in board["cards"] if c.get("origin") == "discovery"
@@ -401,8 +593,10 @@ def _import_discoveries(board: dict, result: dict, run_id: str) -> None:
                     "first_seen_at": item["first_seen_at"], "added_at": now(), "kind": "unknown",
                     "period": item.get("period"), "truncated": item.get("truncated", False),
                     "quoted_text_removed": item.get("quoted_text_removed", False),
-                    "stance": "opposes" if ref in row["counter_evidence_ids"] else "supports",
-                    "origin": "autonomous_discovery", "run_id": run_id, "source_id": item["source_id"], "source_ref": ref})
+                    "stance": ("mixed" if ref in row["counter_evidence_ids"] and ref in row["evidence_ids"]
+                               else "opposes" if ref in row["counter_evidence_ids"] else "supports"),
+                    "origin": "reviewed_discovery" if review_note else "autonomous_discovery",
+                    "run_id": run_id, "source_id": item["source_id"], "source_ref": ref})
             if previous:
                 # Continue the existing candidate, never overwrite the user's plan or past thesis.
                 # D001 is local to a run. Keeping only source_id/text loses later
@@ -412,8 +606,14 @@ def _import_discoveries(board: dict, result: dict, run_id: str) -> None:
                 if not added and (previous.get("discovery_run") == run_id or previous.get("discovery_update", {}).get("run_id") == run_id):
                     continue
                 previous["evidence"].extend(added)
-                previous["discovery_update"] = {"title": row["title"], "reason": row["reason"], "next_check": row["next_check"], "run_id": run_id}
-                _record(board, previous, "自主发现更新", "新材料已追加；原预案和原判断未自动改写")
+                previous["discovery_update"] = {"title": row["title"], "reason": row["reason"], "next_check": row["next_check"], "run_id": run_id,
+                    "claims": deepcopy(row.get("claims", [])), "review_note": review_note,
+                    "counter_evidence_gap": row.get("counter_evidence_gap", "旧版草稿未记录反证覆盖；需重新核验")}
+                counter_gap = row.get("counter_evidence_gap")
+                if counter_gap and not any(g["text"] == counter_gap and not g.get("resolved_by") for g in previous["gaps"]):
+                    previous["gaps"].append({"id": uuid.uuid4().hex, "text": counter_gap, "resolved_by": None})
+                _record(board, previous, "冻结案例审阅" if review_note else "自主发现更新",
+                        review_note or "新材料已追加；原预案和原判断未自动改写")
                 continue
             card = {key: "" for key in FIELDS}
             excerpts = "\n".join(e["text"] for e in evidence)
@@ -421,6 +621,8 @@ def _import_discoveries(board: dict, result: dict, run_id: str) -> None:
                        if h["code"] in row["symbols"] or (h.get("name") and h["name"] in excerpts)]
             gaps = [row["next_check"], "最新行情与机械入场、失效、退出条件待核验", "现金与期末融资待对账；不生成新仓数量"]
             gaps.append("发现仅覆盖本次归档抽样；新闻转述和KOL观点需回到原始证据核验")
+            if row.get("counter_evidence_gap"):
+                gaps.append(row["counter_evidence_gap"])
             if not row["symbols"]:
                 gaps.insert(0, "原文未明确对应证券代码；需核验可交易标的映射")
             card.update(id=uuid.uuid4().hex, title=row["title"], question="这个新发现是否足以改变我的观察或持仓？",
@@ -429,6 +631,8 @@ def _import_discoveries(board: dict, result: dict, run_id: str) -> None:
                 holding_relation=("归档直接提及持仓：" + "、".join(h["name"] for h in related) + "。这是名称关联，传导及风险敞口仍需核验；未调整持仓。" if related else "未发现与已有持仓的直接同名关联；行业重叠风险仍需核验。未调整持仓。"),
                 as_of=result["packet"]["cutoff"][:10], valid_until=(date.fromisoformat(now()[:10])+timedelta(days=7)).isoformat(),
                 status="watch", origin="discovery", discovery_kind=kind, discovery_run=run_id,
+                discovery_claims=deepcopy(row.get("claims", [])),
+                discovery_counter_gap=row.get("counter_evidence_gap", "旧版草稿未记录反证覆盖；需重新核验"),
                 evidence=evidence, gaps=[{"id": uuid.uuid4().hex, "text": g, "resolved_by": None} for g in gaps],
                 reviews=[], history=[], version=0, job=None)
             board["cards"].append(card)
