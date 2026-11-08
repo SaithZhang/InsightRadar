@@ -102,7 +102,7 @@ class ZsxqPdfTests(unittest.TestCase):
                     patch.object(z, "load_metadata", return_value=META), patch.object(z, "chrome", return_value="7"), \
                     patch.object(z, "ready", return_value="FILE_READY"), patch.object(z, "page") as page, \
                     patch.object(z, "extract", return_value=parsed):
-                result = z.run(URL, NAME, d)
+                result = z.run(URL, NAME, d, transport="browser")
             self.assertTrue(result["cached"])
             page.assert_not_called()
             self.assertEqual((out / key / "text.txt").stat().st_mode & 0o777, 0o600)
@@ -115,7 +115,7 @@ class ZsxqPdfTests(unittest.TestCase):
             with patch.object(z, "OUTPUT", out), patch.object(z.sys, "platform", "darwin"), \
                     patch.object(z, "load_metadata", return_value=META), patch.object(z, "chrome", return_value="7"), \
                     patch.object(z, "ready", return_value="FILE_READY"), patch.object(z, "page") as page:
-                self.failure("FILE_MISMATCH", z.run, URL, NAME, d)
+                self.failure("FILE_MISMATCH", z.run, URL, NAME, d, 60, "browser")
             page.assert_not_called()
 
     def test_dom_does_not_download_other_file_or_while_logged_out(self):

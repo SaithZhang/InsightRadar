@@ -1545,3 +1545,11 @@ Mac main/ec784c9 plus uncommitted source/tests/records; prior work preserved. Cl
 - Entry: scripts/zsxq_pdf.py; usage/setup/errors: docs/zsxq-single-pdf.md; latest portable status: CHECKPOINT.md. Needs official CLI OAuth, open logged-in Chrome and user-enabled Apple Events JavaScript. The setting was explicitly authorized and enabled by the owner; scripts never change it.
 - Evidence: 13 synthetic tests; real new download/read then cached rerun with zero new downloads. Four text pages/2760 characters and exact provider size/hash. Private data/acceptance/zsxq-script-20261108/, outputs data/zsxq-pdf/; no credentials/raw PDF committed. OCR/unattended/cross-platform capability absent.
 - Finish with relevant validation and explicit source/docs staging, push authorized existing branch, verify remote SHA and clean status. One next step: use the documented command for a newly selected single attachment; do not expand into a collector or research system.
+
+
+## 2026-11-08 — Cookie background downloader handoff
+
+- Goal: avoid Chrome foreground changes by replacing only PDF transport. Branch codex/checkpoint-20261108-insightradar, start f36042a; commit/push/clean already authorized.
+- Default scripts/zsxq_pdf.py uses an explicitly imported private Cookie plus Python; --transport browser preserves old single-file UI path. --batch accepts 1–20 explicit files, serial and first-error stop. Setup and reimport command: docs/zsxq-single-pdf.md. No browser/Keychain calls after import; credentials outside Git, 600, never logged.
+- Evidence: 25 synthetic checks; one fresh provider-verified four-page PDF, foreground/tab unchanged and Downloads zero additions; cached rerun and actual single-item batch CLI. Private data/acceptance/zsxq-cookie-20261108/. Multi-file load and long-lived website API reliability unverified. Parser unchanged, including encrypted-PDF limitation; no trading/Core/scheduler edits.
+- Finish with memory/architecture/diff checks, explicit staging, authorized branch push and remote SHA/clean confirmation. One next step: run only the owner's explicit attachment list; expired Cookie requires personal login and explicit reimport. Stop after acceptance, no collector expansion.

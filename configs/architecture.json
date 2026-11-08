@@ -352,16 +352,16 @@
     {
       "id": "zsxq_single_pdf",
       "ring": "extension",
-      "title": "知识星球单 PDF 本地工具",
+      "title": "知识星球 PDF 后台下载工具",
       "type": "utility",
       "lane": "data",
-      "status": "mac_single_attachment_verified",
+      "status": "mac_cookie_download_verified",
       "commands": [],
       "command": ".venv/bin/python scripts/zsxq_pdf.py '<official-topic-url>' '<attachment.pdf>'",
-      "summary": "用户手动启动单附件读取：官方CLI元数据加已登录Chrome网页点击，校验大小/SHA-256后本地提取文本；重复任务复用已核验副本。无调度、批量或Core数据流，不改变交易逻辑。",
-      "inputs": ["单个官方帖子链接与精确PDF文件名", "已有官方OAuth与Chrome登录态", "用户启用的Apple Events JavaScript权限"],
+      "summary": "官方CLI元数据加Cookie/Python后台下载，校验大小/SHA-256后沿用本地提取；显式清单最多20份串行，首错停止。AppleScript仅显式备用，无历史抓取、调度或Core数据流。",
+      "inputs": ["官方帖子链接和精确PDF文件名或显式清单", "已有官方OAuth及项目外私有Cookie", "首次导入使用Mac钥匙串；浏览器备用才需要Apple Events"],
       "outputs": ["私有data/zsxq-pdf中的PDF、分页文本与回执", "明确的登录失效/权限/下载/校验错误"],
-      "next": ["仅按用户指定单份附件运行", "网页变化时修复可重现问题，不扩为采集系统"]
+      "next": ["仅按用户指定附件清单运行", "Cookie失效时本人登录并重新导入，不扩建系统"]
     },
     {
       "id": "evolution",

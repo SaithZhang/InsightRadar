@@ -4,7 +4,17 @@
 
 本 checkpoint 保存当前代码与工程上下文，适用于普通编辑器、Codex、OpenCode、DeepSeek 等接手方式；不依赖原聊天。它是恢复点，不表示所有产品验收完成。精确提交以包含本文件的 Git 提交和总管索引为准。
 
-## 最新交付：可重复运行的单 PDF 脚本
+## 最新交付：Cookie/Python 后台 PDF 下载
+
+2026-11-08，起始 `f36042a`，分支 `codex/checkpoint-20261108-insightradar` 不变。用户明确改为 Cookie + Python 下载以避免浏览器抢前台，并要求保留 AppleScript 候选、其他逻辑不变。入口仍为 `scripts/zsxq_pdf.py`：默认 Cookie 后台请求，`--transport browser` 才使用旧网页控制；`--batch` 只接受 1–20 个明确附件，串行、间隔 2 秒、首错停止，不发现或遍历历史。
+
+网页当前代码证实 `GET /v2/files/<id>/download_url`；一次本机钥匙串导入只读取知识星球登录 Cookie，存到项目外权限 600 的私有文件。日常下载不访问 Chrome/钥匙串，Cookie 只发给官方 API，文件请求不带 Cookie，不跟随重定向；过期/权限/限流明确停止，不自动退回前台。官方 Skill/MCP 下载缺口不因此被声称解决，网站内部接口可能变化。首次导入使用已有 cryptography，声明为可选依赖，没有安装新服务。
+
+25 项合成测试通过。真实新下载一份此前授权 PDF，大小/SHA-256 一致，原解析器读出 4 页/2,760 字符；浏览器调用为 0，前后活动应用和标签页一致，下载目录零新增。复跑命中缓存，单项清单 CLI 通过，多项顺序与首错中止由合成测试验证，未做真实批量压力测试。原解析器完全保留，权限加密 PDF 仍可能拒绝读取。私有证据 `data/acceptance/zsxq-cookie-20261108/`，凭据/原文/下载签名不上 Git。
+
+保存用法、测试、同一隔离工具节点及项目记忆；交易代码、Core 数据流、调度均未改变，feat-060 保持 in_progress。按已有授权 commit/push，最终 SHA、clean 与检查回执以 Git 和本地完成记录为准。验收达到即停止。下一步仅按 `docs/zsxq-single-pdf.md` 运行用户指定附件清单；登录失效时本人重新登录并导入，不扩建采集系统。
+
+## 前轮交付：可重复运行的单 PDF 脚本
 
 2026-11-08，起始 `c6604aa`，分支不变。用户明确授权固化单文件脚本并 commit/push、保持 git clean。入口 `scripts/zsxq_pdf.py` 接收官方帖子 URL 和完整附件名；用既有官方 CLI OAuth 获取一帖元数据，以 AppleScript 控制当前 Chrome 网页下载，再校验大小/SHA-256、子进程提取 PDF 文本。用法及稳定错误码见 `docs/zsxq-single-pdf.md`。
 

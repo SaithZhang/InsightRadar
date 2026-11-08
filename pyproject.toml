@@ -18,6 +18,7 @@ amazingdata = [
 ]
 mcp = ["mcp>=2.0,<3"]
 lab = ["scipy"]
+zsxq-cookie = ["cryptography"]
 collectors = [
   "report-cli",
   "twitter-cli>=0.8.5",

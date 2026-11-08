@@ -34,7 +34,7 @@ The first validation may intentionally report stale or missing command coverage.
 
 ## Current Shape
 
-`scripts/zsxq_pdf.py` is an explicitly admitted standalone Extension utility, shown as an isolated `zsxq_single_pdf` node. One official topic/file metadata read and an existing logged-in Chrome session yield one locally verified PDF and bounded text extraction in ignored `data/zsxq-pdf/`. No Core input, product route, service, schedule or trade connection is added. Setup and failure boundaries live in `docs/zsxq-single-pdf.md`.
+`scripts/zsxq_pdf.py` is an explicitly admitted standalone Extension utility, shown as an isolated `zsxq_single_pdf` node. Official CLI metadata plus a locally imported site Cookie now yield background Python downloads and the existing bounded text extraction in ignored `data/zsxq-pdf/`. An explicit list of up to 20 attachments runs serially; AppleScript is a manual fallback only. Cookie import uses the existing Mac Keychain and optional cryptography dependency, with no runtime browser control or new service. No Core input, product route, service, schedule or trade connection is added. Setup and failure boundaries live in `docs/zsxq-single-pdf.md`.
 
 Primary development runs on Mac under ADR-0018. `InsightRadar.command` / `scripts/macos.sh` start the existing loopback service; `/api/health` identifies the checkout for safe reuse, not data readiness. The base install excludes dedicated SDK/MCP/collector extras. First-run views reuse the same HTML shell and approval-gated importer. Source and trade authority are unchanged.
 
