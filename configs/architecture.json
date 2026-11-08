@@ -350,6 +350,20 @@
       "next": ["每次模块变化后刷新", "记忆索引保持短小并按需加载"]
     },
     {
+      "id": "zsxq_single_pdf",
+      "ring": "extension",
+      "title": "知识星球单 PDF 本地工具",
+      "type": "utility",
+      "lane": "data",
+      "status": "mac_single_attachment_verified",
+      "commands": [],
+      "command": ".venv/bin/python scripts/zsxq_pdf.py '<official-topic-url>' '<attachment.pdf>'",
+      "summary": "用户手动启动单附件读取：官方CLI元数据加已登录Chrome网页点击，校验大小/SHA-256后本地提取文本；重复任务复用已核验副本。无调度、批量或Core数据流，不改变交易逻辑。",
+      "inputs": ["单个官方帖子链接与精确PDF文件名", "已有官方OAuth与Chrome登录态", "用户启用的Apple Events JavaScript权限"],
+      "outputs": ["私有data/zsxq-pdf中的PDF、分页文本与回执", "明确的登录失效/权限/下载/校验错误"],
+      "next": ["仅按用户指定单份附件运行", "网页变化时修复可重现问题，不扩为采集系统"]
+    },
+    {
       "id": "evolution",
       "ring": "governance",
       "title": "自我进化 backlog",

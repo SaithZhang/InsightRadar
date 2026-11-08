@@ -1537,3 +1537,11 @@ Mac main/ec784c9 plus uncommitted source/tests/records; prior work preserved. Cl
 - The resumed goal admitted one continuation-header selection change and two real calls within the original cap. The failed 300454 case passes its focused regression. Previously unseen 002463 passes frozen checks for both financial rows, periods, page citations and missing cash-flow explanation. Keep earlier failures and the bounded evaluation scope.
 - 75 focused tests, final Mac desktop/mobile readback, manual import, original PDF, duplicate and interrupted-state recovery, five HTTP routes and v4 history verification pass. 26 other cards and 50 protected artifacts remain equal to baseline. Windows not run.
 - Eight total requests, estimated $0.1188636, reserved $1.60. Full report, five-minute demo, resume evidence and replay commands: private data/acceptance/filing-draft-20261107/REPORT.md. Project feat-060 remains in_progress for actual use and broader coverage. No commit/push, Notion or account writes. trade_authority none.
+
+
+## 2026-11-08 — Mac single-PDF script handoff
+
+- Goal/scope: user-requested reusable single Knowledge Planet PDF command, current Chrome login, explicit errors, commit/push/clean; no batch, scheduler or trading logic. Branch codex/checkpoint-20261108-insightradar, start c6604aa.
+- Entry: scripts/zsxq_pdf.py; usage/setup/errors: docs/zsxq-single-pdf.md; latest portable status: CHECKPOINT.md. Needs official CLI OAuth, open logged-in Chrome and user-enabled Apple Events JavaScript. The setting was explicitly authorized and enabled by the owner; scripts never change it.
+- Evidence: 13 synthetic tests; real new download/read then cached rerun with zero new downloads. Four text pages/2760 characters and exact provider size/hash. Private data/acceptance/zsxq-script-20261108/, outputs data/zsxq-pdf/; no credentials/raw PDF committed. OCR/unattended/cross-platform capability absent.
+- Finish with relevant validation and explicit source/docs staging, push authorized existing branch, verify remote SHA and clean status. One next step: use the documented command for a newly selected single attachment; do not expand into a collector or research system.

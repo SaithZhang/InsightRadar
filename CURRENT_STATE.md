@@ -73,7 +73,7 @@ The canonical boundary and extraction rules are in `docs/product-charter.md`. Th
 
 ## Known Gaps
 
-- 11-08 zsxq: CLI/MCP metadata and one CUA-driven official-web PDF download pass; size/hash match, 4 pages readable. MCP download, unattended runs, OCR and product wiring unverified. See CHECKPOINT.md; no business changes.
+- 11-08 zsxq: scripts/zsxq_pdf.py verifies one Mac Chrome PDF download/read and cached rerun. 13 tests pass; explicit login errors. No batch, OCR, MCP downloader or Core wiring. See docs/zsxq-single-pdf.md and CHECKPOINT.md.
 - The local MCP server supports stdio and loopback Streamable HTTP only. ChatGPT Web cannot call localhost directly; Secure MCP Tunnel or a separately reviewed authenticated remote HTTPS deployment remains outside `feat-059`.
 - Eastmoney/Tencent application endpoints are non-official and have no SLA. The current evidence layer supports only a bounded recent minute window and fixed benchmark registry; sector-relative strength and old-history backfill remain explicit gaps.
 - IR-001 external-mapping returns are explicit acceptance-case inputs, not verified external price observations. Live `catalyst_failure` remains unavailable until a point-in-time external mapping source is wired.
