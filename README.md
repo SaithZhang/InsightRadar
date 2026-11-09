@@ -1,373 +1,112 @@
-# InsightRadar
+# InsightRadar · 本机股票研究工作台
 
-Current product line: **InsightRadar V3.1 — Incremental Development**. V3.0 remains the historical implemented baseline; its scope freeze ended by owner decision on 2026-08-01 without claiming completion of the planned ten-run trial. See [PRODUCT_VERSION.md](PRODUCT_VERSION.md) and [ADR-0015](docs/memory/decisions/0015-open-sequential-v3-1-iteration.md).
+当前开发以 V0.02 的 Java / Vue 工程为基线。产品合同为 [冻结 PRD](docs/01_PRD_产品需求_冻结版.md)，技术合同为 [TECH](docs/02_TECH_技术设计_实施版.md)。旧 Python 工程已归档。本机手工持仓及三页导航见 [持仓管理增量](docs/TECH-持仓管理.md)。
 
-InsightRadar 是面向个人投资者和资产出资人的独立 AI 风险官。它持续过滤市场信息，区分事实、推断、传闻、情绪与 unknown，结合真实持仓、账户风险、产业基本面、市场状态和可验证行动证据，给出可追溯、可复核、必须由用户人工确认的风险等级与条件计划。
+**当前为 PARTIAL 版本，尚未完成整版验收。** BaoStock 0.9.4 已通过沪电股份 120 根真实日 K 验收。其他市场及 D+1 实股验收仍需补跑。页面可用官方公告、PDF、模型证据提炼和只读历史，报告按实际处理范围声明覆盖。详细实测见 [验收记录](docs/IMPLEMENTATION_PROGRESS.md) 和 [来源实测](docs/data-provider-spike.md)。
 
-短定义：**不是帮用户知道更多，而是帮助用户识别少数真正值得改变仓位的信息。**
+## macOS 启动
 
-主要开发与运行平台：**macOS**。当前工作区为 `/Users/zhangjiawen/work/market/insightradar`；启动脚本从自身位置定位项目，也可放在其他目录。Windows 启动方式继续保留。
-
-## 版本基线文档
-
-- [产品基线](docs/PRODUCT_BASELINE.md)
-- [V3.0 已实现冻结面](docs/V3.0_FROZEN.md)
-- [V3.1 增量候选与状态](docs/V3.1_DELTA.md)
-- [架构](docs/ARCHITECTURE.md)
-- [数据与公开边界](docs/DATA_BOUNDARIES.md)
-- [本轮决策日志](docs/DECISION_LOG.md)
-
-V3.1 已获准按增量逐项开发；一次只推进一个已准入增量，未验证能力不得写成已实现。不得新增第五个一级菜单、用原型数据冒充真实能力、自动交易，或让 AI/实名观点来源覆盖规则和人工确认。
-
-## Mac 一键使用（主要入口）
-
-双击根目录 **`InsightRadar.command`**，打开 [本地工作台](http://127.0.0.1:8765/)。第一次启动会在项目 `.venv` 中安装依赖，不修改系统 Python，也不覆盖已有密钥。需要 Python 3.10+ 或已安装的 uv。
-
-首页提供今日工作台、组合风险、标的研究、复盘账本四项任务。点击“隔夜机会发现”，系统按交易日历读取最近已收盘交易日15:00之后的已归档新闻、NGA、雪球片段，生成待核验候选，不预设方向；交易日盘中点击时，材料截止到09:25，更早两天的材料单列为历史背景。也可以“指定研究”。发现复用相邻 `InsightRadar-Control` 的 Pilot 模型配置，单次最多1次模型请求、90秒、本地估算额度0.10美元；未找到原项目、日历不可确认或没有可用证据时明确停止。只读已有归档，不自动启动采集，无后台定时任务。
-
-研究卡可检索现有归档、调用现有 Agent、补充来源与反证、修订条件、冻结观察版及记录复盘。数据保存在忽略Git的 `data/research-board.json`；原始发现输入和模型返回保存在 `data/research-discovery/`，失败或中断不自动重发。未知代码映射保持待核验，AI不自动更新价格条件或解除缺口。原有分析工作台保留于 `/report`；持仓导入入口不变，仍需预览和确认。研究上下文与账户导入版本分开显示，不自动覆盖账户。JSON、Markdown、HTML 报告继续作为原有分析的审计产物。
-
-当前实现是人工触发的归档发现与持续研究，尚未接实时行情扫描、自动9:25冻结、自动订单或已验证盈利策略。历史案例与自主发现明确分开；点击刷新状态只重读已保存内容，不刷新行情。
+前提：Java 21、Maven ≥3.6.3、Node 24、Python 3.13（也可准备兼容 Python 3.11+ 环境）、本机 PostgreSQL 17。运行和测试均不需要 Docker。测试采用 JUnit 5，直接启动 Spring 和独立的临时本机 PostgreSQL 集群。实际应用依赖锁定在 pom.xml、package-lock.json、bridge/requirements.lock；本机 PostgreSQL 当前已验证 17.11。
 
 ```bash
-./scripts/macos.sh setup          # 只安装项目环境
-./scripts/macos.sh start          # 启动并打开工作台
-./scripts/macos.sh start --no-open # 只启动服务
-./scripts/macos.sh check          # 项目记忆、编译与真实盘后产物检查
+cd /path/to/insightradar
+# 只在尚未安装 PostgreSQL 17 时执行：
+brew install postgresql@17
+python3 -m venv .venv
+.venv/bin/python -m pip install -r bridge/requirements.lock
+npm ci --prefix web
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+scripts/start.sh
 ```
 
-保持启动窗口打开；按 Control-C 或在页面点击退出停止。重复启动会复用同一工作区的服务。端口被其他程序占用时会明确报错，不会结束其他进程；可用 `INSIGHTRADAR_PORT=8767 ./scripts/macos.sh start` 指定空闲端口。未安装登录自启或后台计划任务。
-
-**数据与密钥边界：** 基础工作台不需要 AI API key。已有环境变量、项目 `.env` 与仓库外密钥文件按原有优先级使用，启动器不复制、改写或自动切换供应商。AmazingData/tgw 是可选专用 SDK，Mac 基础安装不包含它们，也不代表已通过真实账户行情验收。公开源已有的降级规则仍保留，缺失数据不会补成零。可选功能按需安装：
+打开 [股票分析](http://127.0.0.1:15173)。API 为 `127.0.0.1:18080`，PostgreSQL 为 `127.0.0.1:15432`。这三个端口必须空闲。首次安装依赖需要联网。启动脚本构建生产资源，用本机 `pg_ctl` 管理本工程的数据库集群，再启动单个 Java 进程与页面静态服务器；不安装开机服务，也不启动 Homebrew 的全局数据库服务。
 
 ```bash
-uv pip install --python .venv/bin/python -e '.[mcp]'        # 已有只读 MCP
-uv pip install --python .venv/bin/python -e '.[collectors]' # 可选采集 CLI
+scripts/stop.sh
 ```
 
-在受 SDK 支持的 Windows 环境安装 `.[amazingdata]`，或沿用下文的 vendor wheel。无需为了打开工作台安装这些扩展。
+停止只作用于本工程记录的进程与 `data/postgres-native` 数据库集群，不删除历史。数据端口保持 15432，不占用全局默认 5432。`scripts/postgres.sh start|stop|status` 可单独管理数据库。不要手动修改已应用迁移。原项目恢复方式仍在原项目 README/CHECKPOINT。
 
-## Windows 一键使用
+2026-11-09 已将原容器库逻辑迁移到本机集群，6 张表的行数和 SHA-256 全部一致。旧 `data/postgres` 原件仍保留为离线回退资料，不再使用；迁移回执为 `data/acceptance/native-migration/`。如果旧数据存在但没有迁移成功标记，启动脚本会拒绝创建空库，防止把空历史当作迁移完成。当前用户“移除 Docker 依赖”的指令替代冻结附件中 Testcontainers/Docker 的实现选择，附件原文仍保留。
 
-不需要先打开 PowerShell。直接在项目根目录双击：
+开发时分别开终端：
 
-- `InsightRadar.cmd`：启动本地应用并打开工作台；页面内可粘贴、预览、批准保存、查看自动 beta 计算进度、打开最新报告和关闭应用；
-- `生成盘后报告.cmd`：生成并自动打开最新盘后报告；
-- `导入持仓.cmd`：与主入口相同，打开仅监听 `127.0.0.1` 的本地持仓导入页面；
-- `打开最新报告.cmd`：不刷新数据，直接打开最近一次盘后报告。
-
-启动器会优先使用 `.venv\Scripts\python.exe`，该环境缺失时会寻找已经安装好项目依赖的系统 Python。若环境不可用或生成失败，窗口会保留并显示明确错误。
-
-## 当前四个一级任务
-
-本地工作台固定保留四个一级任务：
-
-- **今日工作台**：盘后/周末结论、市场约束、统一关注队列和人工响应；
-- **组合风险**：已知/未知仓位、自动 beta 证据、基础分析就绪度、系统生成的持仓管理建议、用户确认/调整，以及独立的行情能力隔离；
-- **标的研究**：按意图建立研究任务并查看已有证据；真实技术图与 P1 研究编排尚未实现；
-- **复盘账本**：计划版本、用户响应和 T+1/T+5/T+20 后验成熟度；真实成交执行流水尚未接入。
-
-市场证据是上游约束和页面抽屉，不是第五个一级任务。
-
-## 工程模块
-
-InsightRadar 收敛为四个产品模块：
-
-- **Portfolio Intelligence**：持仓、风险线、交易假设、复盘和盘后动作。
-- **Research Intelligence**：研报、公告、外部观点、产业线索和 thesis delta。
-- **Market Radar**：A股、跨市场、crypto、事件风险和异常监控。
-- **Product Ops**：产品地图、验证状态、运行历史和自我进化 backlog。
-
-这四个模块是 CLI 和代码的工程分类，不是另一套页面导航。
-
-生成当前产品地图：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli product-map
+```bash
+scripts/postgres.sh start
+cd server
+JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn spring-boot:run
+# 另一终端从工程根目录：
+npm run dev --prefix web
 ```
 
-## 长程项目记忆
+Windows 需自行准备 PostgreSQL 17 和数据库连接变量，建立 `.venv` 后将 `BRIDGE_PYTHON` 设为完整的 `.venv\Scripts\python.exe`，`BRIDGE_PATH` 指向 bridge 脚本，`DATA_DIR` 指向本地 data，再使用 Maven/npm。Bash 启动脚本和原生数据库测试夹具仅验证 macOS；Windows 未实测，不承诺直接执行上述脚本。
 
-非简单任务先读根目录 `PROJECT_MEMORY.md` 和 `CURRENT_STATE.md`，再按触发词只加载对应主题。`progress.md` 与 `session-handoff.md` 是按功能编号或最新尾部查询的历史证据，不再整份作为启动上下文。项目方向见 `docs/product-charter.md`，重要取舍通过 `docs/memory/decisions/` 下的 ADR 留存。
+## 持仓管理
 
-```powershell
-.venv\Scripts\python scripts\validate_project_memory.py
-.venv\Scripts\python -m stock_assist.cli architecture-view
+从顶栏打开「持仓」或直接打开 [持仓管理](http://127.0.0.1:15173/#/positions)。手工录入股数、可选成本和 MA55 条件触发后的预设动作。北京时间当天确认的持仓可用于生成个人动作。持仓只保存在本机 PostgreSQL，生成报告时保存当次记录。首轮启动自动应用 Flyway V4。
+
+## 配置
+
+无模型配置也能运行。可将 `.env.example` 复制为 `.env`，由启动脚本加载；手动启动需自己导出变量。`.env` 不入 Git，不要把密钥粘贴到聊天或前端。
+
+| 变量 | 默认 / 用途 |
+|---|---|
+| DB_URL / DB_USER | 本机 15432 / insightradar |
+| DB_PASSWORD | 示例中的开发占位密码，仅本机隔离 DB；自行改时同时调整已有 DB 用户密码 |
+| PG_BIN | 可选，PostgreSQL 17 可执行文件目录；自动查找 Homebrew 常用路径、Linux 17 路径及 PATH |
+| BRIDGE_PYTHON | 从 server 启动时为 `../.venv/bin/python` |
+| BRIDGE_PATH | `../bridge/baostock_bridge.py` |
+| DATA_DIR | `../data` |
+| LLM_BASE_URL / LLM_MODEL | 空时降级；目前使用 `https://api.openai.com/v1` 和 `gpt-6.1-sol` |
+| LLM_KEY_ENV_FILE / LLM_API_KEY | 启动时引用已有 `OPENAI_API_KEY` 文件，或从环境传入 `LLM_API_KEY` |
+| LLM_HTTP_PROXY | 可选 HTTP CONNECT 代理 `host:port`，仅用于模型请求 |
+| LLM_MONTHLY_BUDGET_USD | 本应用按北京时间自然月默认 100 美元，无单日额度。每次发出前保守预留 0.20 美元，按预留额控制；不读取其他项目用量 |
+| DISCLOSURE_MAX_PDFS | 8，最大 30；超过处理上限必为 PARTIAL |
+
+API 和页面固定 loopback。API_PORT 只供单独手动运行，配套代理和 Origin 白名单目前按固定端口配置；一键脚本使用固定端口。服务不含登录、调度、通知或交易执行。所有报告 `trade_authority=none`。
+
+## 数据与规则
+
+- BaoStock 0.9.4 通过本地 Python 子进程调用，使用官方公开服务 public-api.baostock.com:10030，免费匿名连接。单次 socket 超时 60 秒、整个子进程上限 180 秒；异步报告页面会显示处理阶段。网络仍可能慢或失败，失败保留真实缺口。Fuyao 本地 URL/授权尚未验证，未创建伪 Adapter。
+- 证券按供应商主数据唯一匹配。来源失联时 `canonicalCode=null`、身份待核验，巨潮发行人名称单独展示，不能据此确认交易所。
+- 原价、供应商 qfq、稀疏复权事件、交易日历及规范化 qfq 一并冻结。Java 校验 OHLC、停牌、来源身份、日期、复权比例；同日 OHLC 比率误差容忍上限为供应商四位精度对应的 0.001 元，不是交易比较阈值。技术判断始终使用 DECIMAL128，UI 只格式化。
+- 普通分析按证券、北京时间自然日和本次请求截止日复用行情快照。跨日或盘后切到当日终值时重新取数。六位代码首次仍须由来源确认身份，之后同日带正确交易所后缀也能复用该输入。每次分析重新校验、计算并保存独立报告，可在「规则版本与复现指纹」查看 `marketCacheHit` 与原始 `providerFetchAt`。D+1 后验仍按所需区间重新查询。
+- 窗口默认回看 730 个自然日，取最近最多 120 根有效日 K；不足明确标出。至少 60 根才能完成趋势判断。长期停牌导致窗口不足仍为缺口，不承诺全历史回填。
+- 盘前、盘中和非交易日使用最近已完成的交易日。交易日 15:00 后，报告期待当日终值。本机从 18:00 起请求 BaoStock 当日原价、前复权与复权数据，校验通过才更新技术判断。等待期间可展示上一交易日的参考收盘，报告标明缺口，暂停依赖新终值的判断。固定 D+1 也在目标日终值确认后可检查。
+- 个股页可先展示腾讯已收盘的不复权价格，需同一证券、同一交易日、市场明确已收盘且日线与快照收盘一致。BaoStock 技术日线与复权数据就绪后，通过「更新技术指标」生成新报告。
+- D 日计划冻结，复核固定 D+1；价格口径变化不能安全比较时返回 `ADJUSTMENT_CHANGED_RECHECK`。晚到数据只补验原目标。已触发后跌破下沿另追加记录，首次触发记录不修改。
+- 90 个自然日官方目录完整分页；另检索定期报告目录，按报告期优先、同期间披露时间选择最新全文，排除摘要、提示和关于报告的公告。标出更正/补充。PDF 有大小、页数、官方域名和重定向限制，无 OCR。
+- 单次默认抽取 8 份 PDF；目录、PDF 与模型覆盖分别声明。已有文档保留真实物理页码和 SHA-256；模型事实逐条校验 documentId/page/quote，未核验数字推导拒绝入正式结论。引文匹配不等于语义判断必然正确。
+- 「生产」默认复用同一模型、提示词与实际输入的证据结果，报告生成时间不参与匹配。「调试」总是尝试发出新请求；结果有通过校验的事实时可供后续生产复用。失败或没有合格事实的响应不进入缓存。命中仍生成新报告且不占用新额度；预算用尽时也可命中。模型优先处理最新定期报告，输入上限 30,000 字节、输出上限 2,400 token，截断会在报告中标为 PARTIAL。
+- 原型 `prototype/index.html` 是离线 demo；运行前端不导入其中任何模拟行情。
+
+## 验证与复现
+
+```bash
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+mvn -f server/pom.xml test
+.venv/bin/python -m unittest discover -s bridge/tests -v
+.venv/bin/python scripts/check_reference.py
+npm run test --prefix web
+npm run build --prefix web
+npm run test:e2e --prefix web
 ```
 
-交互式架构拓扑写入 `docs/architecture.html`。新增或重命名产品命令后，记忆校验会检查它是否已进入 `configs/architecture.json`，并拒绝把旧拓扑当作当前事实。
+集成测试使用本机 PostgreSQL 17 的 `initdb` / `pg_ctl` 在系统临时目录创建独立集群，随机 loopback 端口，结束后关闭并删除。它不读取应用的 DB_URL，不接触报告库；找不到 PostgreSQL 时明确失败，不跳过数据库验证。无需 Docker。Playwright 默认使用本机 Chrome 的隔离临时浏览器，不读取日常登录资料；两种视口为 1440×900、390×844。需先启动本工程并生成一份真实来源报告；无报告时真实历史 E2E 明确 skip，不能计为通过。
 
-### 独立交易纪律提醒器
+真实 PDF 引用验收可显式设置 `OFFICIAL_PDF_TEST=/absolute/path/report.pdf` 运行 Maven；未提供时该项跳过，不冒充已验。当前本机产物在 `data/acceptance/cninfo-report.pdf`，不随源码分发。
 
-Windows 个人交易纪律提醒器已完成两阶段拆分并由独立项目 `D:\work\reminder` 持有。Windows 登录任务、源码、配置、构建脚本和本地日志均由该项目管理；本仓不再包含或发布该应用。拆分结果与扩张冻结计划见 `docs/extractions/README.md`。
-
-## 数据源连通性检查
-
-仅在受支持的 Windows 环境使用 AmazingData 时，安装 SDK wheel：
-
-```powershell
-python -m venv .venv
-.venv\Scripts\python -m pip install .vendor\xysz-src\xysz\xysz_tools\tgw-1.0.8.7-py3-none-any.whl .vendor\xysz-src\xysz\xysz_tools\AmazingData\AmazingData-1.1.8-cp313-none-any.whl
+```bash
+.venv/bin/python scripts/gate0.py
+.venv/bin/python scripts/live_acceptance.py
 ```
 
-配置账号密码。推荐复制 `.env.example` 为 `.env`，然后填写真实账号：
+两者均访问真实来源、串行执行、保留拒绝状态，原始响应与日志在 `data/acceptance`。失败时不要删除旧快照或把 FAILED 改为完成。报告/计划重现以冻结输入、TECH-R1、冻结 LLM 响应为准，重复请求模型不保证同一答案。
 
-```powershell
-Copy-Item .env.example .env
-notepad .env
-```
+REST 路由见 [TECH 第 5 节](docs/02_TECH_技术设计_实施版.md)。另外提供 `GET /api/v1/health`。分析为 202 异步任务，2 个有界工作线程、队列 8；重启把未完成任务标为明确失败，已完成报告不变。数据库运行锁阻止第二实例抢先执行恢复。
 
-`.env` 内容类似：
+## 保存与接续
 
-```dotenv
-AD_USERNAME=your_username
-AD_PASSWORD=your_password
-AD_HOST=101.230.159.234
-AD_BACKUP_HOST=140.206.44.234
-AD_PORT=8600
-AD_CACHE_DIR=data/amazingdata
-AD_PERMISSION_START=2026-05-22
-AD_PERMISSION_END=2027-05-22
-```
+先读 [CHECKPOINT.md](CHECKPOINT.md) 和 [实现记录](docs/IMPLEMENTATION_PROGRESS.md)。跨项目恢复入口为 `../InsightRadar-Control/CHECKPOINT.md`。Git 仅保存源码、规则、合成测试和说明；真实 PDF、市场响应、数据库、日志、模型响应、凭据均在忽略目录。当前开发分支为 `codex/v002-baseline`，沿用原 [InsightRadar GitHub 仓库](https://github.com/SaithZhang/InsightRadar)。
 
-`.env` 已被 `.gitignore` 忽略，不会提交到仓库。也可以只在当前 PowerShell 中临时设置：
-
-```powershell
-$env:AD_USERNAME="your_username"
-$env:AD_PASSWORD="your_password"
-$env:AD_HOST="101.230.159.234"
-$env:AD_BACKUP_HOST="140.206.44.234"
-$env:AD_PORT="8600"
-$env:AD_CACHE_DIR="data/amazingdata"
-$env:AD_PERMISSION_START="2026-05-22"
-$env:AD_PERMISSION_END="2027-05-22"
-```
-
-运行最小自检：
-
-```powershell
-.venv\Scripts\python -m stock_assist.data_sources.xysz doctor --code 000001.SZ
-```
-
-## 工作流命令
-
-安装本项目为可编辑模式：
-
-```powershell
-.venv\Scripts\python -m pip install -e .
-```
-
-项目是 Python `>=3.10` 模块化单体。没有 `package.json`、Node 前端构建链、独立数据库服务或 ORM；页面由 Python 生成自包含 HTML/CSS/JavaScript。
-
-### 本地工作台（127.0.0.1:8765）
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli portfolio-import --serve
-```
-
-该命令只监听 `127.0.0.1`。根路径提供四任务工作台，`/portfolio-import` 提供本地粘贴/预览/批准导入页；保存后先运行 `portfolio-beta`，以沪深300为基准、120个交易日窗口和至少60个有效样本计算 beta，再继续风险刷新。样本不足、过期或异常保持 `unknown`。所有状态写操作要求当前进程生成的随机 Token，服务不接受交易指令。
-
-安装后可使用新的产品命令 `insight-radar`；`shenyan-radar` 和原 `stock-assist` 命令保留为兼容别名。下面仍使用 `python -m stock_assist.cli`，避免本地入口脚本未刷新时影响运行。
-
-### Portfolio Intelligence
-
-生成盘后持仓指引和 HTML dashboard：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli after-close
-```
-
-`after-close` now writes one cross-client payload and two renderers with the same timestamp:
-
-- `reports/*-after-close.json`: Portfolio Intelligence payload for future iOS / Android / Windows / Web clients;
-- `reports/*-after-close.md`: CLI/text review report;
-- `reports/*-after-close.html`: InsightRadar dashboard renderer.
-
-Each run also updates the private `data/signal_outcomes.jsonl` ledger. One signal is kept per stock and calendar day, then refreshed after 1/5/20 trading sessions with raw return, direction-adjusted hit/miss, and 20-session maximum favorable/adverse excursion. Horizons remain `pending` until enough trading sessions exist; InsightRadar does not publish an early hit rate from immature samples. Use `data/signal_outcomes.example.jsonl` only as the public schema example.
-
-### Research Intelligence
-
-同步中证1000历史成员区间：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli factor-universe-sync
-```
-
-该命令把 AmazingData `get_index_constituent` 规范化为私有 `data/factor_universe/csi1000_membership.csv`，同时生成审计用 JSON、Markdown 和 HTML。每次同步都会计算 `manifest_hash`；历史模型按 `universe_id + manifest_hash` 隔离，不能和原20股试验账本静默混训。要启用历史成分实验，可复制 `configs/factor_lab.csi1000.example.json` 和 `configs/factor_pipeline.csi1000.example.json`，并使用独立数据目录。
-
-运行本地多因子滚动检验（日线、未来5日相对中证1000收益）：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli factor-lab
-```
-
-配置文件为 `configs/factor_lab.json`。默认股票池明确标为研究试验池，不冒充完整中证1000成分。流程对每个交易日做横截面MAD去极值和排序标准化，用带5日隔离期的滚动岭回归估权，并输出RankIC、扣费后Top组合相对收益、回撤、换手率及最新研究排名。排名仅供纸面研究；行业/市值中性化、涨跌停可交易性和冲击成本完成前，不进入实盘。
-
-个人模型的日更MVP：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli factor-pipeline
-```
-
-`factor-pipeline` 使用无需GPU的 `Ridge v1`。每次运行会按 `universe_id + date + code` 更新私有观察账本，将T+5已成熟的相对收益标签加入训练集，用最近约252个交易日全量重训候选模型，再通过RankIC、分层收益、单调性、VIF和条件数等硬门槛决定是否覆盖 `champion.json`。失败候选只留在模型注册表，不进入正式评分。
-
-需要工作日15:40自动运行时，可手动安装本地计划任务：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install-factor-pipeline-task.ps1
-```
-
-当前阶段不需要云服务器；数据规模扩大到数百/数千股票、分钟级特征或单次训练持续超过约30分钟后，再把同一数据账本和模型注册协议迁移到按任务计费的云CPU。
-
-监测研报和 thesis delta：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli research-monitor
-```
-
-生成产业股票池：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli industry-pool 机器人
-```
-
-以下实名观点/社区命令属于可选 Extension 或历史兼容能力，不是正式产品依赖，也不能直接授权仓位动作。
-
-生成观点来源技能库：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli influencer-skills
-```
-
-生成回复情绪指示器：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli influencer-sentiment
-```
-
-采集 X/Twitter 用户最新帖子：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli x-user-posts aleabitoreddit -n 5
-```
-
-将 X/Twitter 原始采集转成大V观点流水：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli x-sync-observations
-```
-
-### Market Radar
-
-生成 A 股当日市场脉冲 PPT-style dashboard。优先使用 Galaxy AmazingData `query_snapshot`，公开分时数据只作为 fallback：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli market-pulse
-```
-
-配置文件：
-
-```text
-configs/a_share_pulse.json
-```
-
-`market-pulse` 会优先使用有日期对齐的已完成收盘 IF/IH/IC/IM 基差；盘中静态收盘数据会被拒绝并串行回退到 AmazingData 实时适配器。没有真实的前序盘中观测时不会伪造 4 分钟变化。
-
-- 结构化 payload：`reports/*-market-pulse.json`，作为未来 iOS / Android / Windows / Web App 的跨端契约；
-- Markdown 报告：`reports/*-market-pulse.md`，保留给 CLI 和文本复盘；
-- HTML dashboard：`reports/*-market-pulse.html`，由同一份 JSON payload 渲染；
-- 期指基差表：现货、期指、当前基差、短窗口变化；
-- 操作建议表：顺势观察、不开激进仓、冲高控仓等条件化动作；
-- 后台审计：数据来源和每条基差记录写入 `data/market_pulse_sources.jsonl`，不显示在前台卡片里。
-
-生成大盘多周期点位指示。默认分析上证指数的月、周、日、60分钟、15分钟和3分钟结构；3分钟线由1分钟线聚合：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli market-levels
-```
-
-配置文件为 `configs/market_levels.json`。报告同时生成 JSON、Markdown 和 HTML。点位区间只在分型/前低、均线、BOLL/ATR、中枢边界、波段回撤等至少两类证据聚合时展示，并给出守住、跌破、重新站回三类条件。这里的缠论口径是可复现的程序化近似，不替代人工严格画笔，也不输出确定性涨跌预测。
-
-### Product Ops
-
-查看当前 Agent 分工：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli agents
-```
-
-生成架构工作流前端视图：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli architecture-view
-```
-
-扫描近期报告并生成自我进化 backlog：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli evolve
-```
-
-生成产品模块、命令和数据边界地图：
-
-```powershell
-.venv\Scripts\python -m stock_assist.cli product-map
-```
-
-报告默认写入 `reports/`；架构视图默认写入 `docs/architecture.html`，可以直接用浏览器打开。
-
-## 每天盘后运行
-
-先用 Windows 任务计划程序或 `schtasks` 调度盘后命令。例如交易日 15:30 运行：
-
-```powershell
-$repo = (Get-Location).Path
-$python = Join-Path $repo ".venv\Scripts\python.exe"
-schtasks /Create /TN InsightRadar-after-close /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 15:30 /TR "`"$python`" -m stock_assist.cli after-close"
-```
-
-如果后续要接入 Codex 自动解读报告，可以把这个命令作为固定的项目侧产物，再由 Codex 读取最新 `reports/*-after-close.md` 做二次研究。
-
-## 本地数据文件
-
-InsightRadar 把文件分成四类：
-
-- **product_config**：入库配置，例如 `configs/agents.json`、`configs/architecture.json`、`configs/industries.json`、`configs/influencers.json`、`configs/event_calendar.json`、`configs/crypto_watchlist.json`、`configs/research_sources.json`。
-- **private_runtime_data**：本地私有数据，例如 `.env`、`data/portfolio.manual.tsv`、`data/portfolio.json`、`data/portfolio.galaxy.tsv`、`data/portfolio_context.json`、`data/research_deltas.jsonl`、`data/influencer_observations.jsonl`。这些不应提交。
-- **template/schema**：可复制的示例和轻量契约，例如 `*.example.json`、`*.example.tsv`、`data/*.schema.json`。
-- **generated_output**：生成产物，例如 `reports/*` 和 `docs/architecture.html`。
-
-公开仓库只允许源代码、产品文档、测试、可复现配置、schema/example 和明确标注的合成截图。真实账户、持仓、交割单、原始截图、Cookie、Token、日志、数据库与私有行情缓存必须只保留本地，详见 `docs/DATA_BOUNDARIES.md`。
-
-### Replayable portfolio context
-
-- `data/portfolio.manual.tsv`: easiest manual holdings input. Copy broker position rows into this tab-separated file using the same header as `data/portfolio.manual.example.tsv`. InsightRadar uses `当前持仓` as the true current position and ignores rows where `当前持仓` is 0, so same-day sells or frozen historical balances do not become false holdings.
-- `data/portfolio_context.json`: private local position context written by the loopback Portfolio UI. The system generates a deterministic management proposal first; users adopt, adjust, or leave it uncertain without editing JSON. The file retains compatible `current_risk_line` / `review_status` fields plus confirmation/source/version metadata. User confirmation affects personalization only and cannot clear an account or market-data quarantine. Unknown entry history stays explicit and limits Review quality without blocking base analysis.
-
-## 开发验证
-
-Mac 使用 `.venv/bin/python`；标准检查为 `./init.sh`，回归测试为 `.venv/bin/python -m unittest discover -s tests -v`。完整回归需先安装 `.[mcp,lab]`（含现有因子计算所需 SciPy）。以下保留 Windows 等价命令。
-
-安装项目依赖并检查环境：
-
-```powershell
-.\.venv\Scripts\python -m pip install -e .
-.\.venv\Scripts\python -m pip check
-```
-
-当前基线的标准验证：
-
-```powershell
-.\.venv\Scripts\python -m compileall stock_assist
-.\.venv\Scripts\python -m unittest discover -s tests -v
-.\.venv\Scripts\python scripts\validate_project_memory.py
-.\.venv\Scripts\python -m stock_assist.cli after-close
-```
-
-Production package build:
-
-```powershell
-.\.venv\Scripts\python -m build
-```
-
-冻结点没有仓库级 lint 或静态类型检查配置。基线审计会如实记录独立运行 `ruff`/`mypy` 的结果，不把“未配置”写成通过。
+来源协议参考：[BaoStock 官方发布包与示例](https://pypi.org/project/baostock/0.9.4/)、[Spring Boot 4.1.2 系统要求](https://docs.spring.io/spring-boot/system-requirements.html)、[巨潮资讯](https://www.cninfo.com.cn/)、[PDFBox](https://pdfbox.apache.org/)。这些文档能力不等于本机所有来源已通过验收。

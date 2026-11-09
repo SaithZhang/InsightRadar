@@ -1,0 +1,27 @@
+{
+  "name": "insightradar-web",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 15173 --strictPort",
+    "build": "vue-tsc -b && vite build",
+    "test": "vitest run tests/api.test.ts",
+    "test:e2e": "playwright test",
+    "preview": "vite preview --host 127.0.0.1 --port 15173 --strictPort"
+  },
+  "dependencies": {
+    "vue": "3.5.45",
+    "element-plus": "2.14.8",
+    "echarts": "6.1.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "6.0.10",
+    "vite": "8.3.6",
+    "typescript": "~5.9.3",
+    "vue-tsc": "3.1.8",
+    "vitest": "5.1.0",
+    "@playwright/test": "1.56.1",
+    "@types/node": "24.10.0"
+  }
+}
